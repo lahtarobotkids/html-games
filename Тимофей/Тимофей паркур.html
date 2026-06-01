@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Паркур по машинам</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        canvas {
+            border: 3px solid #0f3460;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+            background: #87CEEB;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game" width="800" height="500"></canvas>
+    <div id="ui">🏃‍♂️ Distance: <span id="distanceDisplay">0</span> m</div>
+    <script>
+        (function() {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            const distanceSpan = document.getElementById('distanceDisplay');
+
+            // ---------- НАСТРОЙКИ ----------
+            const GRAVITY = 0.65;
+            const WORLD_SPEED = 3.2;        // скорость движения машин влево
+            const JUMP_FORCE = -11.5;
+            const PLAYER_W = 34;
+            const PLAYER_H = 48;
+            const CAR_BODY_HEIGHT = 48;     // высота кузова
+            const WHEEL_RADIUS = 11;
+            const CAR_TOTAL_HEIGHT = CAR_BODY_HEIGHT + WHEEL_RADIUS;  // ~59
+            const GROUND_Y = 430;           // Y-координата дороги (асфальт)
+            const CAR_TOP_Y = GROUND_Y - CAR_TOTAL_HEIGHT; // верх кузова ≈ 371
+
+            // ---------- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ----------
+            let cars = [];
+            let player = {
+                x: 180,
+                y: CAR_TOP_Y - PLAYER_H,
+                width: PLAYER_W,
+                height: PLAYER_H,
+                vy: 0,
+                vx: 0,
+                attachedCar: null,
+                offsetX: 0,         // смещение относительно левого края машины
+                canJump: true,
+                distance: 0
+            };
+
+            let gameOver = false;
+            let gameStarted = false;
+
+            // Управление
+            const keys = {
+                'ArrowLeft': false,
+                'ArrowRight': false,
+                'ArrowUp': false,
+                ' ': false
+            };
+
+            // ---------- ГЕНЕРАТОР МАШИН ----------
+            function createCar(worldX) {
+                const minWidth = 100;
+                const maxWidth = 210;
+                const width = minWidth + Math.random() * (maxWidth - minWidth);
+                const colors = [
+                    '#E63946', '#2A9D8F', '#E9C46A', '#F4A261', '#264653',
+                    '#6D6875', '#B5838D', '#FFB4A2', '#9C89B8', '#6D597A'
+                ];
+                return {
+                    x: worldX,
+                    width: width,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    // для простоты крыша там же где и верх кузова (carTop)
+                };
+            }
+
+            // Заполняем начальными машинами
+            function generateInitialCars() {
+                cars = [];
+                let lastX = 0;
+                while (lastX < canvas.width + 600) {
+                    const car = createCar(lastX);
+                    cars.push(car);
+                    const gap = 60 + Math.random() * 120; // промежуток между машинами 60–180
+                    lastX = car.x + car.width + gap;
+                }
+            }
+
+            // ---------- СБРОС ИГРЫ ----------
+            function resetGame() {
+                generateInitialCars();
+                player.attachedCar = null;
+                // размещаем игрока на первой попавшейся машине, которая видна
+                for (let car of cars) {
+                    if (car.x < canvas.width && car.x + car.width > 50) {
+                        player.attachedCar = car;
+                        player.offsetX = Math.min(60, car.width - player.width);
+                        player.x = car.x + player.offsetX;
+                        player.y = CAR_TOP_Y - player.height;
+                        player.vy = 0;
+                        player.vx = 0;
+                        player.canJump = true;
+                        player.distance = 0;
+                        break;
+                    }
+                }
+                if (!player.attachedCar) {
+                    // fallback
+                    player.attachedCar = cars[0];
+                    player.offsetX = 20;
+                    player.x = cars[0].x + 20;
+                    player.y = CAR_TOP_Y - player.height;
+                }
+                gameOver = false;
+                gameStarted = true;
+            }
+
+            // ---------- ОБРАБОТКА ВВОДА ----------
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === ' ') {
+                    e.preventDefault();
+                    keys[e.key] = true;
+                    if (!gameStarted && !gameOver) {
+                        resetGame();
+                    }
+                    if (gameOver && e.key === ' ') {
+                        resetGame();
+                    }
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === ' ') {
+                    e.preventDefault();
+                    keys[e.key] = false;
+                }
+            });
+
+            // Клик для перезапуска
+            canvas.addEventListener('click', () => {
+                if (gameOver) {
+                    resetGame();
+                } else if (!gameStarted) {
+                    resetGame();
+                }
+            });
+
+            // ---------- ОБНОВЛЕНИЕ ИГРОВОГО МИРА ----------
+            function update() {
+                if (!gameStarted || gameOver) return;
+
+                // 1. Двигаем все машины влево
+                for (let car of cars) {
+                    car.x -= WORLD_SPEED;
+                }
+
+                // 2. Удаляем уехавшие далеко влево
+                cars = cars.filter(car => {
+                    if (car.x + car.width < -200) {
+                        if (player.attachedCar === car) {
+                            player.attachedCar = null; // игрок теряет опору
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+
+                // 3. Добавляем новые машины справа, если надо
+                const lastCar = cars[cars.length - 1];
+                if (lastCar && lastCar.x + lastCar.width < canvas.width + 250) {
+                    const gap = 60 + Math.random() * 130;
+                    const newCar = createCar(lastCar.x + lastCar.width + gap);
+                    cars.push(newCar);
+                }
+
+                // 4. Обновление игрока
+                if (player.attachedCar) {
+                    // Проверяем, существует ли ещё машина, к которой прикреплён игрок
+                    if (!cars.includes(player.attachedCar)) {
+                        player.attachedCar = null;
+                    } else {
+                        // Синхронизация позиции с машиной
+                        player.x = player.attachedCar.x + player.offsetX;
+                        player.y = CAR_TOP_Y - player.height;
+                        player.vy = 0;
+                        player.vx = 0;
+
+                        // Хождение по платформе
+                        const moveSpeed = 4.5;
+                        if (keys['ArrowLeft']) {
+                            player.offsetX -= moveSpeed;
+                            if (player.offsetX < 0) player.offsetX = 0;
+                        }
+                        if (keys['ArrowRight']) {
+                            player.offsetX += moveSpeed;
+                            const maxOffset = player.attachedCar.width - player.width;
+                            if (player.offsetX > maxOffset) player.offsetX = maxOffset;
+                        }
+
+                        // Проверка: не вышел ли игрок за край машины (упал)
+                        if (player.offsetX < 0 || player.offsetX + player.width > player.attachedCar.width) {
+                            player.attachedCar = null;
+                        }
+
+                        // Прыжок
+                        if ((keys['ArrowUp'] || keys[' ']) && player.canJump && player.attachedCar) {
+                            player.vy = JUMP_FORCE;
+                            player.vx = -WORLD_SPEED;  // наследуем горизонтальную скорость платформы
+                            player.attachedCar = null;
+                            player.canJump = false;
+                        }
+
+                        // Начисление дистанции
+                        player.distance += WORLD_SPEED;
+                    }
+                } else {
+                    // Игрок в воздухе
+                    player.vy += GRAVITY;
+                    player.y += player.vy;
+
+                    // Горизонтальное управление в воздухе
+                    const airAccel = 0.7;
+                    if (keys['ArrowLeft']) player.vx -= airAccel;
+                    if (keys['ArrowRight']) player.vx += airAccel;
+                    // Трение и ограничение скорости
+                    player.vx *= 0.96;
+                    const maxAirSpeed = 6.5;
+                    if (player.vx > maxAirSpeed) player.vx = maxAirSpeed;
+                    if (player.vx < -maxAirSpeed) player.vx = -maxAirSpeed;
+
+                    player.x += player.vx;
+
+                    // Проверка приземления (только когда падает вниз)
+                    if (player.vy >= 0) {
+                        for (let car of cars) {
+                            const playerBottom = player.y + player.height;
+                            const carTop = CAR_TOP_Y;
+                            // Проверка пересечения по X
+                            if (player.x + player.width > car.x && player.x < car.x + car.width) {
+                                // Проверка, что нижняя точка игрока достигла крыши
+                                if (playerBottom >= carTop && playerBottom <= carTop + 14) {
+                                    // Приземление!
+                                    player.y = carTop - player.height;
+                                    player.vy = 0;
+                                    player.attachedCar = car;
+                                    player.offsetX = player.x - car.x;
+                                    // Ограничиваем offsetX, чтобы игрок не вышел за края
+                                    if (player.offsetX < 0) player.offsetX = 0;
+                                    const maxOff = car.width - player.width;
+                                    if (player.offsetX > maxOff) player.offsetX = maxOff;
+                                    player.vx = -WORLD_SPEED;  // синхронизация с новой платформой
+                                    player.canJump = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Дистанция всё равно растёт (игрок летит)
+                    player.distance += WORLD_SPEED;
+
+                    // Проверка падения за нижнюю границу или уход далеко влево
+                    if (player.y > canvas.height + 40 || player.x + player.width < -50) {
+                        gameOver = true;
+                        gameStarted = false;
+                    }
+                }
+
+                // Обновляем счётчик на экране
+                distanceSpan.textContent = Math.floor(player.distance / 10);
+            }
+
+            // ---------- ОТРИСОВКА ----------
+            function drawRoad() {
+                // Асфальт
+                ctx.fillStyle = '#2d2d2d';
+                ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+                // Разметка
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([30, 40]);
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y + 20);
+                ctx.lineTo(canvas.width, GROUND_Y + 20);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            function drawCar(car) {
+                const x = car.x;
+                const y = CAR_TOP_Y;
+                const w = car.width;
+                const bodyH = CAR_BODY_HEIGHT;
+
+                // Кузов
+                ctx.fillStyle = car.color;
+                ctx.beginPath();
+                ctx.roundRect(x, y, w, bodyH, 6);
+                ctx.fill();
+                ctx.strokeStyle = '#111';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Окна
+                ctx.fillStyle = '#aed6f1';
+                const winH = 14;
+                const winY = y + 6;
+                const winW = w * 0.25;
+                ctx.fillRect(x + 10, winY, winW, winH);
+                ctx.fillRect(x + w - winW - 10, winY, winW, winH);
+
+                // Колеса
+                ctx.fillStyle = '#1a1a1a';
+                const wheelY = y + bodyH + 2;
+                const leftWheelX = x + 14;
+                const rightWheelX = x + w - 14 - WHEEL_RADIUS * 2;
+                ctx.beginPath();
+                ctx.arc(leftWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, WHEEL_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, WHEEL_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                // Диски
+                ctx.fillStyle = '#ccc';
+                ctx.beginPath();
+                ctx.arc(leftWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Полифилл для roundRect (если нет)
+            if (!ctx.roundRect) {
+                ctx.roundRect = function(x, y, w, h, r) {
+                    if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+                    this.beginPath();
+                    this.moveTo(x + r.tl, y);
+                    this.lineTo(x + w - r.tr, y);
+                    this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+                    this.lineTo(x + w, y + h - r.br);
+                    this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+                    this.lineTo(x + r.bl, y + h);
+                    this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+                    this.lineTo(x, y + r.tl);
+                    this.quadraticCurveTo(x, y, x + r.tl, y);
+                    this.closePath();
+                };
+            }
+
+            function drawPlayer() {
+                const x = player.x;
+                const y = player.y;
+                // Тень
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(x + 2, y + 2, player.width, player.height);
+                // Тело
+                ctx.fillStyle = '#FF6B6B';
+                ctx.fillRect(x, y, player.width, player.height - 12);
+                // Голова
+                ctx.fillStyle = '#FFD93D';
+                ctx.beginPath();
+                ctx.arc(x + player.width / 2, y - 6, 12, 0, Math.PI * 2);
+                ctx.fill();
+                // Очки
+                ctx.fillStyle = '#333';
+                ctx.fillRect(x + 8, y - 10, 8, 6);
+                ctx.fillRect(x + player.width - 16, y - 10, 8, 6);
+                // Ноги (простая анимация)
+                const legOffset = Math.sin(Date.now() * 0.02) * 3;
+                ctx.fillStyle = '#2E4053';
+                ctx.fillRect(x + 6, y + player.height - 14, 8, 14 + legOffset);
+                ctx.fillRect(x + player.width - 14, y + player.height - 14, 8, 14 - legOffset);
+            }
+
+            function drawUI() {
+                if (!gameStarted && !gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🚗 ПАРКУР ПО МАШИНАМ 🚗', canvas.width / 2, canvas.height / 2 - 30);
+                    ctx.font = '18px Arial';
+                    ctx.fillText('Нажми стрелки или пробел, чтобы начать', canvas.width / 2, canvas.height / 2 + 30);
+                    ctx.textAlign = 'start';
+                } else if (gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#FFD93D';
+                    ctx.font = 'bold 34px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width / 2, canvas.height / 2 - 30);
+                    ctx.fillStyle = 'white';
+                    ctx.font = '22px Arial';
+                    ctx.fillText(`Дистанция: ${Math.floor(player.distance / 10)} м`, canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.fillText('Нажми пробел или кликни, чтобы начать заново', canvas.width / 2, canvas.height / 2 + 60);
+                    ctx.textAlign = 'start';
+                }
+            }
+
+            function draw() {
+                // Небо
+                const gradient = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+                gradient.addColorStop(0, '#4facfe');
+                gradient.addColorStop(1, '#00f2fe');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, GROUND_Y);
+
+                drawRoad();
+
+                // Машины
+                for (let car of cars) {
+                    // Рисуем только те, что видны
+                    if (car.x + car.width > -50 && car.x < canvas.width + 50) {
+                        drawCar(car);
+                    }
+                }
+
+                // Игрок
+                drawPlayer();
+
+                // UI
+                drawUI();
+
+                // Текущий счёт на канвасе (в левом верхнем углу)
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`🏃 ${Math.floor(player.distance / 10)} m`, 15, 35);
+            }
+
+            // ---------- ИГРОВОЙ ЦИКЛ ----------
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // ---------- ЗАПУСК ----------
+            generateInitialCars();
+            // Игрок ещё не начал, показываем стартовый экран
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>

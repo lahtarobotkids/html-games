@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Руми, Мира, Зои против демонов</title>
+    <style>
+        :root { --bg: #0a0a0f; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #08080d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: default;
+        }
+        #game-wrapper {
+            position: relative;
+            border: 3px solid #3a2a0a;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(255, 180, 40, 0.3), 0 0 60px rgba(200, 120, 20, 0.2);
+            overflow: hidden;
+            background: #000;
+        }
+        canvas { display: block; border-radius: 9px; outline: none; }
+        canvas:focus { box-shadow: 0 0 0 2px rgba(255,215,0,0.5); }
+        #ui-overlay {
+            position: absolute; bottom: 0; left: 0; right: 0; pointer-events: none;
+            padding: 10px 15px; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px;
+        }
+        #skill-panel { display: flex; gap: 8px; align-items: flex-end; }
+        .skill-btn {
+            width: 50px; height: 50px; border-radius: 10px; border: 2px solid #8b6914;
+            background: rgba(20, 15, 5, 0.85); display: flex; align-items: center; justify-content: center;
+            position: relative; pointer-events: auto; cursor: pointer; transition: all 0.15s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .skill-btn:hover { border-color: #f0c040; box-shadow: 0 0 20px rgba(240,180,40,0.5); transform: translateY(-2px); }
+        .skill-btn:active { transform: scale(0.92); border-color: #fff; }
+        .skill-btn .icon { font-size: 22px; color: #f0d060; text-shadow: 0 0 8px rgba(240,200,60,0.7); }
+        .skill-btn .key-hint { position: absolute; bottom: 3px; right: 5px; font-size: 9px; color: #ccc; font-weight: bold; text-shadow: 0 1px 2px #000; }
+        .skill-btn .cooldown-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.7); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; color: #fff;
+            display: none;
+        }
+        .skill-btn.on-cooldown .cooldown-overlay { display: flex; }
+        #info-panel {
+            background: rgba(10,8,3,0.8); border: 2px solid #5a4010; border-radius: 8px;
+            padding: 8px 14px; color: #f0d080; font-size: 12px; letter-spacing: 0.5px;
+            text-shadow: 0 1px 3px #000; min-width: 100px; text-align: center;
+        }
+        #info-panel .val { color: #ffcc00; font-weight: bold; font-size: 15px; }
+        .hero-name { position: absolute; top: 15px; left: 15px; color: #fff; font-weight: bold; font-size: 16px; text-shadow: 0 0 8px #000; }
+        .control-hint {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); color: #ddd; padding: 4px 14px; border-radius: 20px;
+            font-size: 11px; pointer-events: none; opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+<div id="game-wrapper">
+    <canvas id="game" tabindex="0"></canvas>
+    <div class="hero-name" id="hero-name">Руми</div>
+    <div id="ui-overlay">
+        <div id="info-panel">
+            🎤 Атака: <span class="val" id="atk-val">30</span><br>
+            🛡️ Защита: <span class="val" id="def-val">10</span>
+        </div>
+        <div id="skill-panel">
+            <div class="skill-btn" id="skill-q" title="Световая волна [Q]">
+                <span class="icon">🌟</span><span class="key-hint">Q</span>
+                <div class="cooldown-overlay"></div>
+            </div>
+            <div class="skill-btn" id="skill-w" title="Музыкальный взрыв [W]">
+                <span class="icon">🎶</span><span class="key-hint">W</span>
+                <div class="cooldown-overlay"></div>
+            </div>
+            <div class="skill-btn" id="skill-e" title="Танцевальный рывок [E]">
+                <span class="icon">💃</span><span class="key-hint">E</span>
+                <div class="cooldown-overlay"></div>
+            </div>
+        </div>
+    </div>
+    <div class="control-hint">🎤 ЛКМ – движение/атака | ПКМ – атака | WASD – движение | Q/W/E – скиллы</div>
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const W = 920, H = 580;
+        canvas.width = W; canvas.height = H;
+        const MAP_W = 2400, MAP_H = 1800;
+
+        let gameTime = 0, score = 0, kills = 0, screenShake = 0, gameOver = false, respawnTimer = 0;
+        let camera = { x: 0, y: 0 };
+        const CAM_SMOOTH = 0.08;
+        const keys = {};
+        let mouseX = W/2, mouseY = H/2, mouseLeftDown = false, mouseRightDown = false;
+        let moveTarget = null;
+
+        canvas.focus();
+        canvas.addEventListener('click', () => canvas.focus());
+        window.addEventListener('load', () => canvas.focus());
+
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (['w','a','s','d','q','e','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault();
+        });
+        window.addEventListener('keyup', e => {
+            keys[e.key.toLowerCase()] = false;
+            if (['w','a','s','d','q','e','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault();
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.clientX - rect.left) * (W / rect.width);
+            mouseY = (e.clientY - rect.top) * (H / rect.height);
+        });
+        canvas.addEventListener('mousedown', e => {
+            e.preventDefault();
+            if (e.button === 0) mouseLeftDown = true;
+            if (e.button === 2) mouseRightDown = true;
+            canvas.focus();
+        });
+        canvas.addEventListener('mouseup', e => {
+            if (e.button === 0) mouseLeftDown = false;
+            if (e.button === 2) mouseRightDown = false;
+        });
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        canvas.addEventListener('click', e => {
+            const rect = canvas.getBoundingClientRect();
+            const worldX = (e.clientX - rect.left) * (W/rect.width) + camera.x - W/2;
+            const worldY = (e.clientY - rect.top) * (H/rect.height) + camera.y - H/2;
+            let enemyClicked = null;
+            enemies.forEach(en => { if (!en.alive) return; const d = Math.hypot(en.x - worldX, en.y - worldY); if (d < 45) enemyClicked = en; });
+            if (enemyClicked && player.atkCooldown <= 0 && player.hp > 0) {
+                player.facingAngle = Math.atan2(enemyClicked.y - player.y, enemyClicked.x - player.x);
+                performAttack(player, enemyClicked);
+                player.atkCooldown = player.atkCooldownMax;
+                moveTarget = null;
+            } else {
+                moveTarget = { x: worldX, y: worldY };
+            }
+        });
+
+        const skillQ = document.getElementById('skill-q');
+        const skillW = document.getElementById('skill-w');
+        const skillE = document.getElementById('skill-e');
+        skillQ.addEventListener('click', () => { useSkill('q'); canvas.focus(); });
+        skillW.addEventListener('click', () => { useSkill('w'); canvas.focus(); });
+        skillE.addEventListener('click', () => { useSkill('e'); canvas.focus(); });
+
+        let particles = [], floatingTexts = [], projectiles = [];
+        function spawnParticles(x, y, count, color, speed = 2, life = 25) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = speed * (0.4 + Math.random() * 1.2);
+                particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, life, maxLife: life, color, size: 1.5+Math.random()*3.5 });
+            }
+        }
+        function spawnFloatingText(x, y, text, color = '#fff') {
+            floatingTexts.push({ x, y, text, life: 35, maxLife: 35, color, vy: -2.5 });
+        }
+        function spawnProjectile(x1, y1, x2, y2, type = 'note') {
+            projectiles.push({ x: x1, y: y1, targetX: x2, targetY: y2, life: 10, maxLife: 10, type });
+        }
+
+        let mapItems = [];
+        const ITEM_TYPES = {
+            health:  { name: 'Аптечка', color: '#4eff4e', glow: '#8fff8f', icon: '❤️', effect: 'heal', value: 40 },
+            attack:  { name: 'Стимулятор', color: '#ff6b35', glow: '#ffaa66', icon: '🔥', effect: 'atkBoost', value: 15, duration: 18 },
+            defense: { name: 'Бронежилет', color: '#5b9eff', glow: '#99ccff', icon: '🛡️', effect: 'defBoost', value: 12, duration: 18 },
+            cooldown:{ name: 'Батарея', color: '#e080ff', glow: '#f0b0ff', icon: '⏳', effect: 'cdReset', value: 1 },
+        };
+        function spawnMapItem(x, y, typeKey) { mapItems.push({ x, y, type: typeKey, alive: true, respawnTime: 0, bobOffset: Math.random()*Math.PI*2 }); }
+        function placeItemsOnMap() {
+            const pos = [
+                [400,350,'health'],[1200,280,'attack'],[800,700,'defense'],[1600,550,'cooldown'],[350,900,'health'],
+                [1000,1050,'attack'],[1700,950,'defense'],[600,1200,'cooldown'],[1400,1300,'health'],[1900,700,'attack'],
+                [500,500,'health'],[1500,400,'defense'],[300,1400,'cooldown'],[1800,1200,'health'],[1100,600,'attack'],
+                [900,1400,'defense']
+            ];
+            pos.forEach(p => spawnMapItem(p[0], p[1], p[2]));
+        }
+
+        // ★ ГЕРОИ (смена при смерти)
+        const heroes = [
+            { name: 'Руми', draw: drawRumi },
+            { name: 'Мира', draw: drawMira },
+            { name: 'Зои', draw: drawZoe }
+        ];
+        let currentHeroIndex = 0;
+
+        // ★ ИГРОК (общие параметры)
+        let player = {
+            x: 400, y: 1500, vx: 0, vy: 0, radius: 20, speed: 3.5,
+            hp: 100, maxHp: 100, atk: 30, def: 10,
+            atkCooldown: 0, atkCooldownMax: 18, atkRange: 200,
+            facingAngle: -Math.PI/2, targetEnemy: null,
+            atkBoostTimer: 0, defBoostTimer: 0,
+            skillQcd: 0, skillQcdMax: 90,
+            skillWcd: 0, skillWcdMax: 210,
+            skillEcd: 0, skillEcdMax: 180,
+            dashDx: 0, dashDy: 0, dashFrames: 0,
+            invincible: 0,
+        };
+        function resetPlayer() {
+            player.x = 400; player.y = 1500; player.hp = player.maxHp; player.atkCooldown = 0;
+            player.atkBoostTimer = 0; player.defBoostTimer = 0;
+            player.skillQcd = 0; player.skillWcd = 0; player.skillEcd = 0;
+            player.dashFrames = 0; player.invincible = 60; player.vx = 0; player.vy = 0; moveTarget = null;
+            document.getElementById('hero-name').textContent = heroes[currentHeroIndex].name;
+        }
+        function switchToNextHero() {
+            currentHeroIndex = (currentHeroIndex + 1) % heroes.length;
+            resetPlayer();
+            respawnTimer = 0;
+            gameOver = false;
+        }
+        function getPlayerEffectiveAtk() { return player.atk + (player.atkBoostTimer > 0 ? 15 : 0); }
+        function getPlayerEffectiveDef() { return player.def + (player.defBoostTimer > 0 ? 12 : 0); }
+
+        // ★ ВРАГИ (Джину, Эбби, Романс Бэйби, Мистери)
+        let enemies = [];
+        const ENEMY_CONFIGS = [
+            { name: 'Джину', color: '#8a2be2', skin: 'jin-u', hp: 90, atk: 22, def: 6, speed: 2.0, detectRange: 250, atkRange: 65, atkCd: 45, homeX: 600, homeY: 400, patrolR: 110 },
+            { name: 'Эбби', color: '#2e8b57', skin: 'abby', hp: 100, atk: 20, def: 10, speed: 1.7, detectRange: 240, atkRange: 60, atkCd: 55, homeX: 1700, homeY: 600, patrolR: 100 },
+            { name: 'Романс Бэйби', color: '#ff69b4', skin: 'romance-baby', hp: 70, atk: 28, def: 5, speed: 2.2, detectRange: 260, atkRange: 140, atkCd: 60, homeX: 1000, homeY: 1200, patrolR: 90 },
+            { name: 'Мистери', color: '#2f2f3f', skin: 'mystery', hp: 80, atk: 26, def: 4, speed: 1.9, detectRange: 270, atkRange: 130, atkCd: 50, homeX: 1900, homeY: 1100, patrolR: 80 },
+        ];
+        function createEnemy(config, id) {
+            return {
+                id, name: config.name, color: config.color, skin: config.skin,
+                x: config.homeX, y: config.homeY, homeX: config.homeX, homeY: config.homeY,
+                patrolR: config.patrolR, vx:0, vy:0, radius:19,
+                hp: config.hp, maxHp: config.hp, atk: config.atk, def: config.def,
+                speed: config.speed, detectRange: config.detectRange, atkRange: config.atkRange,
+                atkCooldown: 0, atkCooldownMax: config.atkCd,
+                state: 'patrol', patrolAngle: Math.random()*Math.PI*2, patrolTimer: 60+Math.random()*120,
+                facingAngle:0, respawnTimer:0, alive:true,
+            };
+        }
+        function resetEnemies() { enemies = ENEMY_CONFIGS.map((c,i) => createEnemy(c,i)); }
+        function respawnEnemy(enemy) {
+            enemy.x = enemy.homeX; enemy.y = enemy.homeY; enemy.hp = enemy.maxHp; enemy.alive = true;
+            enemy.state = 'patrol'; enemy.atkCooldown = 0; enemy.patrolTimer = 60;
+            spawnParticles(enemy.x, enemy.y, 20, '#8888ff', 3, 30);
+        }
+
+        // Городская карта (без изменений)
+        let mapCanvas, mapCtx;
+        function prerenderMap() {
+            mapCanvas = document.createElement('canvas'); mapCanvas.width = MAP_W; mapCanvas.height = MAP_H;
+            mapCtx = mapCanvas.getContext('2d');
+            mapCtx.fillStyle = '#555555'; mapCtx.fillRect(0,0,MAP_W,MAP_H);
+            for (let i=0;i<2000;i++) {
+                mapCtx.fillStyle = i%2===0 ? '#5a5a5a' : '#4f4f4f';
+                mapCtx.beginPath(); mapCtx.arc(Math.random()*MAP_W, Math.random()*MAP_H, 10+Math.random()*30, 0, Math.PI*2); mapCtx.fill();
+            }
+            const roadsX = [350, 1150, 1850];
+            roadsX.forEach(rx => {
+                mapCtx.fillStyle = '#666666'; mapCtx.fillRect(rx-65, 0, 130, MAP_H);
+                mapCtx.fillStyle = '#777777'; mapCtx.fillRect(rx-2, 0, 4, MAP_H);
+            });
+            mapCtx.fillStyle = '#3a6ea5'; mapCtx.fillRect(0, MAP_H/2-60, MAP_W, 120);
+            mapCtx.fillStyle = '#2a5a8a'; mapCtx.fillRect(0, MAP_H/2-15, MAP_W, 30);
+            mapCtx.fillStyle = '#777'; mapCtx.fillRect(0, MAP_H/2-70, MAP_W, 10);
+            mapCtx.fillStyle = '#777'; mapCtx.fillRect(0, MAP_H/2+60, MAP_W, 10);
+            const buildingColors = ['#4a4a5a','#3d3d4d','#5a5a6a','#4d4d5d','#3a3a4a'];
+            for (let i=0;i<60;i++) {
+                const bx = 50 + Math.random()*(MAP_W-100);
+                const by = 50 + Math.random()*(MAP_H-100);
+                const bw = 40 + Math.random()*70;
+                const bh = 40 + Math.random()*80;
+                if (roadsX.some(rx => Math.abs(bx - rx) < 100)) continue;
+                if (Math.abs(by - MAP_H/2) < 100) continue;
+                mapCtx.fillStyle = buildingColors[Math.floor(Math.random()*buildingColors.length)];
+                mapCtx.fillRect(bx, by, bw, bh);
+                mapCtx.fillStyle = '#ffff88';
+                for (let wx = bx+8; wx < bx+bw-8; wx+=12) {
+                    for (let wy = by+8; wy < by+bh-8; wy+=14) {
+                        if (Math.random()>0.3) mapCtx.fillRect(wx, wy, 5, 7);
+                    }
+                }
+            }
+        }
+
+        // Отрисовка Руми
+        function drawRumi(x, y, angle, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0, 8, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-5,5,4,10); ctx.fillRect(1,5,4,10);
+            ctx.fillStyle = '#ff69b4'; ctx.fillRect(-6,13,6,4); ctx.fillRect(2,13,6,4);
+            ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.moveTo(-8,2); ctx.lineTo(8,2); ctx.lineTo(12,9); ctx.lineTo(-12,9); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(-7,-4,14,8);
+            ctx.fillStyle = '#ff1493'; ctx.fillRect(-7,-4,14,3);
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-12,-3,6,3); ctx.fillRect(6,-3,6,3);
+            ctx.fillStyle = '#fce0c0'; ctx.beginPath(); ctx.arc(0,-9,8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(0,-11,9,Math.PI,Math.PI*2); ctx.fill(); ctx.fillRect(-9,-11,18,7);
+            ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.moveTo(3,-16); ctx.quadraticCurveTo(14,-22,18,-14); ctx.quadraticCurveTo(12,-18,3,-14); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3,-10,2.8,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,2.8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a3a1a'; ctx.beginPath(); ctx.arc(-3,-10,1.4,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,1.4,0,Math.PI*2); ctx.fill();
+            ctx.save(); ctx.translate(10, -2); ctx.rotate(angle + 0.6);
+            ctx.fillStyle = '#888'; ctx.fillRect(-1.5,-16,3,16);
+            ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.arc(0,-18,5,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0,-18,3,0,Math.PI*2); ctx.fill();
+            ctx.restore();
+            ctx.restore();
+        }
+
+        // Отрисовка Миры (мечница)
+        function drawMira(x, y, angle, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0, 8, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-5,5,4,10); ctx.fillRect(1,5,4,10);
+            ctx.fillStyle = '#aa3366'; ctx.fillRect(-6,13,6,4); ctx.fillRect(2,13,6,4);
+            ctx.fillStyle = '#cc4488'; ctx.beginPath(); ctx.moveTo(-8,2); ctx.lineTo(8,2); ctx.lineTo(12,9); ctx.lineTo(-12,9); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(-7,-4,14,8);
+            ctx.fillStyle = '#cc4488'; ctx.fillRect(-7,-4,14,3);
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-12,-3,6,3); ctx.fillRect(6,-3,6,3);
+            ctx.fillStyle = '#fce0c0'; ctx.beginPath(); ctx.arc(0,-9,8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#aa3366'; ctx.beginPath(); ctx.arc(0,-11,9,Math.PI,Math.PI*2); ctx.fill(); ctx.fillRect(-9,-11,18,7);
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3,-10,2.8,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,2.8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a3a1a'; ctx.beginPath(); ctx.arc(-3,-10,1.4,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,1.4,0,Math.PI*2); ctx.fill();
+            // Меч
+            ctx.save(); ctx.translate(10, -2); ctx.rotate(angle + 0.6);
+            ctx.fillStyle = '#aaa'; ctx.fillRect(-1.5,-18,3,18);
+            ctx.fillStyle = '#ffd700'; ctx.fillRect(-3,-3,6,3);
+            ctx.restore();
+            ctx.restore();
+        }
+
+        // Отрисовка Зои (веер)
+        function drawZoe(x, y, angle, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0, 8, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-5,5,4,10); ctx.fillRect(1,5,4,10);
+            ctx.fillStyle = '#4488cc'; ctx.fillRect(-6,13,6,4); ctx.fillRect(2,13,6,4);
+            ctx.fillStyle = '#66aadd'; ctx.beginPath(); ctx.moveTo(-8,2); ctx.lineTo(8,2); ctx.lineTo(12,9); ctx.lineTo(-12,9); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(-7,-4,14,8);
+            ctx.fillStyle = '#66aadd'; ctx.fillRect(-7,-4,14,3);
+            ctx.fillStyle = '#fce0c0'; ctx.fillRect(-12,-3,6,3); ctx.fillRect(6,-3,6,3);
+            ctx.fillStyle = '#fce0c0'; ctx.beginPath(); ctx.arc(0,-9,8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#4488cc'; ctx.beginPath(); ctx.arc(0,-11,9,Math.PI,Math.PI*2); ctx.fill(); ctx.fillRect(-9,-11,18,7);
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3,-10,2.8,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,2.8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a3a1a'; ctx.beginPath(); ctx.arc(-3,-10,1.4,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3,-10,1.4,0,Math.PI*2); ctx.fill();
+            // Веер
+            ctx.save(); ctx.translate(10, -2); ctx.rotate(angle + 0.6);
+            ctx.fillStyle = '#aaddff'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-12,-10); ctx.lineTo(12,-10); ctx.fill();
+            ctx.restore();
+            ctx.restore();
+        }
+
+        // Отрисовка врагов (обновлённые скины)
+        function drawEnemyCharacter(x, y, enemy, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 8, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+            const c = enemy.color;
+            if (enemy.skin === 'jin-u') {
+                ctx.fillStyle = '#222'; ctx.fillRect(-6,3,12,10);
+                ctx.fillStyle = c; ctx.fillRect(-8,-5,16,10);
+                ctx.fillStyle = '#d4c0a0'; ctx.beginPath(); ctx.arc(0,-8,6.5,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0,-9,2.5,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ccc'; ctx.fillRect(-10,-10,2,10); ctx.fillRect(8,-10,2,10);
+            } else if (enemy.skin === 'abby') {
+                ctx.fillStyle = '#3a1a1a'; ctx.fillRect(-8,3,16,12);
+                ctx.fillStyle = c; ctx.fillRect(-10,-5,20,11);
+                ctx.fillStyle = '#e0c0a0'; ctx.beginPath(); ctx.arc(0,-9,7,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#300'; ctx.beginPath(); ctx.arc(0,-10,3,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#7a6a4a'; ctx.fillRect(-12,-4,7,10); ctx.fillStyle = '#aa9a7a'; ctx.fillRect(-11,-3,5,8);
+                ctx.fillStyle = '#aaa'; ctx.fillRect(8,-8,3,14); ctx.fillStyle = '#ffd700'; ctx.fillRect(7,-9,5,3);
+            } else if (enemy.skin === 'romance-baby') {
+                ctx.fillStyle = '#ffb6c1'; ctx.fillRect(-6,-3,12,13);
+                ctx.fillStyle = c; ctx.fillRect(-5,-2,10,12);
+                ctx.fillStyle = '#ffe0e0'; ctx.beginPath(); ctx.arc(0,-7,6.5,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.arc(0,-8,2.5,0,Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#ff69b4'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(9,-3,10,-Math.PI/2,Math.PI/2); ctx.stroke();
+                ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.arc(9,-13,3,0,Math.PI*2); ctx.fill();
+            } else if (enemy.skin === 'mystery') {
+                ctx.fillStyle = '#1a1a2a'; ctx.fillRect(-7,-3,14,14);
+                ctx.fillStyle = c; ctx.fillRect(-6,-3,12,13);
+                ctx.fillStyle = '#2f2f4f'; ctx.fillRect(-7,-1,14,5);
+                ctx.fillStyle = '#d0d0e0'; ctx.beginPath(); ctx.arc(0,-8,6,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0,-9,2.5,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#6a4a2a'; ctx.fillRect(7,-10,2.5,18);
+                ctx.fillStyle = '#8060c0'; ctx.beginPath(); ctx.arc(8.25,-12,5,0,Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawMapItem(item) {
+            const bob = Math.sin(gameTime*0.06 + item.bobOffset)*4;
+            const x = item.x, y = item.y+bob;
+            const t = ITEM_TYPES[item.type];
+            const glow = ctx.createRadialGradient(x,y,4,x,y,22);
+            glow.addColorStop(0,t.glow); glow.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(x,y,22,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle=t.color; ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#fff'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText(t.icon,x,y+4);
+        }
+
+        function drawGame(){
+            ctx.clearRect(0,0,W,H);
+            let shakeX=0,shakeY=0;
+            if(screenShake>0){ shakeX=(Math.random()-0.5)*screenShake*2; shakeY=(Math.random()-0.5)*screenShake*2; }
+            const camX = camera.x - W/2 + shakeX, camY = camera.y - H/2 + shakeY;
+            const clampedCamX = Math.max(0, Math.min(MAP_W-W, camX));
+            const clampedCamY = Math.max(0, Math.min(MAP_H-H, camY));
+            ctx.drawImage(mapCanvas, -clampedCamX, -clampedCamY, MAP_W, MAP_H);
+            const vig = ctx.createRadialGradient(W/2,H/2,W*0.55,W/2,H/2,W*0.85);
+            vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.45)');
+            ctx.fillStyle=vig; ctx.fillRect(0,0,W,H);
+            mapItems.forEach(item=>{ if(!item.alive)return; const sx=item.x-clampedCamX, sy=item.y-clampedCamY; if(sx>-40&&sx<W+40&&sy>-40&&sy<H+40) drawMapItem({...item, x:sx, y:sy}); });
+            enemies.forEach(enemy=>{ if(!enemy.alive)return; const sx=enemy.x-clampedCamX, sy=enemy.y-clampedCamY; if(sx>-50&&sx<W+50&&sy>-50&&sy<H+50){ drawEnemyCharacter(sx,sy,enemy,1); drawHealthBar(sx,sy-24,enemy.hp,enemy.maxHp,32); ctx.fillStyle='#fff'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.fillText(enemy.name,sx,sy-29); } });
+            // Игрок
+            const px = player.x - clampedCamX, py = player.y - clampedCamY;
+            if(player.invincible>0 && Math.floor(player.invincible/4)%2===0) ctx.globalAlpha=0.5;
+            heroes[currentHeroIndex].draw(px, py, player.facingAngle, 1);
+            ctx.globalAlpha=1;
+            drawHealthBar(px, py-26, player.hp, player.maxHp, 36, true);
+            projectiles.forEach(proj => {
+                const progress = 1 - proj.life / proj.maxLife;
+                const sx = proj.x + (proj.targetX - proj.x)*progress;
+                const sy = proj.y + (proj.targetY - proj.y)*progress;
+                const screenX = sx - clampedCamX, screenY = sy - clampedCamY;
+                if (proj.type === 'note') {
+                    ctx.fillStyle = '#ff69b4'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+                    ctx.fillText('🎵', screenX, screenY);
+                } else if (proj.type === 'heart') {
+                    ctx.fillStyle = '#ff1493'; ctx.font = '14px sans-serif'; ctx.fillText('💖', screenX, screenY);
+                }
+            });
+            particles.forEach(p => { const sx=p.x-clampedCamX, sy=p.y-clampedCamY; ctx.globalAlpha=p.life/p.maxLife; ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(sx,sy,p.size*(p.life/p.maxLife),0,Math.PI*2); ctx.fill(); });
+            floatingTexts.forEach(ft => { const sx=ft.x-clampedCamX, sy=ft.y-clampedCamY; ctx.globalAlpha=ft.life/ft.maxLife; ctx.fillStyle=ft.color; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.fillText(ft.text,sx,sy); });
+            ctx.globalAlpha=1;
+            drawMinimap(clampedCamX,clampedCamY);
+            if(player.hp<=0){
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+                ctx.fillStyle='#ff4444'; ctx.font='bold 36px sans-serif'; ctx.textAlign='center'; ctx.fillText('ВЫ ПОГИБЛИ',W/2,H/2-10);
+                ctx.fillStyle='#fff'; ctx.font='16px sans-serif'; ctx.fillText(`Возрождение через ${Math.ceil(respawnTimer/60)} сек...`,W/2,H/2+30);
+                ctx.fillText(`Следующая героиня: ${heroes[(currentHeroIndex+1)%heroes.length].name}`, W/2, H/2+55);
+            }
+            ctx.fillStyle='#ffd700'; ctx.font='bold 15px sans-serif'; ctx.textAlign='right'; ctx.fillText(`Убийств: ${kills}`,W-20,28);
+            ctx.fillText(`Очков: ${score}`,W-20,48);
+        }
+
+        function drawHealthBar(x,y,hp,maxHp,width,isPlayer=false){
+            const h=5; ctx.fillStyle='#111'; ctx.fillRect(x-width/2-1,y-1,width+2,h+2);
+            ctx.fillStyle='#555'; ctx.fillRect(x-width/2,y,width,h);
+            const ratio=Math.max(0,hp/maxHp);
+            ctx.fillStyle= ratio>0.5? `rgb(${Math.floor(255*(1-ratio)*2)},255,40)` : `rgb(255,${Math.floor(255*ratio*2)},30)`;
+            ctx.fillRect(x-width/2,y,width*ratio,h);
+            ctx.strokeStyle=isPlayer?'#ffd700':'#333'; ctx.lineWidth=1; ctx.strokeRect(x-width/2-1,y-1,width+2,h+2);
+        }
+
+        function drawMinimap(camX,camY){
+            const mmW=150,mmH=110,mmX=W-mmW-15,mmY=H-mmH-60;
+            const scaleX=mmW/MAP_W, scaleY=mmH/MAP_H;
+            ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(mmX-2,mmY-2,mmW+4,mmH+4);
+            ctx.strokeStyle='#8b6914'; ctx.lineWidth=2; ctx.strokeRect(mmX-2,mmY-2,mmW+4,mmH+4);
+            ctx.fillStyle='#3a7025'; ctx.fillRect(mmX,mmY,mmW,mmH);
+            enemies.forEach(e=>{ if(!e.alive)return; ctx.fillStyle=e.color; ctx.fillRect(mmX+e.x*scaleX-2,mmY+e.y*scaleY-2,4,4); });
+            ctx.fillStyle='#00ff88'; ctx.beginPath(); ctx.arc(mmX+player.x*scaleX,mmY+player.y*scaleY,3.5,0,Math.PI*2); ctx.fill();
+            mapItems.forEach(item=>{ if(!item.alive)return; ctx.fillStyle=ITEM_TYPES[item.type].color; ctx.fillRect(mmX+item.x*scaleX-1,mmY+item.y*scaleY-1,2.5,2.5); });
+            ctx.strokeStyle='#ffd700'; ctx.strokeRect(mmX+camX*scaleX,mmY+camY*scaleY,W*scaleX,H*scaleY);
+        }
+
+        // Логика (обновлённая смена героя)
+        function update(){
+            if(player.hp<=0){
+                respawnTimer--;
+                if(respawnTimer<=0){
+                    switchToNextHero();
+                }
+                enemies.forEach(e=>{ if(e.alive&&e.state==='chase') e.state='return'; });
+                updateParticlesAndTexts();
+                return;
+            }
+            gameTime++;
+            if(player.atkBoostTimer>0) player.atkBoostTimer--;
+            if(player.defBoostTimer>0) player.defBoostTimer--;
+            if(player.invincible>0) player.invincible--;
+            if(player.atkCooldown>0) player.atkCooldown--;
+            if(player.skillQcd>0) player.skillQcd--;
+            if(player.skillWcd>0) player.skillWcd--;
+            if(player.skillEcd>0) player.skillEcd--;
+            if(screenShake>0) screenShake*=0.85;
+            if(screenShake<0.3) screenShake=0;
+
+            if(player.dashFrames>0){
+                player.x+=player.dashDx; player.y+=player.dashDy;
+                player.dashFrames--;
+                if(player.dashFrames<=0){ player.dashDx=0; player.dashDy=0; }
+            }
+
+            let moveX=0,moveY=0;
+            if(keys['w']||keys['arrowup']) moveY=-1;
+            if(keys['s']||keys['arrowdown']) moveY=1;
+            if(keys['a']||keys['arrowleft']) moveX=-1;
+            if(keys['d']||keys['arrowright']) moveX=1;
+
+            if(player.dashFrames<=0){
+                if(moveX!==0||moveY!==0){
+                    moveTarget=null; const len=Math.hypot(moveX,moveY);
+                    moveX/=len; moveY/=len; player.facingAngle=Math.atan2(moveY,moveX);
+                    player.vx=moveX*player.speed; player.vy=moveY*player.speed;
+                }else if(moveTarget){
+                    const dx=moveTarget.x-player.x, dy=moveTarget.y-player.y, dist=Math.hypot(dx,dy);
+                    if(dist<4){ moveTarget=null; player.vx=0; player.vy=0; }
+                    else { player.facingAngle=Math.atan2(dy,dx); player.vx=(dx/dist)*player.speed; player.vy=(dy/dist)*player.speed; }
+                }else{ player.vx*=0.7; player.vy*=0.7; }
+                player.x+=player.vx; player.y+=player.vy;
+            }
+            player.x=Math.max(player.radius,Math.min(MAP_W-player.radius,player.x));
+            player.y=Math.max(player.radius,Math.min(MAP_H-player.radius,player.y));
+
+            if(player.atkCooldown<=0 && player.dashFrames<=0){
+                let closest=null, closestDist=player.atkRange;
+                enemies.forEach(en=>{ if(!en.alive)return; const d=Math.hypot(en.x-player.x, en.y-player.y); if(d<closestDist){ closestDist=d; closest=en; } });
+                if(closest){
+                    player.facingAngle=Math.atan2(closest.y-player.y, closest.x-player.x);
+                    performAttack(player, closest);
+                    player.atkCooldown=player.atkCooldownMax;
+                }
+            }
+
+            if(keys['q'] && player.skillQcd<=0 && player.hp>0) useSkill('q');
+            if(keys['w'] && player.skillWcd<=0 && player.hp>0) useSkill('w');
+            if(keys['e'] && player.skillEcd<=0 && player.hp>0) useSkill('e');
+
+            enemies.forEach(enemy=>{
+                if(!enemy.alive){ enemy.respawnTimer--; if(enemy.respawnTimer<=0) respawnEnemy(enemy); return; }
+                const dx=player.x-enemy.x, dy=player.y-enemy.y, distToPlayer=Math.hypot(dx,dy);
+                if(enemy.state==='patrol'){
+                    if(distToPlayer<enemy.detectRange && player.hp>0) enemy.state='chase';
+                    else {
+                        enemy.patrolTimer--;
+                        if(enemy.patrolTimer<=0){ enemy.patrolAngle=Math.random()*Math.PI*2; enemy.patrolTimer=80+Math.random()*140; }
+                        const ptx=enemy.homeX+Math.cos(enemy.patrolAngle)*enemy.patrolR;
+                        const pty=enemy.homeY+Math.sin(enemy.patrolAngle)*enemy.patrolR;
+                        const pdx=ptx-enemy.x, pdy=pty-enemy.y, pdist=Math.hypot(pdx,pdy);
+                        if(pdist>3){ enemy.x+=(pdx/pdist)*enemy.speed*0.5; enemy.y+=(pdy/pdist)*enemy.speed*0.5; }
+                    }
+                }else if(enemy.state==='chase'){
+                    if(distToPlayer>enemy.detectRange+100||player.hp<=0) enemy.state='return';
+                    else if(distToPlayer<=enemy.atkRange) enemy.state='attack';
+                    else { enemy.x+=(dx/distToPlayer)*enemy.speed; enemy.y+=(dy/distToPlayer)*enemy.speed; enemy.facingAngle=Math.atan2(dy,dx); }
+                }else if(enemy.state==='attack'){
+                    if(distToPlayer>enemy.atkRange+30||player.hp<=0) enemy.state='chase';
+                    else { enemy.facingAngle=Math.atan2(dy,dx); if(enemy.atkCooldown<=0){ performAttack(enemy,player); enemy.atkCooldown=enemy.atkCooldownMax; } }
+                }else if(enemy.state==='return'){
+                    const hdx=enemy.homeX-enemy.x, hdy=enemy.homeY-enemy.y, hdist=Math.hypot(hdx,hdy);
+                    if(hdist<5) enemy.state='patrol';
+                    else { enemy.x+=(hdx/hdist)*enemy.speed*1.2; enemy.y+=(hdy/hdist)*enemy.speed*1.2; }
+                    if(distToPlayer<enemy.detectRange && player.hp>0) enemy.state='chase';
+                }
+                if(enemy.atkCooldown>0) enemy.atkCooldown--;
+                enemy.x=Math.max(enemy.radius,Math.min(MAP_W-enemy.radius,enemy.x));
+                enemy.y=Math.max(enemy.radius,Math.min(MAP_H-enemy.radius,enemy.y));
+            });
+
+            mapItems.forEach(item=>{
+                if(!item.alive){ item.respawnTime--; if(item.respawnTime<=0){ item.alive=true; item.bobOffset=Math.random()*Math.PI*2; } return; }
+                if(Math.hypot(player.x-item.x, player.y-item.y)<30){ applyItemEffect(item); item.alive=false; item.respawnTime=900+Math.random()*600; }
+            });
+
+            camera.x += (player.x - camera.x)*CAM_SMOOTH;
+            camera.y += (player.y - camera.y)*CAM_SMOOTH;
+            updateParticlesAndTexts();
+            updateSkillUI();
+        }
+
+        function performAttack(attacker, defender){
+            if(attacker===player && player.invincible>0 && player.dashFrames>0) return;
+            if(defender===player && player.invincible>0) return;
+            const rawDmg = attacker===player ? getPlayerEffectiveAtk() : attacker.atk;
+            const defVal = defender===player ? getPlayerEffectiveDef() : defender.def;
+            const dmg = Math.max(3, rawDmg - defVal + Math.floor(Math.random()*8-4));
+            defender.hp -= dmg;
+            if(attacker===player) spawnProjectile(player.x, player.y, defender.x, defender.y, 'note');
+            spawnParticles(defender.x, defender.y, 8, attacker===player?'#ff69b4':'#ff5555', 2.5, 20);
+            spawnFloatingText(defender.x, defender.y-15, '-'+dmg, attacker===player?'#ff69b4':'#ff4444');
+            if(attacker===player) screenShake=Math.max(screenShake,2);
+            if(defender.hp<=0){
+                defender.hp=0;
+                if(defender===player){
+                    spawnParticles(player.x, player.y, 30, '#ff3333', 4, 40);
+                    spawnFloatingText(player.x, player.y, 'СМЕРТЬ', '#ff0000');
+                    respawnTimer = 300;
+                    gameOver = true;
+                } else {
+                    spawnParticles(defender.x, defender.y, 25, defender.color, 3.5, 35);
+                    spawnFloatingText(defender.x, defender.y, 'УБИТ!', '#ffd700');
+                    defender.alive=false; defender.respawnTimer=480+Math.random()*360;
+                    kills++; score+=100; screenShake=Math.max(screenShake,6);
+                    if(Math.random()<0.4){
+                        const types=['health','health','attack','defense','cooldown'];
+                        spawnMapItem(defender.x+(Math.random()-0.5)*40, defender.y+(Math.random()-0.5)*40, types[Math.floor(Math.random()*types.length)]);
+                    }
+                }
+            }
+        }
+
+        function applyItemEffect(item){
+            const t=ITEM_TYPES[item.type];
+            spawnParticles(player.x, player.y, 15, t.color, 2, 22);
+            spawnFloatingText(player.x, player.y-20, t.name, t.color);
+            if(t.effect==='heal'){ player.hp=Math.min(player.maxHp,player.hp+t.value); spawnFloatingText(player.x,player.y-35,'+'+t.value+' HP','#4eff4e'); }
+            else if(t.effect==='atkBoost'){ player.atkBoostTimer=t.duration*60; spawnFloatingText(player.x,player.y-35,'+АТАКА','#ff6b35'); }
+            else if(t.effect==='defBoost'){ player.defBoostTimer=t.duration*60; spawnFloatingText(player.x,player.y-35,'+ЗАЩИТА','#5b9eff'); }
+            else if(t.effect==='cdReset'){ player.skillQcd=0; player.skillWcd=0; player.skillEcd=0; spawnFloatingText(player.x,player.y-35,'СКИЛЛЫ ГОТОВЫ!','#e080ff'); }
+        }
+
+        function useSkill(skill){
+            if(player.hp<=0)return;
+            if(skill==='q' && player.skillQcd<=0){
+                player.skillQcd=player.skillQcdMax;
+                spawnParticles(player.x,player.y,20,'#ff69b4',5,25);
+                screenShake=Math.max(screenShake,5);
+                enemies.forEach(e=>{ if(!e.alive)return; const d=Math.hypot(e.x-player.x, e.y-player.y); if(d<130){ const dmg=Math.max(8,getPlayerEffectiveAtk()*1.8 - e.def + Math.floor(Math.random()*10)); e.hp-=dmg; spawnFloatingText(e.x,e.y-15,'-'+Math.floor(dmg),'#ff69b4'); spawnProjectile(player.x,player.y,e.x,e.y,'heart'); if(e.hp<=0){ e.hp=0; e.alive=false; e.respawnTimer=480+Math.random()*360; kills++; score+=100; } } });
+            } else if(skill==='w' && player.skillWcd<=0){
+                player.skillWcd=player.skillWcdMax;
+                spawnParticles(player.x,player.y,35,'#ffb6c1',6,30);
+                screenShake=Math.max(screenShake,7);
+                enemies.forEach(e=>{ if(!e.alive)return; const d=Math.hypot(e.x-player.x, e.y-player.y); if(d<130){ const dmg=Math.max(6,getPlayerEffectiveAtk()*1.4 - e.def*0.5 + Math.floor(Math.random()*12)); e.hp-=dmg; spawnFloatingText(e.x,e.y-15,'-'+Math.floor(dmg),'#ffb6c1'); spawnProjectile(player.x,player.y,e.x,e.y,'note'); if(e.hp<=0){ e.hp=0; e.alive=false; e.respawnTimer=480+Math.random()*360; kills++; score+=100; } } });
+            } else if(skill==='e' && player.skillEcd<=0){
+                player.skillEcd=player.skillEcdMax;
+                const dashDist=100;
+                player.dashDx=Math.cos(player.facingAngle)*(dashDist/8);
+                player.dashDy=Math.sin(player.facingAngle)*(dashDist/8);
+                player.dashFrames=8;
+                player.invincible=Math.max(player.invincible,10);
+                spawnParticles(player.x,player.y,15,'#ff69b4',4,15);
+            }
+        }
+
+        function updateParticlesAndTexts(){
+            for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life--; if(p.life<=0) particles.splice(i,1); }
+            for(let i=floatingTexts.length-1;i>=0;i--){ const ft=floatingTexts[i]; ft.y+=ft.vy; ft.life--; if(ft.life<=0) floatingTexts.splice(i,1); }
+            for(let i=projectiles.length-1;i>=0;i--){ projectiles[i].life--; if(projectiles[i].life<=0) projectiles.splice(i,1); }
+        }
+
+        function updateSkillUI(){
+            const upd=(btn,cd,cdMax)=>{ const ov=btn.querySelector('.cooldown-overlay'); if(cd>0){ btn.classList.add('on-cooldown'); ov.textContent=(cd/60).toFixed(1); } else { btn.classList.remove('on-cooldown'); ov.textContent=''; } };
+            upd(skillQ, player.skillQcd, player.skillQcdMax);
+            upd(skillW, player.skillWcd, player.skillWcdMax);
+            upd(skillE, player.skillEcd, player.skillEcdMax);
+            document.getElementById('atk-val').textContent = Math.floor(getPlayerEffectiveAtk());
+            document.getElementById('def-val').textContent = Math.floor(getPlayerEffectiveDef());
+        }
+
+        function init(){
+            prerenderMap();
+            resetEnemies();
+            currentHeroIndex = 0;
+            resetPlayer();
+            placeItemsOnMap();
+            camera.x=player.x; camera.y=player.y;
+            particles=[]; floatingTexts=[]; projectiles=[];
+            kills=0; score=0; screenShake=0; gameOver=false; respawnTimer=0;
+            player.invincible=40;
+            moveTarget=null;
+            canvas.focus();
+        }
+
+        function gameLoop(){ update(); drawGame(); requestAnimationFrame(gameLoop); }
+        init(); gameLoop();
+    })();
+</script>
+</body>
+</html>

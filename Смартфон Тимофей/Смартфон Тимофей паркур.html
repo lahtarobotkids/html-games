@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+    <title>Паркур по машинам 📱</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            touch-action: manipulation;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 800 / 500;
+            background: #0f3460;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #87CEEB;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            color: white;
+            font-size: clamp(14px, 4vw, 20px);
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .controls {
+            position: absolute;
+            bottom: 8px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 12px;
+            z-index: 20;
+            pointer-events: none;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .ctrl-btn {
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            backdrop-filter: blur(6px);
+            border: 2px solid rgba(255,255,255,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            touch-action: none;
+            transition: background 0.1s;
+        }
+        .ctrl-btn:active, .ctrl-btn.touched {
+            background: rgba(255,255,255,0.6);
+        }
+        .jump-btn {
+            width: 80px;
+            height: 80px;
+            font-size: 38px;
+            pointer-events: auto;
+            margin: 0 auto;
+        }
+        .restart-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.75);
+            color: white;
+            padding: 15px 30px;
+            font-size: 22px;
+            border-radius: 40px;
+            border: none;
+            font-weight: bold;
+            z-index: 30;
+            pointer-events: auto;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="game" width="800" height="500"></canvas>
+        <div id="ui">🏃‍♂️ Distance: <span id="distanceDisplay">0</span> m</div>
+        <div class="controls">
+            <div class="btn-group">
+                <div class="ctrl-btn" id="leftBtn">←</div>
+                <div class="ctrl-btn" id="rightBtn">→</div>
+            </div>
+            <div class="ctrl-btn jump-btn" id="jumpBtn">↑</div>
+        </div>
+        <button class="restart-btn" id="restartBtn">🔄 Играть заново</button>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            const distanceSpan = document.getElementById('distanceDisplay');
+            const restartBtn = document.getElementById('restartBtn');
+
+            // ---------- СЕНСОРНЫЕ ФЛАГИ ----------
+            let leftPressed = false;
+            let rightPressed = false;
+            let jumpPressed = false;
+
+            // Привязка кнопок
+            const leftBtn = document.getElementById('leftBtn');
+            const rightBtn = document.getElementById('rightBtn');
+            const jumpBtn = document.getElementById('jumpBtn');
+
+            function setButtonListeners(btn, onPress, onRelease) {
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    onPress(true);
+                    btn.classList.add('touched');
+                });
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    onPress(false);
+                    btn.classList.remove('touched');
+                });
+                btn.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    onPress(false);
+                    btn.classList.remove('touched');
+                });
+                // На случай клика мышью (для теста на десктопе)
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    onPress(true);
+                    btn.classList.add('touched');
+                });
+                btn.addEventListener('mouseup', (e) => {
+                    e.preventDefault();
+                    onPress(false);
+                    btn.classList.remove('touched');
+                });
+                btn.addEventListener('mouseleave', (e) => {
+                    onPress(false);
+                    btn.classList.remove('touched');
+                });
+            }
+
+            setButtonListeners(leftBtn, (v) => { leftPressed = v; });
+            setButtonListeners(rightBtn, (v) => { rightPressed = v; });
+            setButtonListeners(jumpBtn, (v) => { jumpPressed = v; });
+
+            // Перезапуск по кнопке
+            restartBtn.addEventListener('click', resetGame);
+            restartBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                resetGame();
+            });
+
+            // ---------- НАСТРОЙКИ ИГРЫ (неизменны) ----------
+            const GRAVITY = 0.65;
+            const WORLD_SPEED = 3.2;
+            const JUMP_FORCE = -11.5;
+            const PLAYER_W = 34;
+            const PLAYER_H = 48;
+            const CAR_BODY_HEIGHT = 48;
+            const WHEEL_RADIUS = 11;
+            const CAR_TOTAL_HEIGHT = CAR_BODY_HEIGHT + WHEEL_RADIUS;
+            const GROUND_Y = 430;
+            const CAR_TOP_Y = GROUND_Y - CAR_TOTAL_HEIGHT;
+
+            let cars = [];
+            let player = {
+                x: 180,
+                y: CAR_TOP_Y - PLAYER_H,
+                width: PLAYER_W,
+                height: PLAYER_H,
+                vy: 0,
+                vx: 0,
+                attachedCar: null,
+                offsetX: 0,
+                canJump: true,
+                distance: 0
+            };
+
+            let gameOver = false;
+            let gameStarted = false;
+
+            // ---------- ГЕНЕРАЦИЯ МАШИН ----------
+            function createCar(worldX) {
+                const minWidth = 100;
+                const maxWidth = 210;
+                const width = minWidth + Math.random() * (maxWidth - minWidth);
+                const colors = [
+                    '#E63946', '#2A9D8F', '#E9C46A', '#F4A261', '#264653',
+                    '#6D6875', '#B5838D', '#FFB4A2', '#9C89B8', '#6D597A'
+                ];
+                return {
+                    x: worldX,
+                    width: width,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                };
+            }
+
+            function generateInitialCars() {
+                cars = [];
+                let lastX = 0;
+                while (lastX < canvas.width + 600) {
+                    const car = createCar(lastX);
+                    cars.push(car);
+                    const gap = 60 + Math.random() * 120;
+                    lastX = car.x + car.width + gap;
+                }
+            }
+
+            function resetGame() {
+                generateInitialCars();
+                player.attachedCar = null;
+                for (let car of cars) {
+                    if (car.x < canvas.width && car.x + car.width > 50) {
+                        player.attachedCar = car;
+                        player.offsetX = Math.min(60, car.width - player.width);
+                        player.x = car.x + player.offsetX;
+                        player.y = CAR_TOP_Y - player.height;
+                        player.vy = 0;
+                        player.vx = 0;
+                        player.canJump = true;
+                        player.distance = 0;
+                        break;
+                    }
+                }
+                if (!player.attachedCar) {
+                    player.attachedCar = cars[0];
+                    player.offsetX = 20;
+                    player.x = cars[0].x + 20;
+                    player.y = CAR_TOP_Y - player.height;
+                }
+                gameOver = false;
+                gameStarted = true;
+                restartBtn.style.display = 'none';
+            }
+
+            // ---------- ОБНОВЛЕНИЕ ----------
+            function update() {
+                if (!gameStarted || gameOver) return;
+
+                // Движение машин
+                for (let car of cars) {
+                    car.x -= WORLD_SPEED;
+                }
+
+                // Удаление уехавших
+                cars = cars.filter(car => {
+                    if (car.x + car.width < -200) {
+                        if (player.attachedCar === car) player.attachedCar = null;
+                        return false;
+                    }
+                    return true;
+                });
+
+                // Добавление новых
+                const lastCar = cars[cars.length - 1];
+                if (lastCar && lastCar.x + lastCar.width < canvas.width + 250) {
+                    const gap = 60 + Math.random() * 130;
+                    const newCar = createCar(lastCar.x + lastCar.width + gap);
+                    cars.push(newCar);
+                }
+
+                // Игрок на машине
+                if (player.attachedCar) {
+                    if (!cars.includes(player.attachedCar)) {
+                        player.attachedCar = null;
+                    } else {
+                        player.x = player.attachedCar.x + player.offsetX;
+                        player.y = CAR_TOP_Y - player.height;
+                        player.vy = 0;
+                        player.vx = 0;
+
+                        const moveSpeed = 4.5;
+                        if (leftPressed) {
+                            player.offsetX -= moveSpeed;
+                            if (player.offsetX < 0) player.offsetX = 0;
+                        }
+                        if (rightPressed) {
+                            player.offsetX += moveSpeed;
+                            const maxOffset = player.attachedCar.width - player.width;
+                            if (player.offsetX > maxOffset) player.offsetX = maxOffset;
+                        }
+
+                        if (player.offsetX < 0 || player.offsetX + player.width > player.attachedCar.width) {
+                            player.attachedCar = null;
+                        }
+
+                        if (jumpPressed && player.canJump && player.attachedCar) {
+                            player.vy = JUMP_FORCE;
+                            player.vx = -WORLD_SPEED;
+                            player.attachedCar = null;
+                            player.canJump = false;
+                        }
+
+                        player.distance += WORLD_SPEED;
+                    }
+                } else {
+                    // В воздухе
+                    player.vy += GRAVITY;
+                    player.y += player.vy;
+
+                    const airAccel = 0.7;
+                    if (leftPressed) player.vx -= airAccel;
+                    if (rightPressed) player.vx += airAccel;
+                    player.vx *= 0.96;
+                    const maxAirSpeed = 6.5;
+                    if (player.vx > maxAirSpeed) player.vx = maxAirSpeed;
+                    if (player.vx < -maxAirSpeed) player.vx = -maxAirSpeed;
+                    player.x += player.vx;
+
+                    if (player.vy >= 0) {
+                        for (let car of cars) {
+                            const playerBottom = player.y + player.height;
+                            const carTop = CAR_TOP_Y;
+                            if (player.x + player.width > car.x && player.x < car.x + car.width) {
+                                if (playerBottom >= carTop && playerBottom <= carTop + 14) {
+                                    player.y = carTop - player.height;
+                                    player.vy = 0;
+                                    player.attachedCar = car;
+                                    player.offsetX = player.x - car.x;
+                                    if (player.offsetX < 0) player.offsetX = 0;
+                                    const maxOff = car.width - player.width;
+                                    if (player.offsetX > maxOff) player.offsetX = maxOff;
+                                    player.vx = -WORLD_SPEED;
+                                    player.canJump = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    player.distance += WORLD_SPEED;
+
+                    if (player.y > canvas.height + 40 || player.x + player.width < -50) {
+                        gameOver = true;
+                        gameStarted = false;
+                        restartBtn.style.display = 'block';
+                    }
+                }
+
+                distanceSpan.textContent = Math.floor(player.distance / 10);
+            }
+
+            // ---------- ОТРИСОВКА ----------
+            function drawRoad() {
+                ctx.fillStyle = '#2d2d2d';
+                ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([30, 40]);
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y + 20);
+                ctx.lineTo(canvas.width, GROUND_Y + 20);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            function drawCar(car) {
+                const x = car.x;
+                const y = CAR_TOP_Y;
+                const w = car.width;
+                const bodyH = CAR_BODY_HEIGHT;
+
+                ctx.fillStyle = car.color;
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, y, w, bodyH, 6);
+                } else {
+                    // простой прямоугольник с закруглениями вручную
+                    const r = 6;
+                    ctx.moveTo(x + r, y);
+                    ctx.lineTo(x + w - r, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                    ctx.lineTo(x + w, y + bodyH - r);
+                    ctx.quadraticCurveTo(x + w, y + bodyH, x + w - r, y + bodyH);
+                    ctx.lineTo(x + r, y + bodyH);
+                    ctx.quadraticCurveTo(x, y + bodyH, x, y + bodyH - r);
+                    ctx.lineTo(x, y + r);
+                    ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.closePath();
+                }
+                ctx.fill();
+                ctx.strokeStyle = '#111';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Окна
+                ctx.fillStyle = '#aed6f1';
+                const winH = 14;
+                const winY = y + 6;
+                const winW = w * 0.25;
+                ctx.fillRect(x + 10, winY, winW, winH);
+                ctx.fillRect(x + w - winW - 10, winY, winW, winH);
+
+                // Колеса
+                ctx.fillStyle = '#1a1a1a';
+                const wheelY = y + bodyH + 2;
+                const leftWheelX = x + 14;
+                const rightWheelX = x + w - 14 - WHEEL_RADIUS * 2;
+                ctx.beginPath();
+                ctx.arc(leftWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, WHEEL_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, WHEEL_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ccc';
+                ctx.beginPath();
+                ctx.arc(leftWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightWheelX + WHEEL_RADIUS, wheelY + WHEEL_RADIUS, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function drawPlayer() {
+                const x = player.x;
+                const y = player.y;
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(x + 2, y + 2, player.width, player.height);
+                ctx.fillStyle = '#FF6B6B';
+                ctx.fillRect(x, y, player.width, player.height - 12);
+                ctx.fillStyle = '#FFD93D';
+                ctx.beginPath();
+                ctx.arc(x + player.width / 2, y - 6, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#333';
+                ctx.fillRect(x + 8, y - 10, 8, 6);
+                ctx.fillRect(x + player.width - 16, y - 10, 8, 6);
+                const legOffset = Math.sin(Date.now() * 0.02) * 3;
+                ctx.fillStyle = '#2E4053';
+                ctx.fillRect(x + 6, y + player.height - 14, 8, 14 + legOffset);
+                ctx.fillRect(x + player.width - 14, y + player.height - 14, 8, 14 - legOffset);
+            }
+
+            function draw() {
+                const gradient = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+                gradient.addColorStop(0, '#4facfe');
+                gradient.addColorStop(1, '#00f2fe');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, GROUND_Y);
+
+                drawRoad();
+
+                for (let car of cars) {
+                    if (car.x + car.width > -50 && car.x < canvas.width + 50) {
+                        drawCar(car);
+                    }
+                }
+
+                drawPlayer();
+
+                // Стартовый / финальный экран
+                if (!gameStarted && !gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 26px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🚗 ПАРКУР ПО МАШИНАМ 🚗', canvas.width / 2, canvas.height / 2 - 20);
+                    ctx.font = '16px Arial';
+                    ctx.fillText('Коснитесь кнопок внизу, чтобы начать', canvas.width / 2, canvas.height / 2 + 30);
+                    ctx.textAlign = 'start';
+                } else if (gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#FFD93D';
+                    ctx.font = 'bold 30px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width / 2, canvas.height / 2 - 20);
+                    ctx.fillStyle = 'white';
+                    ctx.font = '20px Arial';
+                    ctx.fillText(`Дистанция: ${Math.floor(player.distance / 10)} м`, canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.textAlign = 'start';
+                }
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`🏃 ${Math.floor(player.distance / 10)} m`, 15, 35);
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Стартовое заполнение
+            generateInitialCars();
+            gameLoop();
+
+            // Автоматический старт при первом касании любой кнопки управления
+            function autoStartOnTouch() {
+                if (!gameStarted && !gameOver) {
+                    resetGame();
+                }
+            }
+            leftBtn.addEventListener('touchstart', autoStartOnTouch, { once: true });
+            rightBtn.addEventListener('touchstart', autoStartOnTouch, { once: true });
+            jumpBtn.addEventListener('touchstart', autoStartOnTouch, { once: true });
+            leftBtn.addEventListener('mousedown', autoStartOnTouch, { once: true });
+            rightBtn.addEventListener('mousedown', autoStartOnTouch, { once: true });
+            jumpBtn.addEventListener('mousedown', autoStartOnTouch, { once: true });
+        })();
+    </script>
+</body>
+</html>

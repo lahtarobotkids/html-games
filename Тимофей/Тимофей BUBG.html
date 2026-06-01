@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini PUBG</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 2px solid #555;
+            cursor: crosshair;
+        }
+        #restart {
+            display: none;
+            position: absolute;
+            padding: 15px 30px;
+            font-size: 20px;
+            background: #f0a500;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #container {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <canvas id="game" width="1000" height="700"></canvas>
+    <button id="restart">Играть снова</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const restartBtn = document.getElementById('restart');
+
+    // ---------- Глобальные переменные ----------
+    let player, bots, bullets, items, obstacles, zone;
+    let gameOver = false;
+    let winner = false;
+    let lastTime = 0;
+
+    const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
+    const mouse = { x: 0, y: 0, down: false };
+
+    // ---------- Слушатели ----------
+    window.addEventListener('keydown', e => {
+        if (e.code in keys) {
+            keys[e.code] = true;
+            e.preventDefault();
+        }
+    });
+    window.addEventListener('keyup', e => {
+        if (e.code in keys) {
+            keys[e.code] = false;
+            e.preventDefault();
+        }
+    });
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
+    canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    restartBtn.addEventListener('click', () => {
+        restartBtn.style.display = 'none';
+        initGame();
+    });
+
+    // ---------- Вспомогательные функции ----------
+    function dist(x1, y1, x2, y2) {
+        return Math.hypot(x2 - x1, y2 - y1);
+    }
+
+    function lerp(a, b, t) {
+        return a + (b - a) * t;
+    }
+
+    // ---------- Инициализация ----------
+    function initGame() {
+        gameOver = false;
+        winner = false;
+        player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            r: 15,
+            health: 100,
+            maxHealth: 100,
+            speed: 220,
+            weapon: 'pistol',
+            ammo: Infinity,
+            damage: 10,
+            fireRate: 500,
+            lastShot: 0,
+            kills: 0
+        };
+
+        bots = [];
+        bullets = [];
+        items = [];
+        obstacles = [];
+
+        // Препятствия
+        for (let i = 0; i < 30; i++) {
+            const r = 20 + Math.random() * 25;
+            const x = r + Math.random() * (canvas.width - 2 * r);
+            const y = r + Math.random() * (canvas.height - 2 * r);
+            obstacles.push({ x, y, r });
+        }
+
+        // Боты
+        for (let i = 0; i < 10; i++) {
+            let x, y, safe;
+            do {
+                x = 50 + Math.random() * (canvas.width - 100);
+                y = 50 + Math.random() * (canvas.height - 100);
+                safe = true;
+                for (const o of obstacles) {
+                    if (dist(x, y, o.x, o.y) < o.r + 25) { safe = false; break; }
+                }
+                if (dist(x, y, player.x, player.y) < 120) safe = false;
+            } while (!safe);
+            bots.push({
+                x, y, r: 15,
+                health: 100, maxHealth: 100,
+                speed: 140,
+                weapon: 'pistol',
+                ammo: Infinity,
+                damage: 10,
+                fireRate: 500,
+                lastShot: 0,
+                targetX: x,
+                targetY: y,
+                wanderTimer: Math.random() * 2
+            });
+        }
+
+        // Предметы
+        function spawnItem(type) {
+            let x, y, safe;
+            do {
+                x = 30 + Math.random() * (canvas.width - 60);
+                y = 30 + Math.random() * (canvas.height - 60);
+                safe = true;
+                for (const o of obstacles) if (dist(x, y, o.x, o.y) < o.r + 18) { safe = false; break; }
+            } while (!safe);
+            items.push({ x, y, r: 12, type });
+        }
+        for (let i = 0; i < 5; i++) spawnItem('rifle');
+        for (let i = 0; i < 10; i++) spawnItem('ammo');
+        for (let i = 0; i < 10; i++) spawnItem('health');
+
+        // Зона
+        zone = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            r: Math.max(canvas.width, canvas.height) / 2,
+            targetX: canvas.width / 2,
+            targetY: canvas.height / 2,
+            targetR: Math.max(canvas.width, canvas.height) / 2,
+            shrinking: false,
+            startX: canvas.width / 2,
+            startY: canvas.height / 2,
+            startR: Math.max(canvas.width, canvas.height) / 2,
+            shrinkStartTime: 0,
+            shrinkDuration: 20000,
+            stableDelay: 10000,
+            lastStableTime: performance.now()
+        };
+    }
+
+    // ---------- Обновление ----------
+    function update(dt) {
+        if (gameOver) return;
+
+        const now = performance.now();
+
+        // --- Движение игрока ---
+        let dx = 0, dy = 0;
+        if (keys.KeyW) dy -= 1;
+        if (keys.KeyS) dy += 1;
+        if (keys.KeyA) dx -= 1;
+        if (keys.KeyD) dx += 1;
+        if (dx !== 0 || dy !== 0) {
+            const len = Math.hypot(dx, dy);
+            dx = (dx / len) * player.speed * dt;
+            dy = (dy / len) * player.speed * dt;
+        }
+        player.x += dx;
+        player.y += dy;
+
+        for (const o of obstacles) {
+            const d = dist(player.x, player.y, o.x, o.y);
+            const minDist = player.r + o.r;
+            if (d < minDist) {
+                const angle = Math.atan2(player.y - o.y, player.x - o.x);
+                const overlap = minDist - d;
+                player.x += Math.cos(angle) * overlap;
+                player.y += Math.sin(angle) * overlap;
+            }
+        }
+        player.x = Math.max(player.r, Math.min(canvas.width - player.r, player.x));
+        player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
+
+        // --- Стрельба ---
+        if (mouse.down && player.weapon === 'pistol' && now - player.lastShot >= player.fireRate) {
+            shoot(player, mouse.x, mouse.y, now);
+        } else if (mouse.down && player.weapon === 'rifle') {
+            if (player.ammo > 0 && now - player.lastShot >= player.fireRate) {
+                shoot(player, mouse.x, mouse.y, now);
+                player.ammo--;
+                if (player.ammo <= 0) {
+                    player.weapon = 'pistol';
+                    player.damage = 10;
+                    player.fireRate = 500;
+                    player.ammo = Infinity;
+                }
+            }
+        }
+
+        // --- Зона ---
+        if (!zone.shrinking && now - zone.lastStableTime >= zone.stableDelay && zone.r > 25) {
+            zone.shrinking = true;
+            zone.shrinkStartTime = now;
+            zone.startX = zone.x;
+            zone.startY = zone.y;
+            zone.startR = zone.r;
+            zone.targetR = Math.max(25, zone.r * 0.7);
+            const maxDist = zone.r - zone.targetR;
+            const angle = Math.random() * Math.PI * 2;
+            const d = Math.random() * maxDist;
+            zone.targetX = zone.x + Math.cos(angle) * d;
+            zone.targetY = zone.y + Math.sin(angle) * d;
+            zone.targetX = Math.max(zone.targetR, Math.min(canvas.width - zone.targetR, zone.targetX));
+            zone.targetY = Math.max(zone.targetR, Math.min(canvas.height - zone.targetR, zone.targetY));
+        }
+        if (zone.shrinking) {
+            const progress = Math.min(1, (now - zone.shrinkStartTime) / zone.shrinkDuration);
+            zone.x = lerp(zone.startX, zone.targetX, progress);
+            zone.y = lerp(zone.startY, zone.targetY, progress);
+            zone.r = lerp(zone.startR, zone.targetR, progress);
+            if (progress >= 1) {
+                zone.shrinking = false;
+                zone.lastStableTime = now;
+            }
+        }
+
+        if (dist(player.x, player.y, zone.x, zone.y) > zone.r) {
+            player.health -= 20 * dt;
+        }
+        if (player.health <= 0) {
+            player.health = 0;
+            gameOver = true;
+            winner = false;
+        }
+
+        // --- Боты ---
+        for (let i = bots.length - 1; i >= 0; i--) {
+            const bot = bots[i];
+            if (dist(bot.x, bot.y, zone.x, zone.y) > zone.r) bot.health -= 20 * dt;
+            if (bot.health <= 0) { bots.splice(i, 1); player.kills++; continue; }
+
+            let targetX = bot.x, targetY = bot.y;
+            if (dist(bot.x, bot.y, zone.x, zone.y) > zone.r) {
+                targetX = zone.x;
+                targetY = zone.y;
+            } else {
+                let closestEnemy = null, closestDist = Infinity;
+                const candidates = [player, ...bots.filter(b => b !== bot)];
+                for (const enemy of candidates) {
+                    const d = dist(bot.x, bot.y, enemy.x, enemy.y);
+                    if (d < 400 && d < closestDist) { closestDist = d; closestEnemy = enemy; }
+                }
+                if (closestEnemy && closestDist < 400) {
+                    targetX = closestEnemy.x;
+                    targetY = closestEnemy.y;
+                    if (closestDist < 300 && now - bot.lastShot >= bot.fireRate) {
+                        const angle = Math.atan2(closestEnemy.y - bot.y, closestEnemy.x - bot.x);
+                        if (bot.weapon === 'pistol' || (bot.weapon === 'rifle' && bot.ammo > 0)) {
+                            bullets.push({
+                                x: bot.x + Math.cos(angle) * bot.r,
+                                y: bot.y + Math.sin(angle) * bot.r,
+                                vx: Math.cos(angle) * 800,
+                                vy: Math.sin(angle) * 800,
+                                damage: bot.damage,
+                                owner: bot,
+                                distTraveled: 0,
+                                maxDist: 600
+                            });
+                            bot.lastShot = now;
+                            if (bot.weapon === 'rifle') {
+                                bot.ammo--;
+                                if (bot.ammo <= 0) {
+                                    bot.weapon = 'pistol';
+                                    bot.damage = 10;
+                                    bot.fireRate = 500;
+                                    bot.ammo = Infinity;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let nearestHealth = null, nearestHealthDist = 300;
+                    for (const item of items) {
+                        if (item.type === 'health') {
+                            const d = dist(bot.x, bot.y, item.x, item.y);
+                            if (d < nearestHealthDist) { nearestHealthDist = d; nearestHealth = item; }
+                        }
+                    }
+                    if (bot.health < 40 && nearestHealth) {
+                        targetX = nearestHealth.x;
+                        targetY = nearestHealth.y;
+                    } else {
+                        bot.wanderTimer -= dt;
+                        if (bot.wanderTimer <= 0) {
+                            bot.wanderTimer = 1 + Math.random() * 2;
+                            bot.targetX = Math.random() * canvas.width;
+                            bot.targetY = Math.random() * canvas.height;
+                        }
+                        targetX = bot.targetX;
+                        targetY = bot.targetY;
+                    }
+                }
+            }
+
+            let moveX = targetX - bot.x, moveY = targetY - bot.y;
+            const len = Math.hypot(moveX, moveY);
+            if (len > 2) {
+                moveX = (moveX / len) * bot.speed * dt;
+                moveY = (moveY / len) * bot.speed * dt;
+            } else moveX = moveY = 0;
+            bot.x += moveX;
+            bot.y += moveY;
+
+            for (const o of obstacles) {
+                const d = dist(bot.x, bot.y, o.x, o.y);
+                const minDist = bot.r + o.r;
+                if (d < minDist) {
+                    const angle = Math.atan2(bot.y - o.y, bot.x - o.x);
+                    bot.x += Math.cos(angle) * (minDist - d);
+                    bot.y += Math.sin(angle) * (minDist - d);
+                }
+            }
+            bot.x = Math.max(bot.r, Math.min(canvas.width - bot.r, bot.x));
+            bot.y = Math.max(bot.r, Math.min(canvas.height - bot.r, bot.y));
+        }
+
+        // --- Предметы ---
+        for (let i = items.length - 1; i >= 0; i--) {
+            const item = items[i];
+            if (dist(player.x, player.y, item.x, item.y) < player.r + item.r + 5) {
+                applyItem(player, item);
+                items.splice(i, 1);
+                continue;
+            }
+            let picked = false;
+            for (const bot of bots) {
+                if (dist(bot.x, bot.y, item.x, item.y) < bot.r + item.r + 5) {
+                    applyItem(bot, item);
+                    picked = true;
+                    break;
+                }
+            }
+            if (picked) items.splice(i, 1);
+        }
+
+        // --- Пули ---
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const b = bullets[i];
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.distTraveled += Math.hypot(b.vx * dt, b.vy * dt);
+            if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height || b.distTraveled >= b.maxDist) {
+                bullets.splice(i, 1);
+                continue;
+            }
+            let hitObstacle = false;
+            for (const o of obstacles) if (dist(b.x, b.y, o.x, o.y) < o.r) { hitObstacle = true; break; }
+            if (hitObstacle) { bullets.splice(i, 1); continue; }
+
+            if (b.owner !== player && dist(b.x, b.y, player.x, player.y) < player.r) {
+                player.health -= b.damage;
+                bullets.splice(i, 1);
+                if (player.health <= 0) { player.health = 0; gameOver = true; winner = false; }
+                continue;
+            }
+            for (let j = bots.length - 1; j >= 0; j--) {
+                if (b.owner !== bots[j] && dist(b.x, b.y, bots[j].x, bots[j].y) < bots[j].r) {
+                    bots[j].health -= b.damage;
+                    bullets.splice(i, 1);
+                    if (bots[j].health <= 0) { if (b.owner === player) player.kills++; bots.splice(j, 1); }
+                    break;
+                }
+            }
+        }
+
+        if (!gameOver && bots.length === 0) { gameOver = true; winner = true; }
+    }
+
+    function shoot(shooter, targetX, targetY, now) {
+        const angle = Math.atan2(targetY - shooter.y, targetX - shooter.x);
+        bullets.push({
+            x: shooter.x + Math.cos(angle) * shooter.r,
+            y: shooter.y + Math.sin(angle) * shooter.r,
+            vx: Math.cos(angle) * 800,
+            vy: Math.sin(angle) * 800,
+            damage: shooter.damage,
+            owner: shooter,
+            distTraveled: 0,
+            maxDist: 600
+        });
+        shooter.lastShot = now;
+    }
+
+    function applyItem(entity, item) {
+        if (item.type === 'health') entity.health = Math.min(entity.maxHealth, entity.health + 30);
+        else if (item.type === 'rifle') { entity.weapon = 'rifle'; entity.damage = 25; entity.fireRate = 200; entity.ammo = 30; }
+        else if (item.type === 'ammo' && entity.weapon === 'rifle') entity.ammo += 20;
+    }
+
+    // ---------- Отрисовка ----------
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#2d5a1e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (const o of obstacles) {
+            ctx.beginPath();
+            ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+            ctx.fillStyle = '#5a3a1a';
+            ctx.fill();
+            ctx.strokeStyle = '#3a2210';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        for (const item of items) {
+            ctx.beginPath();
+            ctx.arc(item.x, item.y, item.r, 0, Math.PI * 2);
+            ctx.fillStyle = item.type === 'health' ? '#f55' : item.type === 'rifle' ? '#c90' : '#fc0';
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+        }
+
+        for (const bot of bots) {
+            ctx.fillStyle = '#d44';
+            ctx.beginPath();
+            ctx.arc(bot.x, bot.y, bot.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.fillRect(bot.x - 10, bot.y - bot.r - 8, 20, 4);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(bot.x - 10, bot.y - bot.r - 8, 20 * (bot.health / bot.maxHealth), 4);
+        }
+
+        if (!gameOver || !winner) {
+            ctx.fillStyle = '#0af';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+            ctx.beginPath();
+            ctx.moveTo(player.x + Math.cos(angle) * player.r, player.y + Math.sin(angle) * player.r);
+            ctx.lineTo(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#ff0';
+        for (const b of bullets) {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.35)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.beginPath();
+        ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+        ctx.strokeStyle = '#f00';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '18px sans-serif';
+        ctx.fillText(`Здоровье: ${Math.ceil(player.health)}`, 20, 30);
+        ctx.fillText(`Оружие: ${player.weapon === 'pistol' ? 'Пистолет' : 'Винтовка'}`, 20, 55);
+        if (player.weapon === 'rifle') ctx.fillText(`Патроны: ${player.ammo}`, 20, 80);
+        ctx.fillText(`Убито: ${player.kills} / 10`, 20, player.weapon === 'rifle' ? 105 : 80);
+        ctx.fillText(`В зоне: ${dist(player.x, player.y, zone.x, zone.y) <= zone.r ? 'Да' : 'НЕТ!'}`, 20, player.weapon === 'rifle' ? 130 : 105);
+
+        // ---------- Новый финальный экран ----------
+        if (gameOver) {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (winner) {
+                // Победа: надпись по центру
+                ctx.fillStyle = '#FFD700'; // золотой
+                ctx.font = 'bold 56px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Победа победа,', canvas.width / 2, canvas.height / 2 - 40);
+                ctx.fillText('время обеда! 🍗', canvas.width / 2, canvas.height / 2 + 30);
+            } else {
+                // Поражение: левый верхний угол и правый верхний
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 36px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('Вы умерли', 20, 50);
+
+                ctx.textAlign = 'right';
+                const place = bots.length + 1; // сколько ботов осталось + 1 = место игрока
+                ctx.fillText(`Занятое место: ${place}`, canvas.width - 20, 50);
+            }
+            ctx.textAlign = 'start'; // сброс выравнивания
+            restartBtn.style.display = 'block';
+        } else {
+            restartBtn.style.display = 'none';
+        }
+    }
+
+    function gameLoop(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        let dt = (timestamp - lastTime) / 1000;
+        if (dt > 0.1) dt = 0.1;
+        lastTime = timestamp;
+        update(dt);
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    initGame();
+    requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
