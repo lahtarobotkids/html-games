@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Саундтреки</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Arial, sans-serif;
+      background: #111318;
+      color: #f5f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(157, 235, 214, 0.2), transparent 32%),
+        radial-gradient(circle at 86% 84%, rgba(57, 117, 255, 0.22), transparent 34%),
+        #111318;
+    }
+
+    main {
+      width: min(860px, 100%);
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(32px, 7vw, 58px);
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 24px;
+      color: #b8c0d4;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      margin-bottom: 26px;
+      color: #9debd6;
+      text-decoration: none;
+      font-size: 17px;
+    }
+
+    .tracks {
+      display: grid;
+      gap: 14px;
+    }
+
+    article {
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    audio {
+      width: 100%;
+      display: block;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+
+      p,
+      .back {
+        font-size: 16px;
+      }
+
+      article {
+        padding: 14px;
+      }
+
+      h2 {
+        font-size: 17px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="index.html">‹ Назад к играм</a>
+    <h1>Саундтреки</h1>
+    <p>Треки можно слушать онлайн прямо на этой странице.</p>
+
+    <section class="tracks" aria-label="Список саундтреков">
+      <article>
+        <h2>Ваня не качайся</h2>
+        <audio controls preload="none">
+          <source src="mp3/Ваня не качайся.mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>Ваня не качайся (1)</h2>
+        <audio controls preload="none">
+          <source src="mp3/Ваня не качайся (1).mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>ПОСЛЕДНИЙ ПАТРОН</h2>
+        <audio controls preload="none">
+          <source src="mp3/ПОСЛЕДНИЙ ПАТРОН.mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>ПОСЛЕДНИЙ ПАТРОН (1)</h2>
+        <audio controls preload="none">
+          <source src="mp3/ПОСЛЕДНИЙ ПАТРОН (1).mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>Робот Грустит</h2>
+        <audio controls preload="none">
+          <source src="mp3/Робот Грустит.mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>Робот Грустит (1)</h2>
+        <audio controls preload="none">
+          <source src="mp3/Робот Грустит (1).mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>Тиканье Таймера</h2>
+        <audio controls preload="none">
+          <source src="mp3/Тиканье Таймера.mp3" type="audio/mpeg">
+        </audio>
+      </article>
+
+      <article>
+        <h2>Тиканье Таймера (1)</h2>
+        <audio controls preload="none">
+          <source src="mp3/Тиканье Таймера (1).mp3" type="audio/mpeg">
+        </audio>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
