@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Московское время — игра</title>
+    <style>
+        /* Сброс всех отступов и полей, белый фон */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+            /* Запрет выделения текста */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            /* Убираем возможный зум при двойном тапе на мобильных */
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+
+        /* Основной контейнер, полностью перекрывающий экран */
+        .game-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #ffffff;
+            position: relative;
+        }
+
+        /* Часы — черный текст, крупный и четкий */
+        #moscow-clock {
+            font-size: clamp(4rem, 20vw, 12rem);
+            font-weight: 700;
+            color: #000000;
+            background-color: #ffffff;
+            letter-spacing: 0.1em;
+            text-align: center;
+            line-height: 1;
+            cursor: default;
+            /* Дополнительная защита от выделения */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            pointer-events: none; /* Клики проходят сквозь текст */
+        }
+
+        /* Невидимый блок поверх всего, чтобы точно перехватывать любые действия */
+        .blocker {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            background: transparent;
+            cursor: default;
+            /* Полная блокировка взаимодействий */
+            pointer-events: auto; /* блокируем события */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Убираем возможность выделения везде */
+        ::selection {
+            background: transparent;
+            color: inherit;
+        }
+        ::-moz-selection {
+            background: transparent;
+            color: inherit;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- Время будет здесь -->
+        <div id="moscow-clock">--:--:--</div>
+    </div>
+
+    <!-- Невидимый блокировщик всех действий -->
+    <div class="blocker" id="action-blocker"></div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // --- Элемент для отображения времени ---
+            const clockElement = document.getElementById('moscow-clock');
+            // --- Блокировщик действий ---
+            const blocker = document.getElementById('action-blocker');
+
+            // --- Функция получения точного московского времени ---
+            function getMoscowTime() {
+                // Московское время: UTC+3 (без перехода на летнее/зимнее, т.к. в РФ отменён переход)
+                const now = new Date();
+                // Получаем UTC-время в миллисекундах
+                const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+                // Московское смещение: +3 часа = 3 * 60 * 60000 миллисекунд
+                const moscowOffset = 3 * 60 * 60000;
+                const moscowDate = new Date(utcTime + moscowOffset);
+                return moscowDate;
+            }
+
+            // --- Форматирование времени в HH:MM:SS ---
+            function formatTime(date) {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${hours}:${minutes}:${seconds}`;
+            }
+
+            // --- Обновление времени на экране ---
+            function updateClock() {
+                const moscowTime = getMoscowTime();
+                clockElement.textContent = formatTime(moscowTime);
+            }
+
+            // --- Запуск часов и немедленное отображение ---
+            updateClock();
+            // Обновление каждые 200 мс для плавности и точности (можно и 1000, но 200 даст меньше расхождений)
+            setInterval(updateClock, 200);
+
+            // --- БЛОКИРОВКА ВСЕХ ДЕЙСТВИЙ ПОЛЬЗОВАТЕЛЯ ---
+
+            // 1. Запрет контекстного меню (правый клик)
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+
+            // 2. Запрет выделения через события мыши/клавиатуры
+            document.addEventListener('selectstart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+
+            // 3. Запрет перетаскивания (drag)
+            document.addEventListener('dragstart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+
+            // 4. Блокировка кликов и любых событий на невидимом блоке
+            blocker.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('dblclick', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('mouseup', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('touchend', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('touchmove', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            blocker.addEventListener('wheel', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            });
+
+            // 5. Блокировка клавиатурных сокращений (Ctrl+A, Ctrl+C, F12 и т.д.)
+            document.addEventListener('keydown', function(e) {
+                // Запрещаем почти все комбинации, кроме, возможно, Ctrl+R / F5 (обновление страницы)
+                // Но чтобы соответствовать "ничего нельзя делать", можно заблокировать и их,
+                // однако это может разозлить пользователя. Заблокируем только потенциально "действенные" клавиши.
+                const forbiddenKeys = ['F12', 'F3', 'F7', 'F10'];
+                // Ctrl, Alt, Meta с любой клавишей (кроме, возможно, R/F5 — но мы заблокируем и их для чистоты концепции)
+                if (e.ctrlKey || e.altKey || e.metaKey || forbiddenKeys.includes(e.key)) {
+                    // Исключение: позволяем Ctrl+Shift+I? Нет, это инструмент разработчика, лучше заблокировать.
+                    // Но пользователь может отключить JS. В рамках игры — блокируем.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+
+                // Дополнительно: блокируем клавиши, которые могут вызвать действия (Enter, пробел, стрелки)
+                // Но чтобы не сломать скролл (если он вдруг возможен), перестрахуемся.
+                // Поскольку overflow: hidden, скролла нет.
+                // Заблокируем все клавиши, кроме, может быть, служебных, но для концепции "ничего нельзя" — блокируем все.
+                if (e.key === 'Enter' || e.key === ' ' || e.key.startsWith('Arrow')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            });
+
+            // 6. Предотвращаем попытки выделения через клавиатуру (Shift + стрелки)
+            document.addEventListener('keyup', function(e) {
+                // Очищаем возможное выделение
+                if (window.getSelection) {
+                    if (window.getSelection().empty) {  // Chrome
+                        window.getSelection().empty();
+                    } else if (window.getSelection().removeAllRanges) { // Firefox, Safari
+                        window.getSelection().removeAllRanges();
+                    }
+                }
+            });
+
+            // 7. Снимаем выделение при любом клике (на всякий случай, если blocker пропустил)
+            document.addEventListener('mouseup', function() {
+                if (window.getSelection) {
+                    if (window.getSelection().empty) {
+                        window.getSelection().empty();
+                    } else if (window.getSelection().removeAllRanges) {
+                        window.getSelection().removeAllRanges();
+                    }
+                }
+            });
+
+            // 8. Запрет масштабирования через жесты (pinch) на мобильных устройствах
+            document.addEventListener('gesturestart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            document.addEventListener('gesturechange', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            document.addEventListener('gestureend', function(e) {
+                e.preventDefault();
+                return false;
+            });
+
+            // Дополнительная страховка: отключаем возможные действия при загрузке
+            window.addEventListener('load', function() {
+                // Сразу снимаем фокус с любых элементов
+                if (document.activeElement) {
+                    document.activeElement.blur();
+                }
+                // При попытке фокуса — сбрасываем
+                document.addEventListener('focusin', function(e) {
+                    e.target.blur();
+                });
+            });
+
+            // Предотвращаем появление курсора ввода на случай, если появится какой-то инпут (его нет, но на будущее)
+            document.addEventListener('focus', function(e) {
+                e.target.blur();
+            }, true);
+
+            console.log('🎮 Игра "Смотри на время" запущена. Московское время обновляется. Никакие действия недоступны.');
+        })();
+    </script>
+</body>
+</html>
