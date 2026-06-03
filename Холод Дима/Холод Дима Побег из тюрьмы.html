@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>🏃 ПОБЕГ ИЗ ТЮРЬМЫ — Стелс-экшен</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      background: #0a0a0a;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0; left: 0;
+    }
+    #ui {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      color: white;
+    }
+    #top-panel {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .hud-item {
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(6px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 0.95rem;
+      border: 1px solid rgba(255,255,255,0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bar-container {
+      width: 110px;
+      height: 10px;
+      background: #222;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      transition: width 0.3s;
+    }
+    #health-fill { background: linear-gradient(90deg, #e74c3c, #ff6b6b); }
+    #stamina-fill { background: linear-gradient(90deg, #3498db, #5dade2); }
+    #detection-fill { background: linear-gradient(90deg, #f39c12, #e74c3c); }
+
+    #center-message {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-shadow: 2px 2px 12px black;
+      text-align: center;
+      pointer-events: none;
+    }
+    #interact-hint {
+      position: absolute;
+      bottom: 120px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: #ffd700;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      display: none;
+      border: 1px solid #ffd700;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 110px;
+      height: 110px;
+      background: rgba(0,0,0,0.8);
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    #restart-btn {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #c0392b;
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 28px;
+      cursor: pointer;
+      pointer-events: all;
+      display: none;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+      z-index: 20;
+      transition: 0.2s;
+    }
+    #restart-btn:hover { background: #e74c3c; transform: translateX(-50%) scale(1.05); }
+    #controls-info {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.5);
+      font-size: 0.7rem;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 14px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <div id="top-panel">
+    <div class="hud-item">❤️<div class="bar-container"><div id="health-fill" class="bar-fill" style="width:100%"></div></div></div>
+    <div class="hud-item">⚡<div class="bar-container"><div id="stamina-fill" class="bar-fill" style="width:100%"></div></div></div>
+    <div class="hud-item">👁<div class="bar-container"><div id="detection-fill" class="bar-fill" style="width:0%"></div></div></div>
+    <div class="hud-item">🔑 <span id="key-count">0/3</span></div>
+  </div>
+  <div id="center-message"></div>
+  <div id="interact-hint">Нажмите E</div>
+  <div id="minimap"></div>
+  <button id="restart-btn">🔄 ПОПРОБОВАТЬ СНОВА</button>
+  <div id="controls-info">WASD — движение | Shift — бег | E — подобрать | Пробел — оглушить</div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let WIDTH, HEIGHT;
+  function resize() {
+    WIDTH = canvas.width = window.innerWidth;
+    HEIGHT = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ==================== ИГРОК ====================
+  const player = {
+    x: 100, y: 200,
+    radius: 18,
+    speed: 3.5,
+    runSpeed: 6,
+    health: 100,
+    maxHealth: 100,
+    stamina: 100,
+    maxStamina: 100,
+    keys: 0,
+    detection: 0,
+    alive: true,
+    won: false,
+    trail: []
+  };
+
+  // ==================== ИГРОВЫЕ ОБЪЕКТЫ ====================
+  let walls = [];
+  let guards = [];
+  let keyItems = [];
+  let exitDoor = null;
+  let particles = [];
+  let gameActive = true;
+  const totalKeys = 3;
+  let frame = 0;
+
+  // ==================== ГЕНЕРАЦИЯ ТЮРЬМЫ ====================
+  function generatePrison() {
+    walls = [];
+    guards = [];
+    keyItems = [];
+    particles = [];
+    
+    // Внешние стены
+    walls.push({x:0, y:0, w:WIDTH, h:15}); // верх
+    walls.push({x:0, y:HEIGHT-15, w:WIDTH, h:15}); // низ
+    walls.push({x:0, y:0, w:15, h:HEIGHT}); // лево
+    walls.push({x:WIDTH-15, y:0, w:15, h:HEIGHT}); // право
+
+    // Внутренние стены (лабиринт)
+    const wallData = [
+      {x:200, y:0, w:15, h:HEIGHT*0.35},
+      {x:200, y:HEIGHT*0.55, w:15, h:HEIGHT*0.45},
+      {x:400, y:0, w:15, h:HEIGHT*0.45},
+      {x:400, y:HEIGHT*0.65, w:15, h:HEIGHT*0.35},
+      {x:600, y:0, w:15, h:HEIGHT*0.3},
+      {x:600, y:HEIGHT*0.5, w:15, h:HEIGHT*0.5},
+      {x:800, y:0, w:15, h:HEIGHT*0.4},
+      {x:800, y:HEIGHT*0.6, w:15, h:HEIGHT*0.4},
+      // Горизонтальные
+      {x:0, y:150, w:300, h:15},
+      {x:350, y:150, w:200, h:15},
+      {x:600, y:150, w:WIDTH-600, h:15},
+      {x:0, y:300, w:250, h:15},
+      {x:350, y:300, w:300, h:15},
+      {x:700, y:300, w:WIDTH-700, h:15},
+      {x:0, y:450, w:400, h:15},
+      {x:500, y:450, w:200, h:15},
+      {x:750, y:450, w:WIDTH-750, h:15},
+    ];
+
+    if (WIDTH > 600) {
+      wallData.forEach(w => walls.push(w));
+    }
+
+    // Ящики-укрытия
+    for (let i = 0; i < 20; i++) {
+      walls.push({
+        x: 60 + Math.random() * (WIDTH - 120),
+        y: 40 + Math.random() * (HEIGHT - 80),
+        w: 30 + Math.random() * 30,
+        h: 30 + Math.random() * 30,
+        type: 'crate'
+      });
+    }
+
+    // Ключи
+    const keyPositions = [
+      {x: 180, y: 100}, {x: 500, y: 400}, {x: 750, y: 200},
+      {x: 300, y: 350}, {x: 650, y: 100}
+    ];
+    for (let i = 0; i < totalKeys; i++) {
+      const pos = keyPositions[i] || {
+        x: 100 + Math.random() * (WIDTH - 200),
+        y: 50 + Math.random() * (HEIGHT - 100)
+      };
+      keyItems.push({x: pos.x, y: pos.y, radius: 16, collected: false});
+    }
+
+    // Выход
+    exitDoor = {x: WIDTH - 60, y: HEIGHT/2, w: 40, h: 70, open: false};
+
+    // Охранники
+    for (let i = 0; i < 5; i++) {
+      guards.push({
+        x: 150 + i * 150,
+        y: 100 + i * 80,
+        radius: 18,
+        speed: 0.8 + Math.random() * 1.2,
+        patrolAngle: Math.random() * Math.PI * 2,
+        visionRange: 160,
+        visionCone: Math.PI / 2.5,
+        stunned: false,
+        stunTimer: 0,
+        path: [],
+        pathIndex: 0
+      });
+    }
+
+    // Сброс игрока
+    player.x = 80;
+    player.y = 80;
+    player.health = player.maxHealth;
+    player.stamina = player.maxStamina;
+    player.keys = 0;
+    player.detection = 0;
+    player.alive = true;
+    player.won = false;
+    player.trail = [];
+    gameActive = true;
+
+    updateUI();
+  }
+
+  // ==================== ФИЗИКА И КОЛЛИЗИИ ====================
+  function rectCircleCollision(rx, ry, rw, rh, cx, cy, cr) {
+    const closestX = Math.max(rx, Math.min(cx, rx + rw));
+    const closestY = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return (dx * dx + dy * dy) < (cr * cr);
+  }
+
+  function resolveCollisions(obj, radius) {
+    for (const wall of walls) {
+      if (rectCircleCollision(wall.x, wall.y, wall.w, wall.h, obj.x, obj.y, radius)) {
+        const cx = Math.max(wall.x, Math.min(obj.x, wall.x + wall.w));
+        const cy = Math.max(wall.y, Math.min(obj.y, wall.y + wall.h));
+        const dx = obj.x - cx;
+        const dy = obj.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < radius) {
+          const overlap = radius - dist;
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+          obj.x += nx * overlap;
+          obj.y += ny * overlap;
+        }
+      }
+    }
+  }
+
+  // ==================== ОБНОВЛЕНИЕ ====================
+  function update(delta) {
+    if (!gameActive || !player.alive || player.won) return;
+    frame++;
+    const dt = Math.min(delta, 0.05);
+
+    // Движение игрока
+    const keys = window._keys || {};
+    let moveX = 0, moveY = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) moveY = -1;
+    if (keys['KeyS'] || keys['ArrowDown']) moveY = 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) moveX = -1;
+    if (keys['KeyD'] || keys['ArrowRight']) moveX = 1;
+
+    const isRunning = (keys['ShiftLeft'] || keys['ShiftRight']) && player.stamina > 0;
+    const speed = isRunning ? player.runSpeed : player.speed;
+
+    if (moveX !== 0 || moveY !== 0) {
+      const len = Math.sqrt(moveX * moveX + moveY * moveY);
+      moveX /= len;
+      moveY /= len;
+      player.x += moveX * speed * dt * 60;
+      player.y += moveY * speed * dt * 60;
+
+      if (isRunning) {
+        player.stamina = Math.max(0, player.stamina - 25 * dt);
+      }
+      
+      // Шлейф
+      if (frame % 3 === 0) {
+        player.trail.push({x: player.x, y: player.y, life: 0.4, maxLife: 0.4});
+      }
+    } else {
+      player.stamina = Math.min(player.maxStamina, player.stamina + 15 * dt);
+    }
+
+    player.trail = player.trail.filter(t => { t.life -= dt; return t.life > 0; });
+    resolveCollisions(player, player.radius);
+
+    // Сбор ключей
+    for (const key of keyItems) {
+      if (!key.collected) {
+        const dx = player.x - key.x;
+        const dy = player.y - key.y;
+        if (Math.sqrt(dx*dx + dy*dy) < player.radius + key.radius + 10) {
+          key.collected = true;
+          player.keys++;
+          spawnParticles(key.x, key.y, '#ffd700', 15);
+          showInteractHint(false);
+        }
+      }
+    }
+
+    // Проверка близости к ключу
+    let nearKey = false;
+    for (const key of keyItems) {
+      if (!key.collected) {
+        const dx = player.x - key.x;
+        const dy = player.y - key.y;
+        if (Math.sqrt(dx*dx + dy*dy) < player.radius + key.radius + 30) {
+          nearKey = true;
+          break;
+        }
+      }
+    }
+
+    // Проверка выхода
+    const nearExit = exitDoor && Math.abs(player.x - exitDoor.x) < 60 && Math.abs(player.y - exitDoor.y) < 60;
+    
+    if (nearKey || nearExit) {
+      showInteractHint(true, nearKey ? 'Подобрать ключ' : 'Открыть дверь (нужно 3 ключа)');
+    } else {
+      showInteractHint(false);
+    }
+
+    // Открытие двери
+    if (nearExit && player.keys >= totalKeys && (keys['KeyE'] || keys['Space'])) {
+      player.won = true;
+      gameActive = false;
+      document.getElementById('center-message').innerHTML = '🎉 ВЫ СБЕЖАЛИ!<br><small>Поздравляем с победой!</small>';
+      document.getElementById('restart-btn').style.display = 'block';
+      spawnParticles(exitDoor.x, exitDoor.y, '#ffd700', 30);
+    }
+
+    // Обновление охранников
+    for (const guard of guards) {
+      if (guard.stunned) {
+        guard.stunTimer -= dt;
+        if (guard.stunTimer <= 0) guard.stunned = false;
+        continue;
+      }
+
+      // Патрулирование
+      guard.patrolAngle += (Math.random() - 0.5) * 0.02;
+      guard.x += Math.cos(guard.patrolAngle) * guard.speed * dt * 60;
+      guard.y += Math.sin(guard.patrolAngle) * guard.speed * dt * 60;
+      
+      // Отскок от стен
+      for (const wall of walls) {
+        if (rectCircleCollision(wall.x, wall.y, wall.w, wall.h, guard.x, guard.y, guard.radius)) {
+          guard.patrolAngle += Math.PI * (0.5 + Math.random());
+          break;
+        }
+      }
+      
+      // Ограничение карты
+      guard.x = Math.max(30, Math.min(WIDTH - 30, guard.x));
+      guard.y = Math.max(30, Math.min(HEIGHT - 30, guard.y));
+
+      // Обнаружение игрока
+      const dx = player.x - guard.x;
+      const dy = player.y - guard.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist < guard.visionRange) {
+        const angle = Math.atan2(dy, dx);
+        let angleDiff = angle - guard.patrolAngle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        
+        if (Math.abs(angleDiff) < guard.visionCone / 2) {
+          // Игрок в поле зрения
+          const hidden = walls.some(w => {
+            if (w.type === 'crate' && Math.abs(player.x - (w.x + w.w/2)) < w.w/2 + 10 &&
+                Math.abs(player.y - (w.y + w.h/2)) < w.h/2 + 10) {
+              return true; // Игрок за укрытием
+            }
+            return false;
+          });
+          
+          if (!hidden) {
+            player.detection = Math.min(100, player.detection + 40 * dt);
+          }
+        }
+      }
+    }
+
+    // Снижение обнаружения
+    if (player.detection > 0) {
+      player.detection = Math.max(0, player.detection - 15 * dt);
+    }
+
+    // Урон при полном обнаружении
+    if (player.detection >= 100) {
+      player.health -= 30 * dt;
+      if (player.health <= 0) {
+        player.alive = false;
+        gameActive = false;
+        document.getElementById('center-message').innerHTML = '💀 ВАС ПОЙМАЛИ!<br><small>Охранники схватили вас</small>';
+        document.getElementById('restart-btn').style.display = 'block';
+        spawnParticles(player.x, player.y, '#ff4444', 30);
+      }
+    }
+
+    // Оглушение охранника (пробел рядом)
+    if (keys['Space'] && !nearKey && !nearExit) {
+      for (const guard of guards) {
+        if (!guard.stunned) {
+          const dx = player.x - guard.x;
+          const dy = player.y - guard.y;
+          if (Math.sqrt(dx*dx + dy*dy) < 60 && player.stamina > 30) {
+            guard.stunned = true;
+            guard.stunTimer = 2;
+            player.stamina -= 30;
+            spawnParticles(guard.x, guard.y, '#ffff00', 10);
+            break;
+          }
+        }
+      }
+    }
+
+    // Частицы
+    particles = particles.filter(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      return p.life > 0;
+    });
+
+    updateUI();
+  }
+
+  function spawnParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 120,
+        vy: (Math.random() - 0.5) * 120,
+        life: 0.6 + Math.random() * 0.4,
+        maxLife: 0.8,
+        size: 3 + Math.random() * 5,
+        color
+      });
+    }
+  }
+
+  function showInteractHint(show, text = '') {
+    const hint = document.getElementById('interact-hint');
+    if (show) {
+      hint.textContent = text;
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
+  }
+
+  function updateUI() {
+    document.getElementById('health-fill').style.width = `${Math.max(0, player.health)}%`;
+    document.getElementById('stamina-fill').style.width = `${Math.max(0, player.stamina)}%`;
+    document.getElementById('detection-fill').style.width = `${Math.min(100, player.detection)}%`;
+    document.getElementById('key-count').textContent = `${player.keys}/${totalKeys}`;
+  }
+
+  // ==================== ОТРИСОВКА ====================
+  function draw() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+    // Фон
+    const bgGrad = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 100, WIDTH/2, HEIGHT/2, WIDTH);
+    bgGrad.addColorStop(0, '#1a1a2e');
+    bgGrad.addColorStop(1, '#0a0a15');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    // Пол
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    for (let x = 0; x < WIDTH; x += 40) {
+      for (let y = 0; y < HEIGHT; y += 40) {
+        ctx.fillStyle = (Math.floor(x/40) + Math.floor(y/40)) % 2 === 0 ? '#2a2a35' : '#252530';
+        ctx.fillRect(x, y, 40, 40);
+      }
+    }
+
+    // Стены
+    for (const wall of walls) {
+      if (wall.type === 'crate') {
+        ctx.fillStyle = '#5a4a3a';
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.strokeStyle = '#3a2a1a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.fillStyle = '#6a5a4a';
+        ctx.fillRect(wall.x + 4, wall.y + 4, wall.w - 8, wall.h - 8);
+      } else {
+        ctx.fillStyle = '#4a4a5a';
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.fillStyle = '#5a5a6a';
+        ctx.fillRect(wall.x + 2, wall.y + 2, wall.w - 4, wall.h - 4);
+      }
+    }
+
+    // Выход
+    if (exitDoor) {
+      ctx.fillStyle = player.keys >= totalKeys ? '#4CAF50' : '#555';
+      ctx.fillRect(exitDoor.x - exitDoor.w/2, exitDoor.y - exitDoor.h/2, exitDoor.w, exitDoor.h);
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(exitDoor.x - exitDoor.w/2, exitDoor.y - exitDoor.h/2, exitDoor.w, exitDoor.h);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('ВЫХОД', exitDoor.x, exitDoor.y + 5);
+    }
+
+    // Ключи
+    for (const key of keyItems) {
+      if (key.collected) continue;
+      const glow = Math.sin(frame * 0.06) * 0.3 + 0.7;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 15 * glow;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(key.x, key.y - 5, key.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillRect(key.x - 4, key.y - 2, 8, 18);
+      ctx.fillRect(key.x + 6, key.y + 10, 12, 4);
+      ctx.shadowBlur = 0;
+    }
+
+    // Охранники
+    for (const guard of guards) {
+      if (guard.stunned) {
+        ctx.fillStyle = '#ffff00';
+        ctx.globalAlpha = 0.7 + Math.sin(frame * 0.2) * 0.3;
+      } else {
+        ctx.fillStyle = '#e74c3c';
+      }
+      ctx.beginPath();
+      ctx.arc(guard.x, guard.y, guard.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(guard.x - 5, guard.y - 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(guard.x + 5, guard.y - 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(guard.x - 5, guard.y - 5, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(guard.x + 5, guard.y - 5, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Конус зрения
+      ctx.fillStyle = 'rgba(255,100,100,0.08)';
+      ctx.beginPath();
+      ctx.moveTo(guard.x, guard.y);
+      ctx.arc(guard.x, guard.y, guard.visionRange, 
+        guard.patrolAngle - guard.visionCone/2, 
+        guard.patrolAngle + guard.visionCone/2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Игрок
+    // Шлейф
+    for (const t of player.trail) {
+      const alpha = t.life / t.maxLife;
+      ctx.fillStyle = `rgba(52,152,219,${alpha * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, player.radius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Тело
+    const playerGlow = player.detection > 50 ? Math.sin(frame * 0.1) * 0.4 + 0.6 : 0;
+    ctx.shadowColor = player.detection > 50 ? '#ff4444' : '#3498db';
+    ctx.shadowBlur = 12 + playerGlow * 10;
+    
+    ctx.fillStyle = '#3498db';
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(player.x - 5, player.y - 5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(player.x + 5, player.y - 5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(player.x - 5, player.y - 5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(player.x + 5, player.y - 5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Частицы
+    for (const p of particles) {
+      const alpha = p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // Миникарта
+    drawMinimap();
+  }
+
+  function drawMinimap() {
+    const mmCanvas = document.getElementById('minimap');
+    if (!mmCanvas) return;
+    const mmCtx = mmCanvas.getContext ? null : null;
+    // Простая мини-карта через CSS (отрисовывается на основном канвасе)
+    const mmX = WIDTH - 130;
+    const mmY = HEIGHT - 130;
+    const mmSize = 110;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath();
+    ctx.arc(mmX + mmSize/2, mmY + mmSize/2, mmSize/2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(mmX + mmSize/2, mmY + mmSize/2, mmSize/2, 0, Math.PI*2);
+    ctx.clip();
+    
+    const scale = 0.08;
+    // Стены
+    ctx.fillStyle = '#555';
+    for (const wall of walls) {
+      ctx.fillRect(mmX + wall.x * scale, mmY + wall.y * scale, wall.w * scale, wall.h * scale);
+    }
+    // Охранники
+    ctx.fillStyle = '#e74c3c';
+    for (const g of guards) {
+      ctx.beginPath();
+      ctx.arc(mmX + g.x * scale, mmY + g.y * scale, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Игрок
+    ctx.fillStyle = '#3498db';
+    ctx.beginPath();
+    ctx.arc(mmX + player.x * scale, mmY + player.y * scale, 4, 0, Math.PI*2);
+    ctx.fill();
+    // Выход
+    if (exitDoor) {
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(mmX + exitDoor.x * scale - 2, mmY + exitDoor.y * scale - 2, 4, 4);
+    }
+    ctx.restore();
+  }
+
+  // ==================== ИГРОВОЙ ЦИКЛ ====================
+  let lastTime = performance.now();
+
+  function gameLoop(time) {
+    const delta = (time - lastTime) / 1000;
+    lastTime = time;
+
+    update(delta);
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // ==================== УПРАВЛЕНИЕ ====================
+  window._keys = {};
+  window.addEventListener('keydown', e => {
+    window._keys[e.code] = true;
+    e.preventDefault();
+  });
+  window.addEventListener('keyup', e => {
+    window._keys[e.code] = false;
+  });
+
+  // Мобильное управление
+  let touchActive = false;
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    touchActive = true;
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const tx = touch.clientX - rect.left;
+    const ty = touch.clientY - rect.top;
+    
+    if (tx < WIDTH/3) window._keys['KeyA'] = true;
+    else if (tx > WIDTH*2/3) window._keys['KeyD'] = true;
+    if (ty < HEIGHT/3) window._keys['KeyW'] = true;
+    else if (ty > HEIGHT*2/3) window._keys['KeyS'] = true;
+    
+    if (tx > WIDTH/2 && ty > HEIGHT/2) window._keys['Space'] = true;
+  });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    window._keys = {};
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const tx = touch.clientX - rect.left;
+    const ty = touch.clientY - rect.top;
+    if (tx < WIDTH/3) window._keys['KeyA'] = true;
+    else if (tx > WIDTH*2/3) window._keys['KeyD'] = true;
+    if (ty < HEIGHT/3) window._keys['KeyW'] = true;
+    else if (ty > HEIGHT*2/3) window._keys['KeyS'] = true;
+  });
+  canvas.addEventListener('touchend', () => {
+    window._keys = {};
+    touchActive = false;
+  });
+
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    document.getElementById('restart-btn').style.display = 'none';
+    document.getElementById('center-message').textContent = '';
+    generatePrison();
+    updateUI();
+  });
+
+  // ==================== ЗАПУСК ====================
+  generatePrison();
+  updateUI();
+  requestAnimationFrame(gameLoop);
+
+  console.log('🏃 ПОБЕГ ИЗ ТЮРЬМЫ! WASD — движение, Shift — бег, E — подобрать, Пробел — оглушить');
+})();
+</script>
+</body>
+</html>

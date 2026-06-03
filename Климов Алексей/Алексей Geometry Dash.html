@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry Dash – Простая версия</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 20px #ff0000;
+            background: #111;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            color: white;
+            font-size: 22px;
+            text-shadow: 0 0 10px red;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <span>Очки: <span id="scoreDisplay">0</span></span>
+        <span style="margin-left: 30px;">Попытки: <span id="attemptsDisplay">0</span></span>
+        <span style="margin-left: 30px;">Цвет: <span id="colorName">голубой</span> (C)</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 400;
+
+        // ---------- НАСТРОЙКИ ИГРЫ ----------
+        const GROUND_Y = 350;          // уровень земли
+        const PLAYER_SIZE = 30;        // размер квадрата
+        const GRAVITY = 0.7;
+        const JUMP_FORCE = -10;
+
+        // Цветовые схемы игрока
+        const colorSchemes = [
+            { name: 'голубой', main: '#00ccff', dark: '#0066ff' },
+            { name: 'зелёный', main: '#00ff88', dark: '#00aa44' },
+            { name: 'фиолетовый', main: '#cc44ff', dark: '#8800cc' },
+            { name: 'оранжевый', main: '#ffaa00', dark: '#ff4400' }
+        ];
+        let currentColor = 0;
+
+        // Состояние игры
+        let player = {
+            x: 150,
+            y: GROUND_Y - PLAYER_SIZE,
+            vy: 0,
+            grounded: true
+        };
+        let obstacles = [];
+        let speed = 6;
+        let frame = 0;
+        let score = 0;
+        let attempts = 0;
+        let gameOver = false;
+        let spawnTimer = 0;
+
+        // ---------- ФУНКЦИИ ----------
+        function restart() {
+            player.y = GROUND_Y - PLAYER_SIZE;
+            player.vy = 0;
+            player.grounded = true;
+            obstacles = [];
+            speed = 6;
+            frame = 0;
+            score = 0;
+            gameOver = false;
+            spawnTimer = 0;
+            attempts++;
+            updateUI();
+        }
+
+        function jump() {
+            if (gameOver) {
+                restart();
+                return;
+            }
+            // Прыжок возможен только с земли
+            if (player.grounded) {
+                player.vy = JUMP_FORCE;
+                player.grounded = false;
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('scoreDisplay').textContent = score;
+            document.getElementById('attemptsDisplay').textContent = attempts;
+            document.getElementById('colorName').textContent = colorSchemes[currentColor].name;
+        }
+
+        function spawnSpike() {
+            const height = 25;
+            obstacles.push({
+                x: canvas.width,
+                y: GROUND_Y - height,  // стоит на земле
+                width: 20,
+                height: height,
+                type: 'spike'
+            });
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            // Физика игрока
+            player.vy += GRAVITY;
+            player.y += player.vy;
+            // Столкновение с землёй
+            if (player.y + PLAYER_SIZE > GROUND_Y) {
+                player.y = GROUND_Y - PLAYER_SIZE;
+                player.vy = 0;
+                player.grounded = true;
+            } else {
+                player.grounded = false;
+            }
+
+            // Движение препятствий
+            for (let obs of obstacles) {
+                obs.x -= speed;
+            }
+            // Удаляем ушедшие за экран и начисляем очки
+            obstacles = obstacles.filter(obs => {
+                if (obs.x + obs.width < 0) {
+                    score += 10;
+                    return false;
+                }
+                return true;
+            });
+
+            // Спавн новых шипов
+            spawnTimer++;
+            if (spawnTimer > 70 && obstacles.length < 4) {
+                spawnSpike();
+                spawnTimer = 0;
+            }
+
+            // Постепенное ускорение
+            if (frame % 300 === 0 && speed < 12) {
+                speed += 0.5;
+            }
+
+            // Проверка столкновений с шипами
+            const playerRect = {
+                x: player.x,
+                y: player.y,
+                w: PLAYER_SIZE,
+                h: PLAYER_SIZE
+            };
+            for (let obs of obstacles) {
+                if (
+                    playerRect.x < obs.x + obs.width &&
+                    playerRect.x + playerRect.w > obs.x &&
+                    playerRect.y < obs.y + obs.height &&
+                    playerRect.y + playerRect.h > obs.y
+                ) {
+                    gameOver = true;
+                    break;
+                }
+            }
+
+            frame++;
+            updateUI();
+        }
+
+        function draw() {
+            // Чёрный фон
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Полосы на фоне для динамики
+            for (let i = 0; i < 20; i++) {
+                ctx.fillStyle = (i % 2 === 0) ? '#1a1a1a' : '#151515';
+                ctx.fillRect(0, i * 20, canvas.width, 20);
+            }
+
+            // Линия земли
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(0, GROUND_Y, canvas.width, 3);
+
+            // Шипы (треугольники)
+            for (let obs of obstacles) {
+                ctx.fillStyle = '#ff3333';
+                ctx.beginPath();
+                ctx.moveTo(obs.x, obs.y + obs.height);          // нижний левый
+                ctx.lineTo(obs.x + obs.width / 2, obs.y);       // вершина
+                ctx.lineTo(obs.x + obs.width, obs.y + obs.height); // нижний правый
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Игрок (квадрат с градиентом)
+            const col = colorSchemes[currentColor];
+            const gradient = ctx.createLinearGradient(
+                player.x, player.y,
+                player.x + PLAYER_SIZE, player.y + PLAYER_SIZE
+            );
+            gradient.addColorStop(0, col.main);
+            gradient.addColorStop(1, col.dark);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+            // Обводка
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+
+            // Если игра окончена – сообщение
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ff0000';
+                ctx.font = 'bold 42px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+                ctx.fillStyle = '#fff';
+                ctx.font = '18px Arial';
+                ctx.fillText('Нажмите, чтобы начать заново', canvas.width / 2, canvas.height / 2 + 30);
+            }
+        }
+
+        // ---------- УПРАВЛЕНИЕ ----------
+        window.addEventListener('click', jump);
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jump();
+            }
+            if (e.code === 'KeyC') {
+                currentColor = (currentColor + 1) % colorSchemes.length;
+                updateUI();
+            }
+        });
+
+        // ---------- ИГРОВОЙ ЦИКЛ ----------
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Запуск
+        restart();
+        updateUI();
+        gameLoop();
+    </script>
+</body>
+</html>

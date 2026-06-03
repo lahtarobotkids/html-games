@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>🎮 ROBLOX STYLE — Мини-игры и платформер</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      background: #1a1a2e;
+      overflow: hidden;
+      user-select: none;
+    }
+    canvas { display: block; }
+    #ui {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      color: white;
+    }
+    #top-hud {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .hud-box {
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      padding: 8px 16px;
+      border-radius: 16px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      border: 2px solid rgba(255,255,255,0.2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #coins-display { color: #ffd700; }
+    #gems-display { color: #ff69b4; }
+    .bar-outer {
+      width: 100px;
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-inner {
+      height: 100%;
+      transition: width 0.3s;
+    }
+    #hp-bar { background: linear-gradient(90deg, #e74c3c, #ff6b6b); }
+    #xp-bar { background: linear-gradient(90deg, #4CAF50, #8BC34A); }
+
+    #message {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2rem;
+      font-weight: bold;
+      text-shadow: 2px 2px 10px black;
+      text-align: center;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 110px;
+      height: 110px;
+      background: rgba(0,0,0,0.8);
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    #shop-panel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      backdrop-filter: blur(12px);
+      padding: 20px;
+      border-radius: 20px;
+      pointer-events: all;
+      display: none;
+      border: 2px solid #ffd700;
+      color: white;
+      z-index: 20;
+    }
+    #shop-panel h3 { color: #ffd700; margin-bottom: 12px; text-align: center; }
+    .shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .shop-item {
+      background: rgba(255,255,255,0.1);
+      padding: 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: 0.2s;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .shop-item:hover { background: rgba(255,215,0,0.2); border-color: #ffd700; }
+    #controls {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.5);
+      font-size: 0.7rem;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 12px;
+      border-radius: 8px;
+    }
+    #restart-btn {
+      position: absolute;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 28px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 24px;
+      cursor: pointer;
+      pointer-events: all;
+      display: none;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <div id="top-hud">
+    <div class="hud-box">❤️<div class="bar-outer"><div id="hp-bar" class="bar-inner" style="width:100%"></div></div></div>
+    <div class="hud-box">⭐<div class="bar-outer"><div id="xp-bar" class="bar-inner" style="width:0%"></div></div> Ур.<span id="level">1</span></div>
+    <div class="hud-box" id="coins-display">🪙 <span id="coins">0</span></div>
+    <div class="hud-box" id="gems-display">💎 <span id="gems">10</span></div>
+  </div>
+  <div id="message"></div>
+  <div id="minimap"></div>
+  <div id="shop-panel">
+    <h3>🛒 МАГАЗИН (B)</h3>
+    <div class="shop-grid">
+      <div class="shop-item" onclick="buyItem('speed')">⚡ Скорость +1<br><small>100 🪙</small></div>
+      <div class="shop-item" onclick="buyItem('jump')">🦘 Прыжок +2<br><small>150 🪙</small></div>
+      <div class="shop-item" onclick="buyItem('hp')">❤️ HP +20<br><small>200 🪙</small></div>
+      <div class="shop-item" onclick="buyItem('skin')">🎨 Скин<br><small>5 💎</small></div>
+    </div>
+  </div>
+  <div id="controls">WASD — движение | Пробел — прыжок | E — собирать | B — магазин | 1-3 — мини-игры</div>
+  <button id="restart-btn">🔄 ИГРАТЬ СНОВА</button>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ==================== ИГРОК ====================
+  const player = {
+    x: 200, y: 300,
+    width: 36, height: 60,
+    vx: 0, vy: 0,
+    speed: 5,
+    jumpForce: -14,
+    hp: 100, maxHp: 100,
+    coins: 0,
+    gems: 10,
+    level: 1,
+    xp: 0, xpToNext: 100,
+    color: '#3498db',
+    skin: 'default',
+    isJumping: false,
+    trail: []
+  };
+
+  // ==================== ИГРОВОЙ МИР ====================
+  let platforms = [];
+  let coins = [];
+  let gems = [];
+  let obstacles = [];
+  let npcs = [];
+  let particles = [];
+  let gameActive = true;
+  let currentGame = 'obby'; // obby, tycoon, simulator
+  let frame = 0;
+
+  const GRAVITY = 0.8;
+  const GROUND_Y = 500;
+
+  // ==================== ГЕНЕРАЦИЯ ====================
+  function generateObby() {
+    platforms = [];
+    coins = [];
+    gems = [];
+    obstacles = [];
+    npcs = [];
+    particles = [];
+    currentGame = 'obby';
+
+    // Стартовая платформа
+    platforms.push({ x: 50, y: GROUND_Y, w: 200, h: 30, color: '#4CAF50', type: 'start' });
+
+    // Платформы
+    const platColors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22'];
+    for (let i = 0; i < 12; i++) {
+      const pw = 80 + Math.random() * 120;
+      platforms.push({
+        x: 250 + i * 180 + Math.random() * 100,
+        y: GROUND_Y - 40 - Math.random() * 200,
+        w: pw, h: 24,
+        color: platColors[Math.floor(Math.random() * platColors.length)],
+        type: 'normal'
+      });
+    }
+
+    // Монеты над платформами
+    for (const plat of platforms) {
+      if (Math.random() < 0.6) {
+        coins.push({
+          x: plat.x + plat.w / 2,
+          y: plat.y - 35,
+          radius: 14,
+          collected: false
+        });
+      }
+      if (Math.random() < 0.2) {
+        gems.push({
+          x: plat.x + plat.w / 4,
+          y: plat.y - 40,
+          radius: 12,
+          collected: false
+        });
+      }
+    }
+
+    // Препятствия
+    for (let i = 0; i < 8; i++) {
+      obstacles.push({
+        x: 400 + i * 250 + Math.random() * 150,
+        y: GROUND_Y - 40,
+        w: 30, h: 40,
+        color: '#e74c3c',
+        type: 'spike'
+      });
+    }
+
+    // Финиш
+    platforms.push({
+      x: platforms[platforms.length-1].x + 300,
+      y: GROUND_Y,
+      w: 200, h: 30,
+      color: '#ffd700',
+      type: 'finish'
+    });
+
+    player.x = 120;
+    player.y = GROUND_Y - player.height;
+    player.vx = 0;
+    player.vy = 0;
+    player.isJumping = false;
+    gameActive = true;
+    updateUI();
+  }
+
+  function generateTycoon() {
+    platforms = [{ x: 50, y: GROUND_Y, w: 300, h: 30, color: '#8B4513', type: 'ground' }];
+    coins = []; gems = []; obstacles = []; npcs = []; particles = [];
+    currentGame = 'tycoon';
+
+    // Здания-генераторы
+    for (let i = 0; i < 6; i++) {
+      npcs.push({
+        x: 150 + i * 180,
+        y: GROUND_Y - 60,
+        w: 80, h: 60,
+        type: 'generator',
+        color: '#9b59b6',
+        timer: 0,
+        rate: 3 - i * 0.3,
+        level: 1
+      });
+    }
+
+    // Кнопки улучшения
+    for (let i = 0; i < 4; i++) {
+      platforms.push({
+        x: 200 + i * 200,
+        y: GROUND_Y - 120,
+        w: 60, h: 20,
+        color: '#f39c12',
+        type: 'upgrade'
+      });
+    }
+
+    player.x = 200;
+    player.y = GROUND_Y - player.height;
+    player.vx = 0; player.vy = 0;
+    gameActive = true;
+    updateUI();
+  }
+
+  function generateSimulator() {
+    platforms = [{ x: 50, y: GROUND_Y, w: 400, h: 30, color: '#2ecc71', type: 'ground' }];
+    coins = []; gems = []; obstacles = []; npcs = []; particles = [];
+    currentGame = 'simulator';
+
+    // Ресурсы для сбора
+    for (let i = 0; i < 20; i++) {
+      coins.push({
+        x: 100 + Math.random() * (W - 200),
+        y: 80 + Math.random() * (GROUND_Y - 160),
+        radius: 13,
+        collected: false
+      });
+    }
+
+    // Питомцы
+    for (let i = 0; i < 3; i++) {
+      npcs.push({
+        x: 200 + i * 200,
+        y: GROUND_Y - 40,
+        w: 40, h: 40,
+        type: 'pet',
+        color: ['#ff69b4', '#ffd700', '#00bcd4'][i],
+        following: false
+      });
+    }
+
+    player.x = 200;
+    player.y = GROUND_Y - player.height;
+    player.vx = 0; player.vy = 0;
+    gameActive = true;
+    updateUI();
+  }
+
+  // ==================== ФИЗИКА ====================
+  function updatePlayer(dt) {
+    const keys = window._keys || {};
+    
+    // Горизонтальное движение
+    if (keys['KeyA'] || keys['ArrowLeft']) player.vx = -player.speed;
+    else if (keys['KeyD'] || keys['ArrowRight']) player.vx = player.speed;
+    else player.vx *= 0.8;
+
+    // Прыжок
+    if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && !player.isJumping) {
+      player.vy = player.jumpForce;
+      player.isJumping = true;
+    }
+
+    // Гравитация
+    player.vy += GRAVITY;
+    player.x += player.vx * dt * 60;
+    player.y += player.vy * dt * 60;
+
+    // Коллизия с платформами
+    player.isJumping = true;
+    for (const plat of platforms) {
+      if (player.x + player.width > plat.x && player.x < plat.x + plat.w &&
+          player.y + player.height > plat.y && player.y + player.height - player.vy * dt * 60 <= plat.y) {
+        player.y = plat.y - player.height;
+        player.vy = 0;
+        player.isJumping = false;
+      }
+    }
+
+    // Падение
+    if (player.y > GROUND_Y + 100 || player.y < -200) {
+      player.hp -= 20;
+      player.x = 120;
+      player.y = GROUND_Y - player.height;
+      player.vy = 0;
+      spawnParticles(player.x, player.y, '#ff4444', 15);
+      if (player.hp <= 0) {
+        gameActive = false;
+        document.getElementById('message').innerHTML = '💀 ВЫ УПАЛИ!<br><small>Попробуйте снова</small>';
+        document.getElementById('restart-btn').style.display = 'block';
+      }
+    }
+
+    // Сбор монет
+    for (const coin of coins) {
+      if (!coin.collected) {
+        const dx = player.x + player.width/2 - coin.x;
+        const dy = player.y + player.height/2 - coin.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 30) {
+          coin.collected = true;
+          player.coins++;
+          player.xp += 15;
+          spawnParticles(coin.x, coin.y, '#ffd700', 8);
+        }
+      }
+    }
+
+    // Сбор самоцветов
+    for (const gem of gems) {
+      if (!gem.collected) {
+        const dx = player.x + player.width/2 - gem.x;
+        const dy = player.y + player.height/2 - gem.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 28) {
+          gem.collected = true;
+          player.gems++;
+          player.xp += 30;
+          spawnParticles(gem.x, gem.y, '#ff69b4', 10);
+        }
+      }
+    }
+
+    // Препятствия
+    for (const obs of obstacles) {
+      if (player.x + player.width > obs.x && player.x < obs.x + obs.w &&
+          player.y + player.height > obs.y && player.y < obs.y + obs.h) {
+        player.hp -= 15;
+        player.x = 120;
+        player.y = GROUND_Y - player.height;
+        spawnParticles(player.x, player.y, '#ff4444', 15);
+        if (player.hp <= 0) {
+          gameActive = false;
+          document.getElementById('message').innerHTML = '💀 ВЫ ПОГИБЛИ!';
+          document.getElementById('restart-btn').style.display = 'block';
+        }
+      }
+    }
+
+    // Финиш
+    const finishPlat = platforms.find(p => p.type === 'finish');
+    if (finishPlat && player.x + player.width > finishPlat.x && player.x < finishPlat.x + finishPlat.w &&
+        player.y + player.height > finishPlat.y && player.y < finishPlat.y + finishPlat.h) {
+      gameActive = false;
+      player.coins += 50;
+      player.gems += 5;
+      player.xp += 200;
+      document.getElementById('message').innerHTML = '🏆 УРОВЕНЬ ПРОЙДЕН!<br><small>+50 🪙 +5 💎</small>';
+      document.getElementById('restart-btn').style.display = 'block';
+    }
+
+    // Опыт и уровни
+    while (player.xp >= player.xpToNext) {
+      player.xp -= player.xpToNext;
+      player.level++;
+      player.xpToNext = Math.floor(player.xpToNext * 1.5);
+      player.maxHp += 10;
+      player.hp = player.maxHp;
+      document.getElementById('message').textContent = `⭐ УРОВЕНЬ ${player.level}!`;
+      setTimeout(() => { document.getElementById('message').textContent = ''; }, 2000);
+    }
+
+    // Тайкун: генераторы
+    if (currentGame === 'tycoon') {
+      for (const npc of npcs) {
+        if (npc.type === 'generator') {
+          npc.timer += dt;
+          if (npc.timer >= npc.rate) {
+            npc.timer = 0;
+            player.coins += npc.level;
+          }
+        }
+      }
+    }
+
+    // Шлейф
+    if (frame % 2 === 0) {
+      player.trail.push({ x: player.x + player.width/2, y: player.y + player.height/2, life: 0.3, maxLife: 0.3 });
+    }
+    player.trail = player.trail.filter(t => { t.life -= dt; return t.life > 0; });
+
+    // Частицы
+    particles = particles.filter(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      return p.life > 0;
+    });
+
+    updateUI();
+  }
+
+  function spawnParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random()-0.5)*150,
+        vy: (Math.random()-0.5)*150 - 50,
+        life: 0.4 + Math.random()*0.4,
+        maxLife: 0.6,
+        size: 2 + Math.random()*4,
+        color
+      });
+    }
+  }
+
+  function updateUI() {
+    document.getElementById('hp-bar').style.width = `${Math.max(0, (player.hp/player.maxHp)*100)}%`;
+    document.getElementById('xp-bar').style.width = `${Math.min(100, (player.xp/player.xpToNext)*100)}%`;
+    document.getElementById('level').textContent = player.level;
+    document.getElementById('coins').textContent = player.coins;
+    document.getElementById('gems').textContent = player.gems;
+  }
+
+  // ==================== МАГАЗИН ====================
+  window.buyItem = function(item) {
+    if (item === 'speed' && player.coins >= 100) {
+      player.coins -= 100;
+      player.speed += 1;
+    } else if (item === 'jump' && player.coins >= 150) {
+      player.coins -= 150;
+      player.jumpForce -= 2;
+    } else if (item === 'hp' && player.coins >= 200) {
+      player.coins -= 200;
+      player.maxHp += 20;
+      player.hp = player.maxHp;
+    } else if (item === 'skin' && player.gems >= 5) {
+      player.gems -= 5;
+      const skins = ['#e74c3c', '#ffd700', '#ff69b4', '#00ff00', '#ff4500'];
+      player.color = skins[Math.floor(Math.random() * skins.length)];
+    }
+    updateUI();
+  };
+
+  // ==================== ОТРИСОВКА ====================
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Небо
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(1, '#e0f0ff');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Земля
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(0, GROUND_Y, W, 15);
+
+    // Платформы
+    for (const plat of platforms) {
+      ctx.fillStyle = plat.color;
+      ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(plat.x, plat.y, plat.w, plat.h);
+      
+      if (plat.type === 'finish') {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🏁 ФИНИШ', plat.x + plat.w/2, plat.y - 8);
+      }
+    }
+
+    // Монеты
+    for (const coin of coins) {
+      if (coin.collected) continue;
+      const glow = Math.sin(frame * 0.05) * 0.3 + 0.7;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 10 * glow;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('🪙', coin.x, coin.y + 5);
+      ctx.shadowBlur = 0;
+    }
+
+    // Самоцветы
+    for (const gem of gems) {
+      if (gem.collected) continue;
+      ctx.fillStyle = '#ff69b4';
+      ctx.beginPath();
+      ctx.arc(gem.x, gem.y, gem.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('💎', gem.x, gem.y + 4);
+    }
+
+    // Препятствия
+    for (const obs of obstacles) {
+      ctx.fillStyle = obs.color;
+      ctx.beginPath();
+      ctx.moveTo(obs.x, obs.y + obs.h);
+      ctx.lineTo(obs.x + obs.w/2, obs.y);
+      ctx.lineTo(obs.x + obs.w, obs.y + obs.h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // NPC (генераторы/питомцы)
+    for (const npc of npcs) {
+      ctx.fillStyle = npc.color;
+      ctx.fillRect(npc.x, npc.y, npc.w, npc.h);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(npc.x, npc.y, npc.w, npc.h);
+      
+      if (npc.type === 'generator') {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`💰 Ур.${npc.level}`, npc.x + npc.w/2, npc.y + npc.h/2 + 4);
+      }
+    }
+
+    // Игрок
+    // Шлейф
+    for (const t of player.trail) {
+      const alpha = t.life / t.maxLife;
+      ctx.fillStyle = `rgba(${player.color === '#3498db' ? '52,152,219' : '255,107,107'},${alpha * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Тело
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y + 15, player.width, player.height - 15);
+    // Голова
+    ctx.fillStyle = '#ffdbac';
+    ctx.beginPath();
+    ctx.arc(player.x + player.width/2, player.y + 12, 14, 0, Math.PI * 2);
+    ctx.fill();
+    // Глаза
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(player.x + player.width/2 - 4, player.y + 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(player.x + player.width/2 + 4, player.y + 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Частицы
+    for (const p of particles) {
+      const alpha = p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // Мини-карта
+    drawMinimap();
+  }
+
+  function drawMinimap() {
+    const mmX = W - 120, mmY = H - 120, mmS = 100;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath();
+    ctx.arc(mmX + mmS/2, mmY + mmS/2, mmS/2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(mmX + mmS/2, mmY + mmS/2, mmS/2, 0, Math.PI*2);
+    ctx.clip();
+    
+    const scale = 0.12;
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(mmX, mmY + GROUND_Y * scale, mmS, 5);
+    
+    for (const plat of platforms) {
+      ctx.fillStyle = plat.color;
+      ctx.fillRect(mmX + plat.x * scale, mmY + plat.y * scale, plat.w * scale, plat.h * scale);
+    }
+    
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(mmX + player.x * scale, mmY + player.y * scale, 4, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  // ==================== ИГРОВОЙ ЦИКЛ ====================
+  let lastTime = performance.now();
+
+  function gameLoop(time) {
+    const dt = (time - lastTime) / 1000;
+    lastTime = time;
+    frame++;
+
+    if (gameActive) updatePlayer(dt);
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // ==================== УПРАВЛЕНИЕ ====================
+  window._keys = {};
+  window.addEventListener('keydown', e => {
+    window._keys[e.code] = true;
+    if (e.code === 'KeyB') {
+      document.getElementById('shop-panel').style.display = 
+        document.getElementById('shop-panel').style.display === 'none' ? 'block' : 'none';
+    }
+    if (e.code === 'Digit1') generateObby();
+    if (e.code === 'Digit2') generateTycoon();
+    if (e.code === 'Digit3') generateSimulator();
+  });
+  window.addEventListener('keyup', e => { window._keys[e.code] = false; });
+
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    document.getElementById('restart-btn').style.display = 'none';
+    document.getElementById('message').textContent = '';
+    generateObby();
+  });
+
+  // ==================== ЗАПУСК ====================
+  generateObby();
+  updateUI();
+  requestAnimationFrame(gameLoop);
+
+  console.log('🎮 ROBLOX STYLE! 1-Обби, 2-Тайкун, 3-Симулятор, B-Магазин');
+})();
+</script>
+</body>
+</html>

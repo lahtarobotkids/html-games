@@ -27,6 +27,7 @@
     body {
       margin: 0;
       min-height: 100vh;
+      overflow-x: hidden;
       background:
         linear-gradient(180deg, #171720 0%, #111116 46%, #18151c 100%);
     }
@@ -43,6 +44,8 @@
 
     .page {
       width: min(1180px, 100%);
+      max-width: 100%;
+      overflow: hidden;
       margin: 0 auto;
       padding: 22px 18px 34px;
     }
@@ -92,6 +95,7 @@
       color: var(--muted);
       font-size: 19px;
       line-height: 1.5;
+      overflow-wrap: anywhere;
     }
 
     .hero-actions {
@@ -133,7 +137,11 @@
 
     .hero-preview {
       position: relative;
+      display: block;
       overflow: hidden;
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
       background: var(--panel);
@@ -143,6 +151,7 @@
     .hero-preview img {
       width: 100%;
       height: 100%;
+      min-width: 0;
       min-height: 300px;
       object-fit: cover;
     }
@@ -173,6 +182,7 @@
 
     .hero-badge strong {
       font-size: 18px;
+      overflow-wrap: anywhere;
     }
 
     .hero-badge small {
@@ -210,6 +220,7 @@
     .game-card {
       display: flex;
       min-height: 100%;
+      min-width: 0;
       overflow: hidden;
       flex-direction: column;
       border: 1px solid var(--line);
@@ -288,6 +299,7 @@
       font-size: 20px;
       line-height: 1.18;
       letter-spacing: 0;
+      overflow-wrap: anywhere;
     }
 
     .meta {
@@ -312,6 +324,9 @@
       align-items: center;
       margin: 26px 0;
       padding: 18px;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
       border: 1px solid rgba(255, 209, 102, 0.32);
       border-radius: 8px;
       background:
@@ -327,11 +342,12 @@
       margin: 8px 0 0;
       color: var(--muted);
       line-height: 1.45;
+      overflow-wrap: anywhere;
     }
 
     @media (max-width: 980px) {
       .hero {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         min-height: 0;
       }
 
@@ -365,7 +381,14 @@
       }
 
       .soundtrack-panel {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .hero-badge {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        max-width: none;
       }
 
       .game-grid {
@@ -417,7 +440,7 @@
     <section class="soundtrack-panel" aria-label="Саундтреки">
       <div>
         <h2>Музыка и саундтреки</h2>
-        <p>Отдельная страница с онлайн-плеерами для всех загруженных MP3.</p>
+        <p>Страница с MP3-плеерами.</p>
       </div>
       <a class="button secondary" href="soundtracks.html">Открыть музыку</a>
     </section>
@@ -425,7 +448,7 @@
     <section id="games" aria-label="Список игр">
       <div class="section-head">
         <h2>Игры</h2>
-        <p class="count">12 запусков</p>
+        <p class="count">31 запуск</p>
       </div>
 
       <div class="game-grid">
@@ -569,6 +592,234 @@
           <div class="card-body">
             <h3>Рома битва</h3>
             <p class="meta">Битва с большим экраном действия.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Жикулин%20Даня/Жикулин%20Даня%20Реал%20Мадрид-ПСЖ%202.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/zhikulin-real-psg-2.png" alt="Скриншот Жикулин Даня Реал Мадрид-ПСЖ 2">
+            <span class="tag action">Sport</span>
+          </div>
+          <div class="card-body">
+            <h3>Жикулин Даня Реал Мадрид-ПСЖ 2</h3>
+            <p class="meta">Футбольный матч с быстрым игровым темпом.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Жикулин%20Даня/Жикулин%20Даня%20Реал%20Мадрид-ПСЖ.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/zhikulin-real-psg.png" alt="Скриншот Жикулин Даня Реал Мадрид-ПСЖ">
+            <span class="tag action">Sport</span>
+          </div>
+          <div class="card-body">
+            <h3>Жикулин Даня Реал Мадрид-ПСЖ</h3>
+            <p class="meta">Версия футбольной дуэли Реал Мадрид против ПСЖ.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Жикулин%20Даня/Жикулин%20Даня%20Укради%20Брейнрота.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/zhikulin-brainrot.png" alt="Скриншот Жикулин Даня Укради Брейнрота">
+            <span class="tag arcade">Arcade</span>
+          </div>
+          <div class="card-body">
+            <h3>Жикулин Даня Укради Брейнрота</h3>
+            <p class="meta">Аркадная погоня за трофеями и очками.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Климов%20Алексей/Алексей%20Geometry%20Dash.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/alexey-geometry-dash.png" alt="Скриншот Алексей Geometry Dash">
+            <span class="tag arcade">Runner</span>
+          </div>
+          <div class="card-body">
+            <h3>Алексей Geometry Dash</h3>
+            <p class="meta">Раннер с прыжками и препятствиями.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Климов%20Алексей/Алексей%20Змейка.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/alexey-snake.png" alt="Скриншот Алексей Змейка">
+            <span class="tag puzzle">Classic</span>
+          </div>
+          <div class="card-body">
+            <h3>Алексей Змейка</h3>
+            <p class="meta">Классическая змейка с быстрым стартом.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Костылев%20Даня/Костылев%20Даня%203D%20Войнушка%20-%20Бесконечная%20война.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/kostylev-3d-war.png" alt="Скриншот Костылев Даня 3D Войнушка">
+            <span class="tag action">3D</span>
+          </div>
+          <div class="card-body">
+            <h3>Костылев Даня 3D Войнушка</h3>
+            <p class="meta">Трёхмерная битва в режиме бесконечной войны.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Лёня/Леня%201%20Минер-разрушитель.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/lenya-miner.png" alt="Скриншот Леня 1 Минер-разрушитель">
+            <span class="tag arcade">Arcade</span>
+          </div>
+          <div class="card-body">
+            <h3>Леня 1 Минер-разрушитель</h3>
+            <p class="meta">Минирование, разрушение и быстрые решения.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Лёня/Леня%202%20Зомби%20песочница.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/lenya-zombie-sandbox.png" alt="Скриншот Леня 2 Зомби песочница">
+            <span class="tag action">Sandbox</span>
+          </div>
+          <div class="card-body">
+            <h3>Леня 2 Зомби песочница</h3>
+            <p class="meta">Песочница с зомби и свободным действием.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Малютин%20Федя/Малютин%20Федя%20Ловля%20Брейнрота.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/malutin-brainrot.png" alt="Скриншот Малютин Федя Ловля Брейнрота">
+            <span class="tag arcade">Catch</span>
+          </div>
+          <div class="card-body">
+            <h3>Малютин Федя Ловля Брейнрота</h3>
+            <p class="meta">Ловите цель и набирайте очки.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Малютин%20Федя/Малютин%20Федя%20Майнкрафт.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/malutin-minecraft.png" alt="Скриншот Малютин Федя Майнкрафт">
+            <span class="tag arcade">Blocks</span>
+          </div>
+          <div class="card-body">
+            <h3>Малютин Федя Майнкрафт</h3>
+            <p class="meta">Блочная мини-игра в знакомом стиле.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Малютин%20Федя/Малютин%20Федя%20Машинки.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/malutin-cars.png" alt="Скриншот Малютин Федя Машинки">
+            <span class="tag action">Race</span>
+          </div>
+          <div class="card-body">
+            <h3>Малютин Федя Машинки</h3>
+            <p class="meta">Гонки и машинки в аркадном формате.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Мерсон%20Федя/Федя%20Мерсон%201.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/merson-1.png" alt="Скриншот Федя Мерсон 1">
+            <span class="tag action">Quest</span>
+          </div>
+          <div class="card-body">
+            <h3>Федя Мерсон 1</h3>
+            <p class="meta">Большая приключенческая HTML-игра.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Мерсон%20Федя/Федя%20Мерсон%202.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/merson-2.png" alt="Скриншот Федя Мерсон 2">
+            <span class="tag action">Quest</span>
+          </div>
+          <div class="card-body">
+            <h3>Федя Мерсон 2</h3>
+            <p class="meta">Продолжение с новой картой и героями.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Роберт/Роберт%20Рикки-Тикки-Тави.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/robert-rikki-tikki-tavi.png" alt="Скриншот Роберт Рикки-Тикки-Тави">
+            <span class="tag arcade">Arcade</span>
+          </div>
+          <div class="card-body">
+            <h3>Роберт Рикки-Тикки-Тави</h3>
+            <p class="meta">Быстрый аркадный запуск.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Роберт/Роберт%20Рикошет.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/robert-ricochet.png" alt="Скриншот Роберт Рикошет">
+            <span class="tag puzzle">Ricochet</span>
+          </div>
+          <div class="card-body">
+            <h3>Роберт Рикошет</h3>
+            <p class="meta">Рикошеты, блоки и точность удара.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Холод%20Дима/Холод%20Дима%20GEOMETRY%20DASH%20EXTREME%20—%20Хардкорный%20раннер.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/holod-geometry-extreme.png" alt="Скриншот Холод Дима Geometry Dash Extreme">
+            <span class="tag arcade">Extreme</span>
+          </div>
+          <div class="card-body">
+            <h3>Холод Дима Geometry Dash Extreme</h3>
+            <p class="meta">Хардкорный раннер с препятствиями.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Холод%20Дима/Холод%20Дима%20ROBLOX%20STYLE%20—%20Платформер.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/holod-roblox-platformer.png" alt="Скриншот Холод Дима Roblox Style">
+            <span class="tag arcade">Platform</span>
+          </div>
+          <div class="card-body">
+            <h3>Холод Дима Roblox Style</h3>
+            <p class="meta">Платформер с прыжками и монетами.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Холод%20Дима/Холод%20Дима%20Змейка.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/holod-snake.png" alt="Скриншот Холод Дима Змейка">
+            <span class="tag puzzle">Classic</span>
+          </div>
+          <div class="card-body">
+            <h3>Холод Дима Змейка</h3>
+            <p class="meta">Ещё одна версия классической змейки.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Холод%20Дима/Холод%20Дима%20Побег%20из%20тюрьмы.html">
+          <div class="thumb">
+            <img loading="lazy" src="assets/screenshots/holod-prison-escape.png" alt="Скриншот Холод Дима Побег из тюрьмы">
+            <span class="tag action">Escape</span>
+          </div>
+          <div class="card-body">
+            <h3>Холод Дима Побег из тюрьмы</h3>
+            <p class="meta">Побег, ловушки и реакция игрока.</p>
             <span class="button">Играть</span>
           </div>
         </a>

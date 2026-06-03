@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ловля Брайнрота 🧠</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: #000;
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: #00FF00;
+            box-shadow: 0 0 10px #00FF00;
+        }
+        
+        #crosshair::before {
+            width: 2px;
+            height: 30px;
+            left: 14px;
+            top: 0;
+        }
+        
+        #crosshair::after {
+            width: 30px;
+            height: 2px;
+            left: 0;
+            top: 14px;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            pointer-events: none;
+            border: 2px solid #FF00FF;
+            z-index: 10;
+        }
+        
+        #score {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #FFD700;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 24px;
+            border: 2px solid #FFD700;
+            z-index: 10;
+            text-align: center;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 18px;
+            z-index: 10;
+            border: 1px solid #666;
+            display: flex;
+            gap: 30px;
+        }
+        
+        .key {
+            color: #FFD700;
+            font-weight: bold;
+            background: rgba(255, 215, 0, 0.2);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px 30px;
+            border-radius: 20px;
+            font-size: 28px;
+            text-align: center;
+            border: 3px solid #FFD700;
+            z-index: 1000;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        
+        #minimap {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #666;
+            border-radius: 15px;
+            z-index: 10;
+            overflow: hidden;
+        }
+        
+        #minimap canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 40px 50px;
+            border-radius: 25px;
+            text-align: center;
+            border: 3px solid #FFD700;
+            z-index: 2000;
+            cursor: pointer;
+        }
+        
+        #startScreen h1 {
+            color: #FF69B4;
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
+        
+        #startScreen p {
+            font-size: 20px;
+            color: #FFD700;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    
+    <div id="startScreen" onclick="startGame()">
+        <h1>🧠 ЛОВЛЯ БРАЙНРОТА</h1>
+        <p>КЛИКНИТЕ ЧТОБЫ ИГРАТЬ</p>
+        <p style="font-size: 16px; color: #aaa;">Поймайте 10 убегающих мозгов!</p>
+    </div>
+    
+    <div id="ui">
+        <h1 style="color: #FF00FF;">🧠 ЛОВЛЯ БРАЙНРОТА</h1>
+        <p style="font-size: 18px;">Поймано: <span id="caught">0</span> / <span id="total">10</span></p>
+        <p style="font-size: 14px; color: #aaa;">Осталось: <span id="remaining">10</span></p>
+    </div>
+    
+    <div id="score">
+        <div style="font-size: 16px; color: #aaa;">🎯 Ближайший:</div>
+        <div id="distance" style="font-size: 36px; font-weight: bold;">- м</div>
+    </div>
+    
+    <div id="controls">
+        <span><span class="key">WASD</span> ходить</span>
+        <span><span class="key">МЫШЬ</span> смотреть</span>
+        <span><span class="key">E</span> поймать</span>
+        <span><span class="key">ПРОБЕЛ</span> прыжок</span>
+    </div>
+    
+    <div id="message" style="display: none;"></div>
+    <div id="minimap"><canvas id="minimapCanvas" width="150" height="150"></canvas></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // Глобальные переменные
+        let scene, camera, renderer, controls;
+        let gameStarted = false;
+        
+        // СОСТОЯНИЕ ИГРЫ
+        const game = {
+            caught: 0,
+            total: 10,
+            brainrots: [],
+            gameOver: false
+        };
+        
+        // Инициализация игры
+        function initGame() {
+            // Сцена
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 30, 80);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // Управление
+            controls = new PointerLockControls(camera, document.body);
+            
+            controls.addEventListener('lock', () => {
+                console.log('Управление захвачено');
+            });
+            
+            controls.addEventListener('unlock', () => {
+                console.log('Управление освобождено');
+            });
+            
+            scene.add(controls.getObject());
+            
+            // Освещение
+            const ambientLight = new THREE.AmbientLight(0x666666);
+            scene.add(ambientLight);
+            
+            const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            sunLight.position.set(20, 30, 20);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+            
+            // Создание мира
+            createWorld();
+            createBrainrots();
+        }
+        
+        function createWorld() {
+            // Земля
+            const groundGeom = new THREE.PlaneGeometry(60, 60);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x4CAF50, roughness: 0.8 });
+            const ground = new THREE.Mesh(groundGeom, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Деревья
+            for (let i = 0; i < 30; i++) {
+                const x = (Math.random() - 0.5) * 50;
+                const z = (Math.random() - 0.5) * 50;
+                createTree(x, z);
+            }
+            
+            // Кусты
+            for (let i = 0; i < 50; i++) {
+                const x = (Math.random() - 0.5) * 55;
+                const z = (Math.random() - 0.5) * 55;
+                const bushGeom = new THREE.SphereGeometry(0.5, 6, 4);
+                const bushMat = new THREE.MeshStandardMaterial({ color: 0x32CD32, roughness: 0.7 });
+                const bush = new THREE.Mesh(bushGeom, bushMat);
+                bush.position.set(x, 0.3, z);
+                bush.castShadow = true;
+                bush.receiveShadow = true;
+                scene.add(bush);
+            }
+            
+            // Камни
+            for (let i = 0; i < 20; i++) {
+                const x = (Math.random() - 0.5) * 50;
+                const z = (Math.random() - 0.5) * 50;
+                const rockGeom = new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.5, 1);
+                const rockMat = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.8 });
+                const rock = new THREE.Mesh(rockGeom, rockMat);
+                rock.position.set(x, 0.2, z);
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                scene.add(rock);
+            }
+            
+            // Цветы
+            for (let i = 0; i < 80; i++) {
+                const x = (Math.random() - 0.5) * 55;
+                const z = (Math.random() - 0.5) * 55;
+                createFlower(x, z);
+            }
+        }
+        
+        function createTree(x, z) {
+            const group = new THREE.Group();
+            
+            const trunkGeom = new THREE.CylinderGeometry(0.2, 0.3, 3, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+            const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+            trunk.position.y = 1.5;
+            trunk.castShadow = true;
+            group.add(trunk);
+            
+            const leavesGeom = new THREE.SphereGeometry(1.5, 8, 6);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.7 });
+            const leaves = new THREE.Mesh(leavesGeom, leavesMat);
+            leaves.position.y = 3.5;
+            leaves.castShadow = true;
+            group.add(leaves);
+            
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        
+        function createFlower(x, z) {
+            const group = new THREE.Group();
+            
+            const stemGeom = new THREE.CylinderGeometry(0.03, 0.03, 0.5, 6);
+            const stemMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const stem = new THREE.Mesh(stemGeom, stemMat);
+            stem.position.y = 0.25;
+            group.add(stem);
+            
+            const colors = [0xFF69B4, 0xFFD700, 0xFF6347, 0x9370DB, 0xFF4500];
+            const petalGeom = new THREE.SphereGeometry(0.1, 6, 4);
+            const petalMat = new THREE.MeshStandardMaterial({ 
+                color: colors[Math.floor(Math.random() * colors.length)],
+                roughness: 0.5
+            });
+            const petal = new THREE.Mesh(petalGeom, petalMat);
+            petal.position.y = 0.5;
+            group.add(petal);
+            
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        
+        function createBrainrots() {
+            for (let i = 0; i < game.total; i++) {
+                const x = (Math.random() - 0.5) * 40;
+                const z = (Math.random() - 0.5) * 40;
+                createSingleBrainrot(x, z);
+            }
+        }
+        
+        function createSingleBrainrot(x, z) {
+            const group = new THREE.Group();
+            
+            // Основной мозг
+            const brainGeom = new THREE.SphereGeometry(0.4, 16, 16);
+            const brainMat = new THREE.MeshStandardMaterial({ 
+                color: 0xFF69B4,
+                roughness: 0.3,
+                emissive: 0xFF1493,
+                emissiveIntensity: 0.5
+            });
+            const brain = new THREE.Mesh(brainGeom, brainMat);
+            group.add(brain);
+            
+            // Извилины
+            for (let i = 0; i < 5; i++) {
+                const curveGeom = new THREE.TorusGeometry(0.25, 0.05, 8, 8, Math.PI);
+                const curve = new THREE.Mesh(curveGeom, new THREE.MeshStandardMaterial({ 
+                    color: 0xFF1493,
+                    roughness: 0.2
+                }));
+                curve.position.y = (Math.random() - 0.5) * 0.4;
+                curve.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+                group.add(curve);
+            }
+            
+            // Глаза
+            for (let i = -1; i <= 1; i += 2) {
+                const eyeGeom = new THREE.SphereGeometry(0.1, 8, 8);
+                const eyeMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xFFFFFF,
+                    emissive: 0xFFFFFF,
+                    emissiveIntensity: 0.8
+                });
+                const eye = new THREE.Mesh(eyeGeom, eyeMat);
+                eye.position.set(i * 0.15, 0.1, 0.3);
+                group.add(eye);
+            }
+            
+            // Свечение
+            const glowGeom = new THREE.SphereGeometry(0.6, 16, 16);
+            const glowMat = new THREE.MeshBasicMaterial({ 
+                color: 0xFF69B4,
+                transparent: true,
+                opacity: 0.2
+            });
+            const glow = new THREE.Mesh(glowGeom, glowMat);
+            group.add(glow);
+            
+            group.position.set(x, 0.8, z);
+            group.userData = {
+                type: 'brainrot',
+                speed: 1.5 + Math.random() * 3,
+                direction: Math.random() * Math.PI * 2,
+                changeTimer: 1 + Math.random() * 3
+            };
+            
+            scene.add(group);
+            game.brainrots.push(group);
+        }
+        
+        // ФИЗИКА ИГРОКА
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        let onGround = false;
+        const keys = {};
+        
+        function setupControls() {
+            document.addEventListener('keydown', (e) => {
+                if (!gameStarted || game.gameOver) return;
+                
+                keys[e.code] = true;
+                
+                if (e.code === 'Space' && onGround) {
+                    velocity.y = 6;
+                    onGround = false;
+                }
+                
+                if (e.code === 'KeyE') {
+                    catchBrainrot();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+        }
+        
+        function catchBrainrot() {
+            if (!controls.isLocked || game.gameOver) return;
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            
+            const intersects = raycaster.intersectObjects(game.brainrots, true);
+            
+            if (intersects.length > 0 && intersects[0].distance < 3) {
+                let obj = intersects[0].object;
+                while (obj && !obj.userData.type) {
+                    obj = obj.parent;
+                }
+                
+                if (obj && obj.userData.type === 'brainrot') {
+                    scene.remove(obj);
+                    const index = game.brainrots.indexOf(obj);
+                    if (index > -1) {
+                        game.brainrots.splice(index, 1);
+                    }
+                    
+                    game.caught++;
+                    updateUI();
+                    showMessage('🧠 ПОЙМАН! +1');
+                    
+                    if (game.caught >= game.total) {
+                        winGame();
+                    }
+                }
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('caught').textContent = game.caught;
+            document.getElementById('remaining').textContent = game.total - game.caught;
+        }
+        
+        function showMessage(text) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.style.display = 'block';
+            
+            clearTimeout(msg.hideTimeout);
+            msg.hideTimeout = setTimeout(() => {
+                msg.style.display = 'none';
+            }, 1500);
+        }
+        
+        function winGame() {
+            game.gameOver = true;
+            controls.unlock();
+            
+            const msg = document.getElementById('message');
+            msg.innerHTML = '🎉🎊 ВСЕ БРАЙНРОТЫ ПОЙМАНЫ! 🎊🎉<br><br>'
+                + '🏆 Отличная работа!<br>'
+                + 'Вы поймали всех 10 брайнротов!<br><br>'
+                + 'Игра перезапустится...';
+            msg.style.display = 'block';
+            msg.style.background = 'rgba(255, 0, 150, 0.95)';
+            
+            setTimeout(() => location.reload(), 4000);
+        }
+        
+        // МИНИ-КАРТА
+        function updateMinimap() {
+            const canvas = document.getElementById('minimapCanvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, 150, 150);
+            
+            if (!controls) return;
+            
+            const playerPos = controls.getObject().position;
+            const scale = 2.5;
+            const offsetX = 75;
+            const offsetY = 75;
+            
+            // Игрок
+            ctx.fillStyle = '#00FF00';
+            ctx.beginPath();
+            ctx.arc(offsetX, offsetY, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Брайнроты
+            game.brainrots.forEach(brainrot => {
+                const dx = (brainrot.position.x - playerPos.x) * scale;
+                const dz = (brainrot.position.z - playerPos.z) * scale;
+                const x = offsetX + dx;
+                const y = offsetY + dz;
+                
+                if (x > 0 && x < 150 && y > 0 && y < 150) {
+                    ctx.fillStyle = '#FF69B4';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+        
+        // ИГРОВОЙ ЦИКЛ
+        const clock = new THREE.Clock();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!gameStarted || !controls) return;
+            
+            const delta = Math.min(clock.getDelta(), 0.1);
+            
+            if (controls.isLocked && !game.gameOver) {
+                // Гравитация
+                velocity.y -= 9.8 * delta;
+                
+                // Движение
+                const speed = 6;
+                direction.z = Number(keys['KeyW'] || false) - Number(keys['KeyS'] || false);
+                direction.x = Number(keys['KeyD'] || false) - Number(keys['KeyA'] || false);
+                direction.normalize();
+                
+                controls.moveRight(direction.x * speed * delta);
+                controls.moveForward(direction.z * speed * delta);
+                
+                controls.getObject().position.y += velocity.y * delta;
+                
+                if (controls.getObject().position.y <= 1.6) {
+                    velocity.y = 0;
+                    controls.getObject().position.y = 1.6;
+                    onGround = true;
+                } else {
+                    onGround = false;
+                }
+                
+                // Ограничение мира
+                const pos = controls.getObject().position;
+                pos.x = Math.max(-27, Math.min(27, pos.x));
+                pos.z = Math.max(-27, Math.min(27, pos.z));
+            }
+            
+            // Движение брайнротов
+            if (controls && controls.isLocked) {
+                const playerPos = controls.getObject().position;
+                
+                game.brainrots.forEach(brainrot => {
+                    if (!brainrot || !brainrot.parent) return;
+                    
+                    const dist = brainrot.position.distanceTo(playerPos);
+                    
+                    if (dist < 8) {
+                        const angle = Math.atan2(
+                            brainrot.position.z - playerPos.z,
+                            brainrot.position.x - playerPos.x
+                        );
+                        brainrot.position.x += Math.cos(angle) * brainrot.userData.speed * delta;
+                        brainrot.position.z += Math.sin(angle) * brainrot.userData.speed * delta;
+                    } else {
+                        brainrot.userData.changeTimer -= delta;
+                        if (brainrot.userData.changeTimer <= 0) {
+                            brainrot.userData.direction = Math.random() * Math.PI * 2;
+                            brainrot.userData.changeTimer = 1 + Math.random() * 3;
+                        }
+                        
+                        brainrot.position.x += Math.cos(brainrot.userData.direction) * brainrot.userData.speed * 0.5 * delta;
+                        brainrot.position.z += Math.sin(brainrot.userData.direction) * brainrot.userData.speed * 0.5 * delta;
+                    }
+                    
+                    brainrot.position.x = Math.max(-25, Math.min(25, brainrot.position.x));
+                    brainrot.position.z = Math.max(-25, Math.min(25, brainrot.position.z));
+                    brainrot.rotation.y += delta * 2;
+                    brainrot.position.y = 0.8 + Math.sin(Date.now() * 0.005 + brainrot.position.x) * 0.3;
+                });
+                
+                // Расстояние до ближайшего
+                let minDist = Infinity;
+                game.brainrots.forEach(brainrot => {
+                    if (!brainrot) return;
+                    const dist = brainrot.position.distanceTo(playerPos);
+                    if (dist < minDist) minDist = dist;
+                });
+                
+                const distanceEl = document.getElementById('distance');
+                if (distanceEl) {
+                    distanceEl.textContent = minDist < Infinity ? Math.round(minDist) + ' м' : '- м';
+                }
+            }
+            
+            updateMinimap();
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // ЗАПУСК ИГРЫ
+        window.startGame = function() {
+            document.getElementById('startScreen').style.display = 'none';
+            gameStarted = true;
+            
+            initGame();
+            setupControls();
+            updateUI();
+            animate();
+            
+            // Захватываем мышь
+            setTimeout(() => {
+                if (controls) {
+                    controls.lock();
+                }
+            }, 100);
+            
+            setTimeout(() => {
+                showMessage('🧠 Найдите и поймайте 10 Брайнротов!');
+            }, 1500);
+        };
+        
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+        
+        console.log('🧠 Игра готова! Кликните "ИГРАТЬ" для старта');
+    </script>
+</body>
+</html>

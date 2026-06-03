@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Рикки-Тикки-Тави: Мини-стратегия</title>
+<style>
+body{margin:0;background:#222;color:white;font-family:Arial;text-align:center}
+canvas{border:2px solid white;background:black;margin-top:10px}
+button{margin:5px;padding:8px}
+#ui{margin-top:10px}
+</style>
+</head>
+<body>
+<h2>Рикки-Тикки-Тави: Мини-стратегия</h2>
+<select id="side">
+<option value="heroes">Рикки и люди</option>
+<option value="snakes">Наг и Нагайна</option>
+</select>
+<button onclick="newGame()">Новая игра</button>
+<button onclick="saveGame()">Сохранить</button>
+<button onclick="loadGame()">Загрузить</button>
+<div id="ui"></div>
+<canvas id="game" width="960" height="640"></canvas>
+<script>
+const TILE=32, MAP_W=100, MAP_H=100;
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+let currentSide="heroes";
+let inventory={eggsDestroyed:0,snakeTeeth:0};
+let units=[], eggs=[];
+const rand=n=>Math.floor(Math.random()*n);
+
+class Unit{
+ constructor(name,x,y,hp,atk,team,color){
+  Object.assign(this,{name,x,y,hp,atk,team,color});
+ }
+}
+
+function createHeroes(){
+ units.push(new Unit("Рикки",5,5,20,5,"heroes","orange"));
+ units.push(new Unit("Тедди",4,5,8,1,"heroes","cyan"));
+}
+function createSnakes(){
+ units.push(new Unit("Наг",24,15,25,7,"snakes","green"));
+ units.push(new Unit("Нагайна",23,15,20,6,"snakes","lime"));
+ for(let i=0;i<10;i++){
+  units.push(new Unit("Кобра",20+rand(8),10+rand(8),6,2,"snakes","yellow"));
+ }
+}
+function createEggs(){
+ eggs=[];
+ for(let i=0;i<8;i++) eggs.push({x:20+rand(8),y:10+rand(8)});
+}
+function newGame(){
+ currentSide=document.getElementById("side").value;
+ inventory={eggsDestroyed:0,snakeTeeth:0};
+ units=[]; eggs=[];
+ createHeroes(); createSnakes(); createEggs();
+ draw();
+}
+function drawMap(){
+ for(let y=0;y<MAP_H;y++) for(let x=0;x<MAP_W;x++){
+  ctx.fillStyle=((x+y)%2)?"#2f7d32":"#256d28";
+  ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+ }
+}
+function visible(x,y){
+ for(let u of units){
+  if(u.team!==currentSide) continue;
+  let d=Math.abs(u.x-x)+Math.abs(u.y-y);
+  if(d<=5) return true;
+ }
+ return false;
+}
+function drawFog(){
+ for(let y=0;y<MAP_H;y++) for(let x=0;x<MAP_W;x++){
+  if(!visible(x,y)){
+   ctx.fillStyle="black";
+   ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+  }
+ }
+}
+function drawEggs(){
+ for(let e of eggs){
+  if(!visible(e.x,e.y)) continue;
+  ctx.fillStyle="white";
+  ctx.beginPath();
+  ctx.arc(e.x*TILE+16,e.y*TILE+16,8,0,Math.PI*2);
+  ctx.fill();
+ }
+}
+function drawUnits(){
+ for(let u of units){
+  if(!visible(u.x,u.y)&&u.team!==currentSide) continue;
+  ctx.fillStyle=u.color;
+  ctx.fillRect(u.x*TILE+4,u.y*TILE+4,24,24);
+ }
+}
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ drawMap(); drawEggs(); drawUnits(); drawFog();
+ document.getElementById("ui").innerHTML=
+ "Сторона: "+currentSide+"<br>Уничтожено яиц: "+inventory.eggsDestroyed+
+ "<br>Зубы змей: "+inventory.snakeTeeth;
+}
+canvas.addEventListener("click",e=>{
+ let r=canvas.getBoundingClientRect();
+ let x=Math.floor((e.clientX-r.left)/TILE);
+ let y=Math.floor((e.clientY-r.top)/TILE);
+ let hero=units.find(u=>u.team===currentSide);
+ if(!hero) return;
+ hero.x+=Math.sign(x-hero.x);
+ hero.y+=Math.sign(y-hero.y);
+ combat(hero);
+ draw();
+});
+function combat(attacker){
+ for(let enemy of [...units]){
+  if(enemy.team===attacker.team) continue;
+  let d=Math.abs(enemy.x-attacker.x)+Math.abs(enemy.y-attacker.y);
+  if(d<=1){
+   enemy.hp-=attacker.atk;
+   if(enemy.hp<=0){
+    if(enemy.team==="snakes") inventory.snakeTeeth++;
+    units=units.filter(u=>u!==enemy);
+   }
+  }
+ }
+ eggs=eggs.filter(e=>{
+  let d=Math.abs(e.x-attacker.x)+Math.abs(e.y-attacker.y);
+  if(d<=1 && attacker.team==="heroes"){
+   inventory.eggsDestroyed++;
+   return false;
+  }
+  return true;
+ });
+}
+function saveGame(){
+ localStorage.setItem("rikkiMini",JSON.stringify({units,eggs,inventory,currentSide}));
+ alert("Сохранено");
+}
+function loadGame(){
+ let s=localStorage.getItem("rikkiMini");
+ if(!s) return;
+ let d=JSON.parse(s);
+ units=d.units; eggs=d.eggs; inventory=d.inventory; currentSide=d.currentSide;
+ draw();
+}
+newGame();
+</script>
+</body>
+</html>

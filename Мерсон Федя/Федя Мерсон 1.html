@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Реши ситуацию - 50 жизненных ситуаций</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 650px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .stat {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 10px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 0.8em;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+        
+        .category-selector {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .category-btn {
+            background: #f0f0f0;
+            border: 2px solid #ddd;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .category-btn:hover {
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+        
+        .category-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+        
+        .situation-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 5px solid #667eea;
+            position: relative;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .situation-number {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .situation-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+        
+        .situation-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            padding-right: 40px;
+        }
+        
+        .situation-description {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .context-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 0.9em;
+            color: #1565c0;
+            margin-bottom: 15px;
+            border-left: 3px solid #2196f3;
+        }
+        
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .option-btn {
+            background: white;
+            border: 2px solid #ddd;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+            font-size: 1em;
+            color: #333;
+            position: relative;
+        }
+        
+        .option-btn:hover:not(:disabled) {
+            background: #f0f0f0;
+            border-color: #667eea;
+            transform: translateX(5px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .option-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
+        .option-btn.selected-best {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+            animation: correctPulse 0.5s ease-in-out;
+        }
+        
+        .option-btn.selected-good {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        
+        .option-btn.selected-medium {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        
+        .option-btn.selected-bad {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        
+        .option-btn.best-answer {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+            font-weight: bold;
+        }
+        
+        @keyframes correctPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .feedback {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .feedback.show {
+            display: block;
+        }
+        
+        .feedback.excellent {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        
+        .feedback.good {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        
+        .feedback.medium {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+        
+        .feedback.bad {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .next-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: transform 0.2s ease;
+            display: none;
+            font-weight: bold;
+        }
+        
+        .next-btn.show {
+            display: block;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .next-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .progress-container {
+            margin-top: 15px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .achievement {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #333;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: achievementPop 3s ease-out forwards;
+            z-index: 1000;
+        }
+        
+        @keyframes achievementPop {
+            0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+        
+        /* Стили для финального экрана */
+        .final-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 999;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .final-screen.show {
+            display: flex;
+        }
+        
+        .final-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.5s ease-out;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .final-title {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        
+        .trophy-container {
+            font-size: 5em;
+            margin: 20px 0;
+            animation: bounce 1s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .score-comparison {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .score-row:last-child {
+            border-bottom: none;
+        }
+        
+        .score-label {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .score-value {
+            font-size: 1.2em;
+        }
+        
+        .rating-place {
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        
+        .rating-place.gold {
+            background: linear-gradient(135deg, #ffd700, #ffed4a);
+            color: #333;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        .rating-place.silver {
+            background: linear-gradient(135deg, #c0c0c0, #e8e8e8);
+            color: #333;
+            box-shadow: 0 5px 20px rgba(192, 192, 192, 0.5);
+        }
+        
+        .rating-place.bronze {
+            background: linear-gradient(135deg, #cd7f32, #e8a870);
+            color: #333;
+            box-shadow: 0 5px 20px rgba(205, 127, 50, 0.5);
+        }
+        
+        .rating-place.fail {
+            background: linear-gradient(135deg, #999, #bbb);
+            color: #333;
+        }
+        
+        .rating-stars {
+            font-size: 2em;
+            margin: 10px 0;
+        }
+        
+        .rating-details {
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .restart-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s ease;
+            font-weight: bold;
+        }
+        
+        .restart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainGame">
+        <div class="header">
+            <h1>🎯 Реши ситуацию</h1>
+            <p class="subtitle">50 уникальных жизненных ситуаций для прокачки навыков</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="score">0</div>
+                <div class="stat-label">⭐ Очки</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="level">1</div>
+                <div class="stat-label">📊 Уровень</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="solved">0/50</div>
+                <div class="stat-label">✅ Решено</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="streak">0</div>
+                <div class="stat-label">🔥 Серия</div>
+            </div>
+        </div>
+        
+        <div class="category-selector">
+            <button class="category-btn active" data-category="all">🎲 Все</button>
+            <button class="category-btn" data-category="business">💼 Бизнес</button>
+            <button class="category-btn" data-category="emergency">🚨 ЧП</button>
+            <button class="category-btn" data-category="social">👥 Общение</button>
+            <button class="category-btn" data-category="moral">⚖️ Мораль</button>
+            <button class="category-btn" data-category="survival">🏕️ Выживание</button>
+            <button class="category-btn" data-category="tech">💻 Технологии</button>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="progress-text" id="progressText">Прогресс: 0/50 ситуаций</div>
+        </div>
+        
+        <div id="gameArea">
+            <div class="situation-card" id="situationCard">
+                <div class="situation-number" id="situationNumber">#1</div>
+                <div class="situation-icon" id="situationIcon">🎭</div>
+                <div class="situation-title" id="situationTitle">Загрузка...</div>
+                <div class="situation-description" id="situationDescription"></div>
+                <div class="context-info" id="contextInfo"></div>
+                <div class="options" id="optionsContainer"></div>
+            </div>
+            
+            <div class="feedback" id="feedback"></div>
+            <button class="next-btn" id="nextBtn" onclick="nextSituation()">Следующая ситуация ➡️</button>
+        </div>
+    </div>
+    
+    <!-- Финальный экран -->
+    <div class="final-screen" id="finalScreen">
+        <div class="final-card">
+            <div class="final-title" id="finalTitle">🎉 Игра пройдена!</div>
+            <div class="trophy-container" id="trophyIcon">🏆</div>
+            <div class="rating-place" id="ratingPlace">
+                <div class="rating-stars" id="ratingStars"></div>
+                <div id="ratingText"></div>
+            </div>
+            <div class="score-comparison">
+                <div class="score-row">
+                    <span class="score-label">Ваши очки:</span>
+                    <span class="score-value" id="yourScore">0</span>
+                </div>
+                <div class="score-row">
+                    <span class="score-label">Максимально возможные:</span>
+                    <span class="score-value" id="maxScore">500</span>
+                </div>
+                <div class="score-row">
+                    <span class="score-label">Процент выполнения:</span>
+                    <span class="score-value" id="scorePercent">0%</span>
+                </div>
+            </div>
+            <div class="rating-details" id="ratingDetails"></div>
+            <button class="restart-btn" onclick="resetGame()">🔄 Играть заново</button>
+        </div>
+    </div>
+
+    <script>
+        // Состояние игры
+        let gameState = {
+            score: 0,
+            level: 1,
+            solvedCount: 0,
+            streak: 0,
+            bestStreak: 0,
+            currentCategory: 'all',
+            situationsPerLevel: 5,
+            totalSituations: 50,
+            solvedSituations: new Set(),
+            currentSituation: null,
+            maxPossibleScore: 500,
+            excellentDecisions: 0,
+            goodDecisions: 0,
+            mediumDecisions: 0,
+            badDecisions: 0
+        };
+        
+        // Все 50 ситуаций
+        const allSituations = [
+            // 💼 Бизнес (10 ситуаций)
+            {
+                id: 1, category: 'business', icon: '💼',
+                title: 'Срочный дедлайн',
+                description: 'Ваш ключевой сотрудник заболел за день до важной презентации для клиента на 5 млн рублей.',
+                context: 'Время: завтра 10:00 | Команда: 8 человек | Подготовка: 80% готова',
+                options: [
+                    { text: 'Срочно найти замену и провести презентацию самому', score: 10, feedback: 'Лидерство и ответственность — ключ к успеху!' },
+                    { text: 'Перенести презентацию, честно объяснив ситуацию', score: 6, feedback: 'Честность важна, но можно потерять контракт' },
+                    { text: 'Попросить коллегу из другого отдела', score: 7, feedback: 'Неплохо, но коллега может не знать деталей' },
+                    { text: 'Отменить встречу', score: 1, feedback: 'Потеряете и клиента, и репутацию' }
+                ]
+            },
+            {
+                id: 2, category: 'business', icon: '👔',
+                title: 'Конфликт в команде',
+                description: 'Два ведущих разработчика спорят о технологии. Проект на 10 млн рублей стоит на месте.',
+                context: 'Сроки: горят | Настроение в команде: напряженное | Решение нужно сегодня',
+                options: [
+                    { text: 'Организовать встречу и найти компромисс', score: 10, feedback: 'Отличное лидерское решение!' },
+                    { text: 'Принять решение единолично', score: 7, feedback: 'Быстро, но может демотивировать команду' },
+                    { text: 'Нанять внешнего консультанта', score: 5, feedback: 'Дорого и долго, но объективно' },
+                    { text: 'Уволить одного из спорщиков', score: 2, feedback: 'Потеряете ценного специалиста' }
+                ]
+            },
+            {
+                id: 3, category: 'business', icon: '📊',
+                title: 'Сложный клиент',
+                description: 'VIP-клиент (30% прибыли) требует выполнить проект за 2 дня вместо 2 недель.',
+                context: 'Штраф за срыв: крупный | Команда: перегружена | Альтернативные клиенты: есть',
+                options: [
+                    { text: 'Объяснить невозможность и предложить компромисс', score: 10, feedback: 'Профессиональный подход сохраняет отношения' },
+                    { text: 'Согласиться и мобилизовать команду', score: 6, feedback: 'Рискованно для качества и здоровья команды' },
+                    { text: 'Отказаться от клиента', score: 3, feedback: 'Потеря 30% прибыли — серьезный удар' },
+                    { text: 'Согласиться и сдать некачественный результат', score: 1, feedback: 'Обман разрушит репутацию' }
+                ]
+            },
+            {
+                id: 4, category: 'business', icon: '💰',
+                title: 'Бюджетный кризис',
+                description: 'Компания не укладывается в бюджет. Нужно сократить расходы на 20% за месяц.',
+                context: 'Сотрудников: 50 | Резервы: минимальные | Инвесторы: требуют отчет',
+                options: [
+                    { text: 'Оптимизировать процессы и сократить неэффективные расходы', score: 10, feedback: 'Умное сокращение без потери качества' },
+                    { text: 'Сократить 20% персонала', score: 4, feedback: 'Потеряете опытных сотрудников и моральный дух' },
+                    { text: 'Взять кредит на покрытие расходов', score: 5, feedback: 'Временное решение, создающее долги' },
+                    { text: 'Урезать зарплаты всем сотрудникам', score: 3, feedback: 'Демотивирует команду, лучшие уйдут' }
+                ]
+            },
+            {
+                id: 5, category: 'business', icon: '🤝',
+                title: 'Партнерское предложение',
+                description: 'Крупная компания предлагает партнерство, но требует эксклюзивности.',
+                context: 'Выгода: +200% к прибыли | Риск: потеря других клиентов | Срок контракта: 3 года',
+                options: [
+                    { text: 'Провести анализ рисков и принять взвешенное решение', score: 10, feedback: 'Аналитика — основа бизнес-решений' },
+                    { text: 'Согласиться немедленно', score: 6, feedback: 'Быстро, но рискованно без анализа' },
+                    { text: 'Отказаться от эксклюзивности', score: 7, feedback: 'Сохраните свободу, но можете потерять сделку' },
+                    { text: 'Попросить время на размышление', score: 8, feedback: 'Хорошо, но не затягивайте' }
+                ]
+            },
+            {
+                id: 6, category: 'business', icon: '📈',
+                title: 'Стартап-дилемма',
+                description: 'Ваш стартап получил инвестиции, но инвестор хочет изменить продукт.',
+                context: 'Инвестиции: $1M | Ваше видение: под угрозой | Команда: верит в ваш путь',
+                options: [
+                    { text: 'Найти компромисс, сохранив ядро продукта', score: 10, feedback: 'Баланс между видением и реальностью' },
+                    { text: 'Полностью согласиться с инвестором', score: 5, feedback: 'Потеряете уникальность продукта' },
+                    { text: 'Отказаться от инвестиций', score: 4, feedback: 'Благородно, но где взять деньги?' },
+                    { text: 'Искать других инвесторов параллельно', score: 8, feedback: 'Хорошая стратегия, но требует времени' }
+                ]
+            },
+            {
+                id: 7, category: 'business', icon: '🏢',
+                title: 'Офисный переезд',
+                description: 'Арендодатель повышает плату на 50%. Нужно решение за неделю.',
+                context: 'Текущий офис: удобное расположение | Альтернативы: дальше от центра | Сотрудники: привыкли',
+                options: [
+                    { text: 'Проанализировать все варианты и выбрать оптимальный', score: 10, feedback: 'Системный подход к решению проблем' },
+                    { text: 'Согласиться на новые условия', score: 4, feedback: 'Переплата снизит прибыль' },
+                    { text: 'Срочно переехать в первый попавшийся офис', score: 3, feedback: 'Поспешные решения ведут к проблемам' },
+                    { text: 'Перевести часть сотрудников на удаленку', score: 8, feedback: 'Инновационное решение, экономия средств' }
+                ]
+            },
+            {
+                id: 8, category: 'business', icon: '🎯',
+                title: 'Маркетинговая стратегия',
+                description: 'Новый продукт не продается. Маркетинговый бюджет потрачен, результатов нет.',
+                context: 'Вложено: 5 млн | Продажи: минимальные | Конкуренты: активны',
+                options: [
+                    { text: 'Провести исследование и изменить стратегию', score: 10, feedback: 'Данные важнее предположений' },
+                    { text: 'Увеличить рекламный бюджет', score: 3, feedback: 'Тратить больше без анализа — путь к провалу' },
+                    { text: 'Закрыть продукт и списать убытки', score: 2, feedback: 'Сдаться слишком рано' },
+                    { text: 'Нанять нового маркетолога', score: 6, feedback: 'Свежий взгляд может помочь' }
+                ]
+            },
+            {
+                id: 9, category: 'business', icon: '🌍',
+                title: 'Международный рынок',
+                description: 'Компания планирует выход на международный рынок, но есть культурные барьеры.',
+                context: 'Рынок: Китай | Бюджет: ограничен | Конкуренты: уже там',
+                options: [
+                    { text: 'Нанять местных экспертов и адаптировать продукт', score: 10, feedback: 'Локализация — ключ к успеху' },
+                    { text: 'Продавать как есть, без изменений', score: 2, feedback: 'Игнорирование культуры = провал' },
+                    { text: 'Создать совместное предприятие', score: 8, feedback: 'Хороший способ разделить риски' },
+                    { text: 'Отложить выход на год', score: 4, feedback: 'Потеряете время, конкуренты уйдут вперед' }
+                ]
+            },
+            {
+                id: 10, category: 'business', icon: '🔒',
+                title: 'Утечка данных',
+                description: 'Произошла утечка данных клиентов. Информация может попасть в сеть.',
+                context: 'Пострадавших: 1000+ | Репутация: под угрозой | Юристы: советуют молчать',
+                options: [
+                    { text: 'Признать ошибку и предложить компенсации', score: 10, feedback: 'Честность восстанавливает доверие' },
+                    { text: 'Скрыть инцидент и решить тихо', score: 1, feedback: 'Правда выйдет наружу, будет хуже' },
+                    { text: 'Обвинить хакеров и снять ответственность', score: 3, feedback: 'Перекладывание вины не работает' },
+                    { text: 'Нанять PR-агентство для смягчения удара', score: 6, feedback: 'Поможет, но честность важнее' }
+                ]
+            },
+            
+            // 🚨 ЧП (10 ситуаций)
+            {
+                id: 11, category: 'emergency', icon: '🔥',
+                title: 'Пожар в здании',
+                description: 'В офисном здании пожар. Сработала сигнализация, люди паникуют.',
+                context: 'Этаж: 5-й | Людей: 30 | Выходы: основной и запасной | Огонь: распространяется',
+                options: [
+                    { text: 'Организовать спокойную эвакуацию коллег', score: 10, feedback: 'Хладнокровие спасает жизни!' },
+                    { text: 'Эвакуироваться самому и вызвать службы', score: 7, feedback: 'Правильно, но можно помочь другим' },
+                    { text: 'Пытаться потушить пожар самостоятельно', score: 2, feedback: 'Опасно! Оставьте это профессионалам' },
+                    { text: 'Игнорировать сигнализацию', score: 0, feedback: 'Смертельно опасно!' }
+                ]
+            },
+            {
+                id: 12, category: 'emergency', icon: '🏥',
+                title: 'Человек без сознания',
+                description: 'На улице человек потерял сознание. Вы единственный свидетель.',
+                context: 'Время: вечер | Место: малолюдное | Скорая: едет 15 минут',
+                options: [
+                    { text: 'Вызвать скорую и оказать первую помощь', score: 10, feedback: 'Активные действия спасают жизнь!' },
+                    { text: 'Вызвать скорую и ждать', score: 6, feedback: 'Правильно, но пассивно' },
+                    { text: 'Проверить пульс и при необходимости СЛР', score: 10, feedback: 'Профессиональный подход!' },
+                    { text: 'Пройти мимо', score: 0, feedback: 'Недопустимое равнодушие' }
+                ]
+            },
+            {
+                id: 13, category: 'emergency', icon: '🌊',
+                title: 'Наводнение',
+                description: 'В районе наводнение. Вода поднимается, объявлена эвакуация.',
+                context: 'Время: 2 часа | Имущество: ценные вещи | Домашние животные: есть',
+                options: [
+                    { text: 'Собрать документы, питомца и эвакуироваться', score: 10, feedback: 'Жизнь важнее имущества!' },
+                    { text: 'Пытаться спасти всё имущество', score: 3, feedback: 'Риск для жизни ради вещей' },
+                    { text: 'Остаться и переждать', score: 1, feedback: 'Крайне опасно!' },
+                    { text: 'Помочь соседям и эвакуироваться вместе', score: 9, feedback: 'Благородно и правильно' }
+                ]
+            },
+            {
+                id: 14, category: 'emergency', icon: '🚗',
+                title: 'ДТП',
+                description: 'Вы стали свидетелем аварии. Есть пострадавшие.',
+                context: 'Машин: 2 | Пострадавших: 3 | Другие свидетели: нет',
+                options: [
+                    { text: 'Вызвать службы и оказать первую помощь', score: 10, feedback: 'Правильный порядок действий' },
+                    { text: 'Сразу вытаскивать людей из машин', score: 3, feedback: 'Можно навредить при травмах позвоночника' },
+                    { text: 'Снимать на телефон для соцсетей', score: 0, feedback: 'Неэтично и бесполезно' },
+                    { text: 'Уехать, чтобы не создавать пробку', score: 1, feedback: 'Оставление места ДТП — преступление' }
+                ]
+            },
+            {
+                id: 15, category: 'emergency', icon: '⚡',
+                title: 'Удар током',
+                description: 'Коллегу ударило током от неисправного оборудования.',
+                context: 'Состояние: без сознания | Ток: все еще под напряжением | Помещение: влажное',
+                options: [
+                    { text: 'Отключить электричество и вызвать скорую', score: 10, feedback: 'Безопасность прежде всего!' },
+                    { text: 'Оттащить человека от источника тока', score: 2, feedback: 'Сами попадете под напряжение' },
+                    { text: 'Полить водой для охлаждения', score: 0, feedback: 'Вода проводит ток! Очень опасно!' },
+                    { text: 'Позвать на помощь и ждать', score: 5, feedback: 'Лучше, чем ничего, но можно сделать больше' }
+                ]
+            },
+            {
+                id: 16, category: 'emergency', icon: '🏔️',
+                title: 'Заблудился в лесу',
+                description: 'Вы пошли за грибами и заблудились. Телефон не ловит.',
+                context: 'Время: близится вечер | Снаряжение: минимальное | Погода: портится',
+                options: [
+                    { text: 'Оставаться на месте и подавать сигналы', score: 10, feedback: 'Главное правило выживания!' },
+                    { text: 'Идти в случайном направлении', score: 2, feedback: 'Можно уйти дальше от цивилизации' },
+                    { text: 'Искать воду и укрытие на ночь', score: 8, feedback: 'Разумно, если точно не найдете выход' },
+                    { text: 'Бежать в панике', score: 1, feedback: 'Паника — главный враг' }
+                ]
+            },
+            {
+                id: 17, category: 'emergency', icon: '🦈',
+                title: 'Встреча с диким животным',
+                description: 'В походе вы встретили медведя. Зверь заметил вас.',
+                context: 'Расстояние: 50 метров | Медвежата: не видны | Оружие: нет',
+                options: [
+                    { text: 'Медленно отступать, не поворачиваясь спиной', score: 10, feedback: 'Правильное поведение при встрече' },
+                    { text: 'Бежать со всех ног', score: 1, feedback: 'Медведь быстрее, инстинкт погони' },
+                    { text: 'Притвориться мертвым сразу', score: 3, feedback: 'Не всегда работает, зависит от медведя' },
+                    { text: 'Кричать и размахивать руками', score: 4, feedback: 'Может спровоцировать агрессию' }
+                ]
+            },
+            {
+                id: 18, category: 'emergency', icon: '🌪️',
+                title: 'Ураган',
+                description: 'Приближается ураган. Есть предупреждение МЧС.',
+                context: 'Время: 3 часа | Дом: не укреплен | Убежище: в 5 км',
+                options: [
+                    { text: 'Укрепить дом и укрыться в подвале', score: 10, feedback: 'Правильная подготовка к стихии' },
+                    { text: 'Игнорировать предупреждение', score: 0, feedback: 'Смертельно опасно!' },
+                    { text: 'Поехать в убежище немедленно', score: 9, feedback: 'Тоже хороший вариант' },
+                    { text: 'Выйти на улицу смотреть ураган', score: 0, feedback: 'Безрассудство!' }
+                ]
+            },
+            {
+                id: 19, category: 'emergency', icon: '🚢',
+                title: 'Кораблекрушение',
+                description: 'Корабль тонет. Вы в спасательной шлюпке в открытом море.',
+                context: 'Воды: минимум | Еды: нет | Берег: не видно | Людей: 5',
+                options: [
+                    { text: 'Экономить воду и подавать сигналы', score: 10, feedback: 'Правильная стратегия выживания' },
+                    { text: 'Пить морскую воду', score: 0, feedback: 'Ускорит обезвоживание' },
+                    { text: 'Плыть в случайном направлении', score: 2, feedback: 'Потеряете силы без гарантии спасения' },
+                    { text: 'Распределить обязанности в группе', score: 9, feedback: 'Организация повышает шансы' }
+                ]
+            },
+            {
+                id: 20, category: 'emergency', icon: '🏚️',
+                title: 'Землетрясение',
+                description: 'Началось сильное землетрясение. Вы в многоэтажном здании.',
+                context: 'Этаж: 7-й | Толчки: сильные | Лифт: работает',
+                options: [
+                    { text: 'Встать в дверной проем несущей стены', score: 10, feedback: 'Правильное укрытие при землетрясении' },
+                    { text: 'Бежать к лифту', score: 0, feedback: 'Лифт может застрять или упасть' },
+                    { text: 'Прыгать из окна', score: 0, feedback: 'Верная смерть на 7 этаже' },
+                    { text: 'Прятаться под стол', score: 8, feedback: 'Хорошо, но дверной проем надежнее' }
+                ]
+            },
+            
+            // 👥 Общение (10 ситуаций)
+            {
+                id: 21, category: 'social', icon: '👥',
+                title: 'Опоздания друга',
+                description: 'Друг постоянно опаздывает. Сегодня опоздал на час в важный день.',
+                context: 'Отношения: близкие | Частота: каждый раз | Важность встречи: высокая',
+                options: [
+                    { text: 'Спокойно обсудить проблему и договориться', score: 10, feedback: 'Зрелое решение проблемы' },
+                    { text: 'Промолчать, чтобы не ссориться', score: 4, feedback: 'Обида будет копиться' },
+                    { text: 'Устроить скандал', score: 2, feedback: 'Испортит отношения' },
+                    { text: 'Перестать общаться', score: 1, feedback: 'Потеряете друга' }
+                ]
+            },
+            {
+                id: 22, category: 'social', icon: '🎤',
+                title: 'Публичное выступление',
+                description: 'Вас неожиданно попросили выступить перед 100 коллегами.',
+                context: 'Подготовка: 0 минут | Тема: день компании | Время: 5 минут',
+                options: [
+                    { text: 'Согласиться и импровизировать с юмором', score: 10, feedback: 'Спонтанность часто ценится!' },
+                    { text: 'Отказаться', score: 4, feedback: 'Упущенная возможность' },
+                    { text: 'Попросить время на подготовку', score: 7, feedback: 'Хорошо, но момент может быть упущен' },
+                    { text: 'Сказать пару слов и передать слово другому', score: 6, feedback: 'Безопасный, но скромный вариант' }
+                ]
+            },
+            {
+                id: 23, category: 'social', icon: '💑',
+                title: 'Семейный конфликт',
+                description: 'Родители не одобряют ваш выбор партнера. Напряжение растет.',
+                context: 'Отношения: серьезные | Родители: категоричны | Партнер: обижается',
+                options: [
+                    { text: 'Организовать открытый разговор всех сторон', score: 10, feedback: 'Диалог решает проблемы' },
+                    { text: 'Выбрать партнера и порвать с родителями', score: 3, feedback: 'Крайность, потеряете семью' },
+                    { text: 'Выбрать родителей и расстаться', score: 2, feedback: 'Пожертвуете своим счастьем' },
+                    { text: 'Скрывать отношения', score: 4, feedback: 'Ложь всё равно раскроется' }
+                ]
+            },
+            {
+                id: 24, category: 'social', icon: '🎉',
+                title: 'Неловкая ситуация',
+                description: 'На вечеринке вы случайно назвали начальника чужим именем.',
+                context: 'Свидетелей: много | Начальник: заметил | Атмосфера: неловкая',
+                options: [
+                    { text: 'Извиниться и посмеяться над ситуацией', score: 10, feedback: 'Самоирония — лучшее лекарство!' },
+                    { text: 'Сделать вид, что ничего не было', score: 5, feedback: 'Неловкость останется' },
+                    { text: 'Объяснять, что оговорились из-за усталости', score: 6, feedback: 'Оправдания не нужны' },
+                    { text: 'Уйти с вечеринки', score: 2, feedback: 'Бегство — не решение' }
+                ]
+            },
+            {
+                id: 25, category: 'social', icon: '📱',
+                title: 'Соцсети и репутация',
+                description: 'Кто-то опубликовал компрометирующее фото с вами в соцсетях.',
+                context: 'Охват: широкий | Работа: могут увидеть | Автор: друг',
+                options: [
+                    { text: 'Спокойно попросить удалить фото', score: 10, feedback: 'Прямой и вежливый подход' },
+                    { text: 'Ответить публичным скандалом', score: 2, feedback: 'Привлечет больше внимания' },
+                    { text: 'Игнорировать, само рассосется', score: 4, feedback: 'Интернет помнит всё' },
+                    { text: 'Заблокировать автора везде', score: 3, feedback: 'Не решит проблему, фото останется' }
+                ]
+            },
+            {
+                id: 26, category: 'social', icon: '🏠',
+                title: 'Шумные соседи',
+                description: 'Соседи сверху шумят каждую ночь. Жалобы не помогают.',
+                context: 'Продолжительность: месяц | Сон: нарушен | Другие соседи: тоже жалуются',
+                options: [
+                    { text: 'Объединиться с соседями и составить коллективное обращение', score: 10, feedback: 'Вместе вы сила!' },
+                    { text: 'Вызвать полицию каждый раз', score: 6, feedback: 'Поможет, но создаст вражду' },
+                    { text: 'Мстить шумом в ответ', score: 2, feedback: 'Эскалация конфликта' },
+                    { text: 'Переехать', score: 3, feedback: 'Сдаться без борьбы' }
+                ]
+            },
+            {
+                id: 27, category: 'social', icon: '💼',
+                title: 'Сплетни на работе',
+                description: 'Коллеги распускают сплетни о вас. Информация дошла до начальства.',
+                context: 'Источник: неизвестен | Масштаб: весь офис | Карьера: под угрозой',
+                options: [
+                    { text: 'Поговорить с начальством и прояснить ситуацию', score: 10, feedback: 'Прямота разрушает сплетни' },
+                    { text: 'Найти источник и устроить конфронтацию', score: 4, feedback: 'Опуститесь до их уровня' },
+                    { text: 'Игнорировать, правда восторжествует', score: 5, feedback: 'Не всегда, увы' },
+                    { text: 'Уволиться', score: 2, feedback: 'Побег не решит проблему' }
+                ]
+            },
+            {
+                id: 28, category: 'social', icon: '🎓',
+                title: 'Помощь с учебой',
+                description: 'Друг просит написать за него дипломную работу.',
+                context: 'Сроки: горят | Последствия: отчисление при раскрытии | Дружба: под угрозой',
+                options: [
+                    { text: 'Отказать, но предложить помощь в подготовке', score: 10, feedback: 'Настоящая помощь — в поддержке, а не обмане' },
+                    { text: 'Согласиться, дружба важнее', score: 1, feedback: 'Соучастие в обмане' },
+                    { text: 'Сделать часть работы', score: 3, feedback: 'Полумера, тоже обман' },
+                    { text: 'Рассказать преподавателю', score: 0, feedback: 'Предательство дружбы' }
+                ]
+            },
+            {
+                id: 29, category: 'social', icon: '💝',
+                title: 'Признание в чувствах',
+                description: 'Вы влюблены в друга, но боитесь разрушить дружбу.',
+                context: 'Дружба: 5 лет | Чувства: сильные | Риск: потерять друга',
+                options: [
+                    { text: 'Честно признаться и обсудить чувства', score: 10, feedback: 'Честность — основа отношений' },
+                    { text: 'Молчать и страдать', score: 3, feedback: 'Упущенная возможность' },
+                    { text: 'Намекать и ждать первого шага от друга', score: 5, feedback: 'Игры не приводят к счастью' },
+                    { text: 'Прекратить общение, чтобы забыть', score: 2, feedback: 'Потеряете и друга, и шанс' }
+                ]
+            },
+            {
+                id: 30, category: 'social', icon: '🎭',
+                title: 'Конфликт интересов',
+                description: 'Два друга зовут вас на мероприятия в одно время.',
+                context: 'Обоим: важно ваше присутствие | Вы: не можете разорваться | Обида: неизбежна',
+                options: [
+                    { text: 'Честно объяснить ситуацию обоим', score: 10, feedback: 'Честность и открытость!' },
+                    { text: 'Пойти к тому, кто первый позвал', score: 5, feedback: 'Формально правильно, но второй обидится' },
+                    { text: 'Не пойти никуда', score: 3, feedback: 'Потеряете обоих' },
+                    { text: 'Соврать о болезни', score: 2, feedback: 'Ложь раскроется' }
+                ]
+            },
+            
+            // ⚖️ Мораль (10 ситуаций)
+            {
+                id: 31, category: 'moral', icon: '💵',
+                title: 'Найденный кошелек',
+                description: 'Вы нашли кошелек с зарплатой владельца и документами.',
+                context: 'Сумма: 50 000 рублей | Владелец: пенсионер | Камеры: нет',
+                options: [
+                    { text: 'Вернуть всё владельцу', score: 10, feedback: 'Честность — лучшая политика!' },
+                    { text: 'Взять часть денег за находку', score: 2, feedback: 'Это всё равно кража' },
+                    { text: 'Оставить деньги, вернуть документы', score: 1, feedback: 'Лицемерное решение' },
+                    { text: 'Оставить всё себе', score: 0, feedback: 'Аморально и незаконно' }
+                ]
+            },
+            {
+                id: 32, category: 'moral', icon: '📝',
+                title: 'Экзамен и шпаргалка',
+                description: 'Лучший друг просит дать списать на важном экзамене.',
+                context: 'Риск: отчисление обоих | Стипендия друга: под угрозой | Подготовка: друг не учил',
+                options: [
+                    { text: 'Отказать, но помочь подготовиться к пересдаче', score: 10, feedback: 'Истинная помощь в знаниях' },
+                    { text: 'Дать списать', score: 2, feedback: 'Рискуете обоими' },
+                    { text: 'Сделать вид, что не слышали', score: 3, feedback: 'Трусливое избегание' },
+                    { text: 'Доложить преподавателю', score: 0, feedback: 'Предательство' }
+                ]
+            },
+            {
+                id: 33, category: 'moral', icon: '🏢',
+                title: 'Коррупционное предложение',
+                description: 'Чиновник намекает на взятку за ускорение важного процесса.',
+                context: 'Процесс: законный | Сумма: средняя | Последствия: уголовная статья',
+                options: [
+                    { text: 'Отказаться и сообщить в соответствующие органы', score: 10, feedback: 'Гражданская позиция!' },
+                    { text: 'Согласиться для решения проблемы', score: 1, feedback: 'Соучастие в преступлении' },
+                    { text: 'Попытаться договориться без денег', score: 5, feedback: 'Рискованно, но благородно' },
+                    { text: 'Пойти к вышестоящему начальству', score: 8, feedback: 'Правильный путь борьбы' }
+                ]
+            },
+            {
+                id: 34, category: 'moral', icon: '🔬',
+                title: 'Научная этика',
+                description: 'Вы нашли ошибку в исследовании коллеги, которое уже опубликовано.',
+                context: 'Коллега: уважаемый профессор | Ошибка: серьезная | Последствия: репутация',
+                options: [
+                    { text: 'Приватно обсудить с коллегой и предложить исправление', score: 10, feedback: 'Этичный и профессиональный подход' },
+                    { text: 'Публично разоблачить ошибку', score: 4, feedback: 'Унизит коллегу без нужды' },
+                    { text: 'Промолчать', score: 2, feedback: 'Нарушение научной этики' },
+                    { text: 'Анонимно сообщить редактору', score: 5, feedback: 'Трусливый, но действенный метод' }
+                ]
+            },
+            {
+                id: 35, category: 'moral', icon: '🐕',
+                title: 'Бездомное животное',
+                description: 'Вы нашли раненого бездомного щенка на улице.',
+                context: 'Состояние: требует лечения | Расходы: существенные | Дома: нельзя держать',
+                options: [
+                    { text: 'Отвезти в приют и помочь с лечением', score: 10, feedback: 'Сострадание и действие!' },
+                    { text: 'Пройти мимо', score: 1, feedback: 'Равнодушие к страданию' },
+                    { text: 'Покормить и оставить на улице', score: 3, feedback: 'Недостаточная помощь' },
+                    { text: 'Найти через соцсети новых хозяев', score: 9, feedback: 'Отличное решение!' }
+                ]
+            },
+            {
+                id: 36, category: 'moral', icon: '🎁',
+                title: 'Подарок с намеком',
+                description: 'Партнер по бизнесу дарит дорогой подарок перед важным тендером.',
+                context: 'Стоимость: высокая | Тендер: вы оцениваете заявки | Этика: конфликт интересов',
+                options: [
+                    { text: 'Вежливо отказаться от подарка', score: 10, feedback: 'Сохранение объективности!' },
+                    { text: 'Принять подарок', score: 2, feedback: 'Компрометация и нарушение этики' },
+                    { text: 'Задекларировать подарок', score: 7, feedback: 'Формально правильно' },
+                    { text: 'Принять и отдать предпочтение', score: 0, feedback: 'Коррупция' }
+                ]
+            },
+            {
+                id: 37, category: 'moral', icon: '📰',
+                title: 'Журналистская этика',
+                description: 'Вы узнали сенсационную информацию, которая разрушит карьеру политика.',
+                context: 'Источник: анонимный | Правдивость: 90% | Общественная важность: высокая',
+                options: [
+                    { text: 'Перепроверить информацию и опубликовать', score: 10, feedback: 'Ответственная журналистика' },
+                    { text: 'Опубликовать немедленно', score: 3, feedback: 'Без проверки — клевета' },
+                    { text: 'Скрыть информацию', score: 2, feedback: 'Сокрытие правды' },
+                    { text: 'Продать информацию конкурентам', score: 0, feedback: 'Неэтично со всех сторон' }
+                ]
+            },
+            {
+                id: 38, category: 'moral', icon: '🏥',
+                title: 'Медицинская этика',
+                description: 'Пациент неизлечимо болен и спрашивает правду о диагнозе.',
+                context: 'Родственники: просят не говорить | Пациент: имеет право знать | Прогноз: плохой',
+                options: [
+                    { text: 'Мягко, но честно рассказать пациенту', score: 10, feedback: 'Право пациента на правду!' },
+                    { text: 'Солгать по просьбе родственников', score: 2, feedback: 'Нарушение медицинской этики' },
+                    { text: 'Сказать: "Спросите у родственников"', score: 3, feedback: 'Перекладывание ответственности' },
+                    { text: 'Сказать полуправду', score: 4, feedback: 'Ложь во благо? Спорно' }
+                ]
+            },
+            {
+                id: 39, category: 'moral', icon: '🎨',
+                title: 'Плагиат',
+                description: 'Коллега скопировал вашу работу и выдал за свою.',
+                context: 'Доказательства: есть | Начальство: не знает | Коллега: отрицает',
+                options: [
+                    { text: 'Собрать доказательства и обратиться к руководству', score: 10, feedback: 'Защита своих прав!' },
+                    { text: 'Промолчать', score: 2, feedback: 'Поощрение плагиата' },
+                    { text: 'Публично обвинить коллегу', score: 4, feedback: 'Конфликт без доказательств' },
+                    { text: 'Отомстить тем же', score: 1, feedback: 'Опускаться до их уровня' }
+                ]
+            },
+            {
+                id: 40, category: 'moral', icon: '🌍',
+                title: 'Экологическая дилемма',
+                description: 'Завод сбрасывает отходы в реку. Вы работаете на этом заводе.',
+                context: 'Рабочих мест: 500 | Штрафы: огромные | Здоровье людей: страдает',
+                options: [
+                    { text: 'Сообщить экологам анонимно', score: 10, feedback: 'Гражданская ответственность!' },
+                    { text: 'Молчать ради сохранения работы', score: 3, feedback: 'Соучастие в преступлении' },
+                    { text: 'Уволиться и забыть', score: 2, feedback: 'Проблема останется' },
+                    { text: 'Организовать рабочих для давления на руководство', score: 9, feedback: 'Коллективные действия эффективны!' }
+                ]
+            },
+            
+            // 🏕️ Выживание (5 ситуаций)
+            {
+                id: 41, category: 'survival', icon: '🏕️',
+                title: 'Ночь в лесу',
+                description: 'Вы отстали от группы в походе. Темнеет, снаряжения минимум.',
+                context: 'Температура: падает | Снаряжение: нож, спички, вода | Звери: возможны',
+                options: [
+                    { text: 'Построить укрытие и развести костер', score: 10, feedback: 'Приоритеты выживания соблюдены!' },
+                    { text: 'Идти искать группу в темноте', score: 2, feedback: 'Риск травм и переохлаждения' },
+                    { text: 'Залезть на дерево и ждать утра', score: 4, feedback: 'Безопасно от зверей, но холодно' },
+                    { text: 'Кричать и звать на помощь', score: 5, feedback: 'Может сработать, но силы кончатся' }
+                ]
+            },
+            {
+                id: 42, category: 'survival', icon: '💧',
+                title: 'Жажда в пустыне',
+                description: 'Машина сломалась в пустыне. Воды осталось на день.',
+                context: 'Температура: +45°C | Расстояние до людей: 50 км | Тень: минимальная',
+                options: [
+                    { text: 'Оставаться у машины и экономить воду', score: 10, feedback: 'Машину найдут быстрее человека' },
+                    { text: 'Идти пешком за помощью', score: 2, feedback: 'Потеряете воду и силы' },
+                    { text: 'Выпить всю воду сразу', score: 0, feedback: 'Организм не сохранит воду' },
+                    { text: 'Искать воду в пустыне', score: 1, feedback: 'Почти невозможно без навыков' }
+                ]
+            },
+            {
+                id: 43, category: 'survival', icon: '🧭',
+                title: 'Ориентирование',
+                description: 'Вы потеряли карту и компас. Нужно выйти к людям.',
+                context: 'Солнце: садится | Местность: лесистая | Река: слышна вдали',
+                options: [
+                    { text: 'Идти к реке и двигаться вниз по течению', score: 10, feedback: 'Реки ведут к людям!' },
+                    { text: 'Идти на закат солнца', score: 5, feedback: 'Направление есть, но нет цели' },
+                    { text: 'Ждать спасателей на месте', score: 7, feedback: 'Если вас ищут — разумно' },
+                    { text: 'Лезть на дерево для обзора', score: 6, feedback: 'Можно увидеть ориентиры' }
+                ]
+            },
+            {
+                id: 44, category: 'survival', icon: '🥾',
+                title: 'Травма в походе',
+                description: 'Вы подвернули ногу в 10 км от лагеря. Идти больно.',
+                context: 'Связь: нет | Товарищи: ждут в лагере | Время: полдень',
+                options: [
+                    { text: 'Сделать тугую повязку и медленно идти', score: 8, feedback: 'Правильно, но осторожно' },
+                    { text: 'Ждать помощи на месте', score: 10, feedback: 'Безопаснее всего, если вас найдут' },
+                    { text: 'Идти, игнорируя боль', score: 3, feedback: 'Усугубите травму' },
+                    { text: 'Ползти к лагерю', score: 2, feedback: 'Нереально и опасно' }
+                ]
+            },
+            {
+                id: 45, category: 'survival', icon: '🐍',
+                title: 'Укус змеи',
+                description: 'Вас укусила змея. Вы не знаете, ядовитая ли она.',
+                context: 'Место укуса: нога | Аптечка: минимальная | До больницы: 2 часа',
+                options: [
+                    { text: 'Обездвижить конечность и срочно в больницу', score: 10, feedback: 'Правильный алгоритм!' },
+                    { text: 'Отсосать яд из раны', score: 1, feedback: 'Миф! Можно навредить' },
+                    { text: 'Наложить жгут выше укуса', score: 2, feedback: 'Может привести к некрозу' },
+                    { text: 'Прижечь рану', score: 0, feedback: 'Вредный миф, не помогает' }
+                ]
+            },
+            
+            // 💻 Технологии (5 ситуаций)
+            {
+                id: 46, category: 'tech', icon: '💻',
+                title: 'Кибератака',
+                description: 'Компьютер компании заблокирован вирусом-шифровальщиком.',
+                context: 'Данные: зашифрованы | Выкуп: требуют биткоины | Бэкапы: недельной давности',
+                options: [
+                    { text: 'Отключить компьютер от сети и обратиться к специалистам', score: 10, feedback: 'Остановить распространение!' },
+                    { text: 'Заплатить выкуп', score: 2, feedback: 'Нет гарантии расшифровки' },
+                    { text: 'Восстановить из бэкапа', score: 8, feedback: 'Потеряете неделю данных' },
+                    { text: 'Пытаться расшифровать самому', score: 3, feedback: 'Можно сделать хуже' }
+                ]
+            },
+            {
+                id: 47, category: 'tech', icon: '📱',
+                title: 'Потеря смартфона',
+                description: 'Потерян смартфон с доступом к банковским приложениям.',
+                context: 'Пароли: сохранены | Геолокация: отключена | SIM: активна',
+                options: [
+                    { text: 'Заблокировать SIM и сменить пароли', score: 10, feedback: 'Безопасность прежде всего!' },
+                    { text: 'Пытаться найти через друзей', score: 3, feedback: 'Медленно, риски растут' },
+                    { text: 'Купить новый телефон', score: 4, feedback: 'Проблема с данными не решена' },
+                    { text: 'Ждать, что найдут и вернут', score: 2, feedback: 'Наивно и опасно' }
+                ]
+            },
+            {
+                id: 48, category: 'tech', icon: '🔒',
+                title: 'Подозрительное письмо',
+                description: 'Пришло email от "банка" с просьбой подтвердить пароль.',
+                context: 'Отправитель: похож на банк | Ссылка: ведет на странный сайт | Антивирус: молчит',
+                options: [
+                    { text: 'Не открывать и сообщить в банк', score: 10, feedback: 'Фишинг — не пройдешь!' },
+                    { text: 'Перейти по ссылке из любопытства', score: 0, feedback: 'Попались на удочку!' },
+                    { text: 'Ответить с вопросом', score: 3, feedback: 'Подтвердите адрес мошенникам' },
+                    { text: 'Позвонить в банк и проверить', score: 9, feedback: 'Отличная перепроверка!' }
+                ]
+            },
+            {
+                id: 49, category: 'tech', icon: '🤖',
+                title: 'ИИ на работе',
+                description: 'Компания внедряет ИИ, который может заменить вашу работу.',
+                context: 'Сроки: 6 месяцев | Ваши навыки: уникальные | Альтернативы: переобучение',
+                options: [
+                    { text: 'Освоить работу с ИИ и стать оператором', score: 10, feedback: 'Адаптация — ключ к будущему!' },
+                    { text: 'Игнорировать изменения', score: 2, feedback: 'Останетесь без работы' },
+                    { text: 'Саботировать внедрение ИИ', score: 1, feedback: 'Проигрышная стратегия' },
+                    { text: 'Срочно искать новую работу', score: 5, feedback: 'Можно успеть, но зачем убегать?' }
+                ]
+            },
+            {
+                id: 50, category: 'tech', icon: '🌐',
+                title: 'Социальная инженерия',
+                description: 'Незнакомец звонит и представляется сисадмином, просит пароль.',
+                context: 'Голос: убедительный | Знает: ваше имя и должность | Срочность: высокая',
+                options: [
+                    { text: 'Не давать пароль и сообщить руководству', score: 10, feedback: 'Бдительность спасла компанию!' },
+                    { text: 'Дать пароль, раз он знает детали', score: 0, feedback: 'Попались! Социальная инженерия' },
+                    { text: 'Перезвонить в IT-отдел', score: 9, feedback: 'Правильная перепроверка' },
+                    { text: 'Спросить что-то секретное для проверки', score: 7, feedback: 'Неплохо, но лучше перезвонить' }
+                ]
+            }
+        ];
+        
+        // Функция для перемешивания массива (алгоритм Фишера-Йетса)
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        // Инициализация игры
+        function init() {
+            setupCategoryButtons();
+            nextSituation();
+        }
+        
+        // Настройка кнопок категорий
+        function setupCategoryButtons() {
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    gameState.currentCategory = this.dataset.category;
+                    nextSituation();
+                });
+            });
+        }
+        
+        // Получить случайную ситуацию
+        function getRandomSituation() {
+            let available = allSituations;
+            
+            if (gameState.currentCategory !== 'all') {
+                available = available.filter(s => s.category === gameState.currentCategory);
+            }
+            
+            const unsolved = available.filter(s => !gameState.solvedSituations.has(s.id));
+            
+            if (unsolved.length === 0) {
+                if (available.length === 0) {
+                    return null;
+                }
+                return available[Math.floor(Math.random() * available.length)];
+            }
+            
+            const filtered = unsolved.filter(s => s.id !== (gameState.currentSituation?.id || -1));
+            if (filtered.length === 0) {
+                return unsolved[Math.floor(Math.random() * unsolved.length)];
+            }
+            
+            return filtered[Math.floor(Math.random() * filtered.length)];
+        }
+        
+        // Показать следующую ситуацию
+        function nextSituation() {
+            gameState.currentSituation = getRandomSituation();
+            
+            if (!gameState.currentSituation) {
+                showFinalScreen();
+                return;
+            }
+            
+            document.getElementById('situationNumber').textContent = `#${gameState.currentSituation.id}`;
+            document.getElementById('situationIcon').textContent = gameState.currentSituation.icon;
+            document.getElementById('situationTitle').textContent = gameState.currentSituation.title;
+            document.getElementById('situationDescription').textContent = gameState.currentSituation.description;
+            document.getElementById('contextInfo').textContent = gameState.currentSituation.context;
+            
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+            
+            // Перемешиваем варианты ответов
+            const shuffledOptions = shuffleArray(gameState.currentSituation.options);
+            
+            shuffledOptions.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.textContent = option.text;
+                button.onclick = () => makeDecision(option);
+                optionsContainer.appendChild(button);
+            });
+            
+            document.getElementById('feedback').classList.remove('show', 'excellent', 'good', 'medium', 'bad');
+            document.getElementById('nextBtn').classList.remove('show');
+            
+            updateProgress();
+        }
+        
+        // Принять решение
+        function makeDecision(selectedOption) {
+            const buttons = document.querySelectorAll('.option-btn');
+            
+            buttons.forEach(btn => btn.disabled = true);
+            
+            const bestOption = gameState.currentSituation.options.reduce((best, current) => 
+                current.score > best.score ? current : best
+            );
+            
+            // Находим индекс выбранной опции в перемешанном списке
+            const shuffledOptions = Array.from(buttons).map(btn => btn.textContent);
+            const selectedIndex = shuffledOptions.indexOf(selectedOption.text);
+            const bestIndex = shuffledOptions.indexOf(bestOption.text);
+            
+            // Подсвечиваем выбор
+            if (selectedOption.score >= 9) {
+                buttons[selectedIndex].classList.add('selected-best');
+                gameState.excellentDecisions++;
+            } else if (selectedOption.score >= 7) {
+                buttons[selectedIndex].classList.add('selected-good');
+                gameState.goodDecisions++;
+            } else if (selectedOption.score >= 4) {
+                buttons[selectedIndex].classList.add('selected-medium');
+                gameState.mediumDecisions++;
+            } else {
+                buttons[selectedIndex].classList.add('selected-bad');
+                gameState.badDecisions++;
+            }
+            
+            if (bestIndex !== selectedIndex) {
+                buttons[bestIndex].classList.add('best-answer');
+            }
+            
+            gameState.score += selectedOption.score;
+            gameState.solvedCount++;
+            
+            if (selectedOption.score >= 9) {
+                gameState.streak++;
+                if (gameState.streak > gameState.bestStreak) {
+                    gameState.bestStreak = gameState.streak;
+                }
+            } else {
+                gameState.streak = 0;
+            }
+            
+            gameState.solvedSituations.add(gameState.currentSituation.id);
+            
+            if (gameState.solvedCount % gameState.situationsPerLevel === 0) {
+                gameState.level++;
+                showAchievement(`🎉 Новый уровень ${gameState.level}!`);
+            }
+            
+            if (gameState.solvedCount === 10) {
+                showAchievement('🏆 10 ситуаций решено!');
+            } else if (gameState.solvedCount === 25) {
+                showAchievement('🌟 25 ситуаций! Половина пути!');
+            } else if (gameState.solvedCount === 50) {
+                showAchievement('👑 Все 50 ситуаций решены!');
+            }
+            
+            if (gameState.streak === 5) {
+                showAchievement('🔥 Серия из 5 отличных решений!');
+            } else if (gameState.streak === 10) {
+                showAchievement('💎 Серия из 10! Невероятно!');
+            }
+            
+            updateStats();
+            updateProgress();
+            
+            const feedback = document.getElementById('feedback');
+            let feedbackClass, emoji;
+            
+            if (selectedOption.score >= 9) {
+                feedbackClass = 'excellent';
+                emoji = '🌟';
+            } else if (selectedOption.score >= 7) {
+                feedbackClass = 'good';
+                emoji = '✅';
+            } else if (selectedOption.score >= 4) {
+                feedbackClass = 'medium';
+                emoji = '🤔';
+            } else {
+                feedbackClass = 'bad';
+                emoji = '❌';
+            }
+            
+            feedback.className = `feedback show ${feedbackClass}`;
+            feedback.innerHTML = `
+                <strong>${emoji} ${selectedOption.score >= 9 ? 'Превосходное решение!' : 
+                              selectedOption.score >= 7 ? 'Хорошее решение!' : 
+                              selectedOption.score >= 4 ? 'Среднее решение' : 
+                              'Неудачное решение'}</strong>
+                <br><br>
+                ${selectedOption.feedback}
+                <br><br>
+                <small>⭐ Получено очков: ${selectedOption.score} из 10</small>
+                ${selectedOption.score < 9 ? `<br><small>💡 Лучший ответ: "${bestOption.text}" (${bestOption.score} очков)</small>` : ''}
+            `;
+            
+            document.getElementById('nextBtn').classList.add('show');
+            document.getElementById('nextBtn').textContent = gameState.solvedCount >= 50 ? 'Смотреть результаты 🏆' : 'Следующая ситуация ➡️';
+            
+            feedback.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            if (gameState.solvedCount >= 50) {
+                document.getElementById('nextBtn').onclick = showFinalScreen;
+            } else {
+                document.getElementById('nextBtn').onclick = nextSituation;
+            }
+        }
+        
+        // Показать финальный экран
+        function showFinalScreen() {
+            const maxScore = gameState.maxPossibleScore;
+            const percent = Math.round((gameState.score / maxScore) * 100);
+            
+            document.getElementById('yourScore').textContent = gameState.score;
+            document.getElementById('maxScore').textContent = maxScore;
+            document.getElementById('scorePercent').textContent = percent + '%';
+            
+            const ratingPlace = document.getElementById('ratingPlace');
+            const ratingStars = document.getElementById('ratingStars');
+            const ratingText = document.getElementById('ratingText');
+            const trophyIcon = document.getElementById('trophyIcon');
+            const finalTitle = document.getElementById('finalTitle');
+            
+            ratingPlace.className = 'rating-place';
+            
+            if (percent >= 100) {
+                ratingPlace.classList.add('gold');
+                ratingStars.textContent = '⭐⭐⭐⭐⭐';
+                ratingText.textContent = '🥇 1 МЕСТО - Максимальный балл!';
+                trophyIcon.textContent = '👑';
+                finalTitle.textContent = '🏆 Абсолютный победитель!';
+            } else if (percent >= 50) {
+                ratingPlace.classList.add('silver');
+                ratingStars.textContent = '⭐⭐⭐⭐';
+                ratingText.textContent = '🥈 2 МЕСТО - Отличный результат!';
+                trophyIcon.textContent = '🏆';
+                finalTitle.textContent = '🎉 Отличная игра!';
+            } else if (percent >= 25) {
+                ratingPlace.classList.add('bronze');
+                ratingStars.textContent = '⭐⭐⭐';
+                ratingText.textContent = '🥉 3 МЕСТО - Хороший результат';
+                trophyIcon.textContent = '🎖️';
+                finalTitle.textContent = '👍 Неплохо!';
+            } else {
+                ratingPlace.classList.add('fail');
+                ratingStars.textContent = '⭐⭐';
+                ratingText.textContent = '😔 Проигрыш - Нужно больше практики';
+                trophyIcon.textContent = '📚';
+                finalTitle.textContent = '💪 Не сдавайся!';
+            }
+            
+            const ratingDetails = document.getElementById('ratingDetails');
+            ratingDetails.innerHTML = `
+                <div class="detail-item">
+                    <span>🌟 Отличных решений:</span>
+                    <span>${gameState.excellentDecisions}</span>
+                </div>
+                <div class="detail-item">
+                    <span>✅ Хороших решений:</span>
+                    <span>${gameState.goodDecisions}</span>
+                </div>
+                <div class="detail-item">
+                    <span>🤔 Средних решений:</span>
+                    <span>${gameState.mediumDecisions}</span>
+                </div>
+                <div class="detail-item">
+                    <span>❌ Плохих решений:</span>
+                    <span>${gameState.badDecisions}</span>
+                </div>
+                <div class="detail-item">
+                    <span>🔥 Лучшая серия:</span>
+                    <span>${gameState.bestStreak}</span>
+                </div>
+                <div class="detail-item">
+                    <span>📊 Уровень достигнут:</span>
+                    <span>${gameState.level}</span>
+                </div>
+            `;
+            
+            document.getElementById('finalScreen').classList.add('show');
+        }
+        
+        // Обновить статистику
+        function updateStats() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('level').textContent = gameState.level;
+            document.getElementById('solved').textContent = `${gameState.solvedCount}/50`;
+            document.getElementById('streak').textContent = gameState.streak;
+        }
+        
+        // Обновить прогресс
+        function updateProgress() {
+            const progress = (gameState.solvedCount / gameState.totalSituations) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = 
+                `Прогресс: ${gameState.solvedCount}/${gameState.totalSituations} ситуаций`;
+        }
+        
+        // Показать достижение
+        function showAchievement(message) {
+            const achievement = document.createElement('div');
+            achievement.className = 'achievement';
+            achievement.textContent = message;
+            document.body.appendChild(achievement);
+            
+            setTimeout(() => {
+                achievement.remove();
+            }, 3000);
+        }
+        
+        // Сброс игры
+        function resetGame() {
+            gameState = {
+                score: 0,
+                level: 1,
+                solvedCount: 0,
+                streak: 0,
+                bestStreak: 0,
+                currentCategory: 'all',
+                situationsPerLevel: 5,
+                totalSituations: 50,
+                solvedSituations: new Set(),
+                currentSituation: null,
+                maxPossibleScore: 500,
+                excellentDecisions: 0,
+                goodDecisions: 0,
+                mediumDecisions: 0,
+                badDecisions: 0
+            };
+            
+            document.getElementById('finalScreen').classList.remove('show');
+            document.getElementById('nextBtn').onclick = nextSituation;
+            updateStats();
+            updateProgress();
+            nextSituation();
+        }
+        
+        // Запуск
+        init();
+    </script>
+</body>
+</html>

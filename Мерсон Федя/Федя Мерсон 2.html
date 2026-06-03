@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Супергерои: Битва в реальном мире</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            height: 100vh;
+        }
+        
+        .side-panel {
+            background: linear-gradient(180deg, #16213e 0%, #0f3460 100%);
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 2px solid rgba(255, 255, 255, 0.2);
+            z-index: 50;
+        }
+        
+        h2 {
+            color: white;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .hero-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .hero-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .hero-card:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .hero-card.selected {
+            border-color: #ffd700;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+        
+        .hero-card.locked {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+        
+        .hero-avatar {
+            font-size: 2.5em;
+        }
+        
+        .hero-info {
+            flex: 1;
+        }
+        
+        .hero-name {
+            font-weight: bold;
+            color: white;
+            font-size: 0.9em;
+        }
+        
+        .hero-level {
+            color: #ffd700;
+            font-size: 0.8em;
+        }
+        
+        .hero-hp {
+            color: #ff6b6b;
+            font-size: 0.8em;
+        }
+        
+        .map-area {
+            position: relative;
+            background: linear-gradient(180deg, #87CEEB 0%, #228B22 50%, #8B4513 100%);
+            overflow: auto;
+            cursor: grab;
+        }
+        
+        .map-area:active {
+            cursor: grabbing;
+        }
+        
+        .world-map {
+            width: 2000px;
+            height: 1500px;
+            position: relative;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255,255,255,0.2) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.1) 0%, transparent 60%);
+            transform-origin: top left;
+        }
+        
+        .continent {
+            position: absolute;
+            border-radius: 45%;
+            opacity: 0.25;
+        }
+        
+        .continent.na { width: 350px; height: 350px; background: #228B22; top: 15%; left: 10%; }
+        .continent.sa { width: 200px; height: 280px; background: #228B22; top: 50%; left: 15%; }
+        .continent.eu { width: 280px; height: 220px; background: #228B22; top: 12%; left: 38%; }
+        .continent.af { width: 250px; height: 350px; background: #8B4513; top: 30%; left: 35%; }
+        .continent.as { width: 500px; height: 380px; background: #228B22; top: 15%; left: 55%; }
+        .continent.au { width: 160px; height: 160px; background: #8B4513; top: 60%; left: 65%; }
+        .continent.ant { width: 300px; height: 150px; background: #fff; top: 85%; left: 40%; opacity: 0.5; }
+        
+        .ocean-label {
+            position: absolute;
+            color: rgba(255,255,255,0.3);
+            font-size: 1.5em;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        
+        .city-marker {
+            position: absolute;
+            cursor: default;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        
+        .city-icon {
+            font-size: 2em;
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+        }
+        
+        .city-name {
+            position: absolute;
+            color: white;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+            margin-top: -30px;
+            pointer-events: none;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        
+        .enemy-marker {
+            position: absolute;
+            font-size: 2.2em;
+            cursor: pointer;
+            animation: enemyFloat 2s ease-in-out infinite;
+            z-index: 20;
+            filter: drop-shadow(0 0 12px rgba(255, 0, 0, 0.8));
+            transition: transform 0.3s ease;
+        }
+        
+        .enemy-marker:hover {
+            transform: scale(1.5);
+            filter: drop-shadow(0 0 25px rgba(255, 0, 0, 1));
+            z-index: 25;
+        }
+        
+        .enemy-marker.defeated {
+            opacity: 0.3;
+            filter: grayscale(100%);
+            animation: none;
+            cursor: not-allowed;
+        }
+        
+        .enemy-marker.defeated:hover {
+            transform: none;
+        }
+        
+        @keyframes enemyFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+        
+        .top-bar {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 20px;
+            padding: 12px 25px;
+            display: flex;
+            gap: 25px;
+            z-index: 100;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .stat { text-align: center; }
+        .stat-value { font-size: 1.3em; font-weight: bold; color: #ffd700; }
+        .stat-label { font-size: 0.75em; color: #aaa; }
+        
+        .battle-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .battle-overlay.show { display: flex; }
+        
+        .battle-screen {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-radius: 20px;
+            padding: 25px;
+            max-width: 680px;
+            width: 95%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .battle-header { text-align: center; margin-bottom: 15px; color: white; }
+        .battle-lives { text-align: center; font-size: 1.5em; margin: 10px 0; }
+        
+        .battle-arena {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .battle-character { text-align: center; }
+        .character-icon { font-size: 4.5em; }
+        .character-name { font-weight: bold; color: white; margin: 8px 0; font-size: 1.1em; }
+        
+        .health-bar-battle {
+            background: rgba(255, 0, 0, 0.3);
+            border-radius: 10px;
+            height: 22px;
+            width: 200px;
+            margin: 8px auto;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .health-fill-battle {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4444, #ff6666);
+            transition: width 0.5s ease;
+        }
+        
+        .abilities-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .ability-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 6px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .ability-btn:hover:not(:disabled) {
+            transform: scale(1.1);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
+        }
+        
+        .ability-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        
+        .ability-btn.special {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #333;
+            font-weight: bold;
+        }
+        
+        .ability-btn.ultimate {
+            background: linear-gradient(135deg, #ff4444, #ff0000);
+            font-weight: bold;
+            grid-column: span 2;
+        }
+        
+        .basic-actions {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .basic-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            font-weight: bold;
+        }
+        
+        .basic-btn:hover { background: rgba(255, 255, 255, 0.3); }
+        
+        .battle-log {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 12px;
+            max-height: 160px;
+            overflow-y: auto;
+            color: white;
+            font-size: 0.85em;
+            margin-top: 15px;
+        }
+        
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(45deg, #ffd700, #ffaa00);
+            color: #333;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-weight: bold;
+            z-index: 300;
+            animation: slideDown 0.5s ease-out, fadeOut 0.5s 2.5s ease-out forwards;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        
+        .enemy-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            pointer-events: none;
+            display: none;
+            z-index: 150;
+            white-space: nowrap;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        
+        .map-controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        
+        .map-btn {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 1.5em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        
+        .map-btn:hover {
+            background: rgba(255, 215, 0, 0.3);
+            border-color: #ffd700;
+        }
+        
+        button { transition: all 0.3s ease; }
+        button:hover { transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="side-panel">
+            <h2>🦸 Супергерои</h2>
+            <div class="hero-selector" id="heroSelector"></div>
+            <button onclick="healHero()" style="width: 100%; margin-top: 15px; background: linear-gradient(45deg, #ff6b6b, #ff8e53); color: white; border: none; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold;">
+                🏥 Лечить героя (50 ⭐)
+            </button>
+        </div>
+        
+        <div class="map-area" id="mapArea">
+            <div class="world-map" id="worldMap">
+                <div class="continent na"></div>
+                <div class="continent sa"></div>
+                <div class="continent eu"></div>
+                <div class="continent af"></div>
+                <div class="continent as"></div>
+                <div class="continent au"></div>
+                <div class="continent ant"></div>
+                <div class="ocean-label" style="top: 25%; left: 30%;">🌊 Атлантический океан</div>
+                <div class="ocean-label" style="top: 40%; left: 70%;">🌊 Тихий океан</div>
+                <div class="ocean-label" style="top: 55%; left: 50%;">🌊 Индийский океан</div>
+            </div>
+            <div class="top-bar">
+                <div class="stat">
+                    <div class="stat-value" id="totalStars">0</div>
+                    <div class="stat-label">⭐ Звёзды</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="enemiesDefeated">0</div>
+                    <div class="stat-label">💀 Побеждено</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="currentHealth">10</div>
+                    <div class="stat-label">❤️ Здоровье</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="heroLevel">1</div>
+                    <div class="stat-label">📊 Уровень</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="battle-overlay" id="battleOverlay">
+        <div class="battle-screen" id="battleScreen"></div>
+    </div>
+    
+    <div class="enemy-tooltip" id="enemyTooltip"></div>
+    
+    <div class="map-controls">
+        <button class="map-btn" onclick="zoomIn()">➕</button>
+        <button class="map-btn" onclick="zoomOut()">➖</button>
+        <button class="map-btn" onclick="resetZoom()">🔄</button>
+    </div>
+
+    <script>
+        console.log('Запуск игры...');
+        
+        // Состояние игры
+        let gameState = {
+            totalStars: 0,
+            enemiesDefeated: 0,
+            selectedHero: 0,
+            mapScale: 1,
+            heroes: [
+                {
+                    id: 0, name: 'Теневой Страж', icon: '🦸', title: 'Защитник новичков',
+                    level: 1, stars: 0, unlocked: true, unlockLevel: 0,
+                    maxHealth: 10, currentHealth: 10, damage: 2,
+                    battleLives: 10,
+                    abilities: [
+                        { name: 'Теневой удар', damage: 3, used: false, type: 'basic' },
+                        { name: 'Кинжал тьмы', damage: 5, used: false, type: 'special' },
+                        { name: 'Невидимость', damage: 0, used: false, type: 'defense' },
+                        { name: 'Ядовитый клинок', damage: 6, used: false, type: 'special' },
+                        { name: 'Теневой шаг', damage: 4, used: false, type: 'basic' },
+                        { name: 'Удушающая хватка', damage: 7, used: false, type: 'special' },
+                        { name: 'Дымовая завеса', damage: 0, used: false, type: 'defense' },
+                        { name: 'Смертельный бросок', damage: 8, used: false, type: 'special' },
+                        { name: 'Теневой клон', damage: 5, used: false, type: 'basic' },
+                        { name: 'Ульт: Ночь возмездия', damage: 15, used: false, type: 'ultimate' }
+                    ],
+                    color: '#6bcf7f'
+                },
+                {
+                    id: 1, name: 'Огненный Феникс', icon: '🦹', title: 'Повелитель пламени',
+                    level: 1, stars: 0, unlocked: false, unlockLevel: 10,
+                    maxHealth: 15, currentHealth: 15, damage: 3,
+                    battleLives: 10,
+                    abilities: [
+                        { name: 'Огненный шар', damage: 4, used: false, type: 'basic' },
+                        { name: 'Ожог', damage: 6, used: false, type: 'special' },
+                        { name: 'Тепловой щит', damage: 0, used: false, type: 'defense' },
+                        { name: 'Пламенный вихрь', damage: 8, used: false, type: 'special' },
+                        { name: 'Искра', damage: 5, used: false, type: 'basic' },
+                        { name: 'Взрыв', damage: 9, used: false, type: 'special' },
+                        { name: 'Огненная стена', damage: 0, used: false, type: 'defense' },
+                        { name: 'Метеорит', damage: 10, used: false, type: 'special' },
+                        { name: 'Возгорание', damage: 6, used: false, type: 'basic' },
+                        { name: 'Ульт: Адское пламя', damage: 18, used: false, type: 'ultimate' }
+                    ],
+                    color: '#ff6b6b'
+                },
+                {
+                    id: 2, name: 'Ледяной Титан', icon: '🧊', title: 'Властелин холода',
+                    level: 1, stars: 0, unlocked: false, unlockLevel: 20,
+                    maxHealth: 20, currentHealth: 20, damage: 4,
+                    battleLives: 10,
+                    abilities: [
+                        { name: 'Ледяная стрела', damage: 5, used: false, type: 'basic' },
+                        { name: 'Заморозка', damage: 7, used: false, type: 'special' },
+                        { name: 'Ледяной щит', damage: 0, used: false, type: 'defense' },
+                        { name: 'Снежная буря', damage: 9, used: false, type: 'special' },
+                        { name: 'Град', damage: 6, used: false, type: 'basic' },
+                        { name: 'Ледяное копье', damage: 10, used: false, type: 'special' },
+                        { name: 'Вечная мерзлота', damage: 0, used: false, type: 'defense' },
+                        { name: 'Айсберг', damage: 12, used: false, type: 'special' },
+                        { name: 'Обморожение', damage: 7, used: false, type: 'basic' },
+                        { name: 'Ульт: Абсолютный ноль', damage: 22, used: false, type: 'ultimate' }
+                    ],
+                    color: '#4d9de0'
+                },
+                {
+                    id: 3, name: 'Грозовой Бог', icon: '⚡', title: 'Владыка молний',
+                    level: 1, stars: 0, unlocked: false, unlockLevel: 30,
+                    maxHealth: 25, currentHealth: 25, damage: 5,
+                    battleLives: 10,
+                    abilities: [
+                        { name: 'Разряд', damage: 6, used: false, type: 'basic' },
+                        { name: 'Молния', damage: 8, used: false, type: 'special' },
+                        { name: 'Электрический щит', damage: 0, used: false, type: 'defense' },
+                        { name: 'Гром', damage: 10, used: false, type: 'special' },
+                        { name: 'Искра', damage: 7, used: false, type: 'basic' },
+                        { name: 'Электрошок', damage: 12, used: false, type: 'special' },
+                        { name: 'Магнитное поле', damage: 0, used: false, type: 'defense' },
+                        { name: 'Цепная молния', damage: 14, used: false, type: 'special' },
+                        { name: 'Телепортация', damage: 8, used: false, type: 'basic' },
+                        { name: 'Ульт: Грозовой шторм', damage: 25, used: false, type: 'ultimate' }
+                    ],
+                    color: '#ffd93d'
+                },
+                {
+                    id: 4, name: 'Космический Властелин', icon: '🌌', title: 'Хранитель вселенной',
+                    level: 1, stars: 0, unlocked: false, unlockLevel: 40,
+                    maxHealth: 30, currentHealth: 30, damage: 6,
+                    battleLives: 10,
+                    abilities: [
+                        { name: 'Квантовый луч', damage: 8, used: false, type: 'basic' },
+                        { name: 'Гравитация', damage: 10, used: false, type: 'special' },
+                        { name: 'Искажение', damage: 0, used: false, type: 'defense' },
+                        { name: 'Черная дыра', damage: 12, used: false, type: 'special' },
+                        { name: 'Космическая пыль', damage: 9, used: false, type: 'basic' },
+                        { name: 'Временной сдвиг', damage: 14, used: false, type: 'special' },
+                        { name: 'Вселенский барьер', damage: 0, used: false, type: 'defense' },
+                        { name: 'Сверхновая', damage: 16, used: false, type: 'special' },
+                        { name: 'Телекинез', damage: 10, used: false, type: 'basic' },
+                        { name: 'Ульт: Большой взрыв', damage: 30, used: false, type: 'ultimate' }
+                    ],
+                    color: '#9b59b6'
+                }
+            ],
+            enemies: [],
+            battleState: null,
+            enemyElements: []
+        };
+        
+        // 30 городов на большой карте
+        const cities = [
+            { name: 'Москва', x: 48, y: 18, icon: '🏰' },
+            { name: 'Санкт-Петербург', x: 46, y: 14, icon: '🏛️' },
+            { name: 'Нью-Йорк', x: 20, y: 25, icon: '🗽' },
+            { name: 'Лос-Анджелес', x: 12, y: 30, icon: '🌴' },
+            { name: 'Чикаго', x: 18, y: 22, icon: '🏙️' },
+            { name: 'Торонто', x: 19, y: 18, icon: '🇨🇦' },
+            { name: 'Мехико', x: 14, y: 38, icon: '🌵' },
+            { name: 'Лондон', x: 40, y: 20, icon: '🏛️' },
+            { name: 'Париж', x: 42, y: 24, icon: '🗼' },
+            { name: 'Берлин', x: 44, y: 20, icon: '🏰' },
+            { name: 'Рим', x: 43, y: 28, icon: '🏟️' },
+            { name: 'Мадрид', x: 38, y: 30, icon: '🏯' },
+            { name: 'Киев', x: 47, y: 22, icon: '🏰' },
+            { name: 'Стамбул', x: 50, y: 28, icon: '🕌' },
+            { name: 'Каир', x: 48, y: 38, icon: '🏺' },
+            { name: 'Лагос', x: 42, y: 45, icon: '🏙️' },
+            { name: 'Кейптаун', x: 45, y: 72, icon: '🏔️' },
+            { name: 'Дубай', x: 55, y: 38, icon: '🏗️' },
+            { name: 'Мумбаи', x: 58, y: 42, icon: '🏯' },
+            { name: 'Дели', x: 60, y: 36, icon: '🕌' },
+            { name: 'Пекин', x: 68, y: 24, icon: '🏯' },
+            { name: 'Шанхай', x: 70, y: 30, icon: '🌆' },
+            { name: 'Токио', x: 78, y: 26, icon: '🗾' },
+            { name: 'Сеул', x: 74, y: 22, icon: '🏯' },
+            { name: 'Бангкок', x: 66, y: 42, icon: '🛕' },
+            { name: 'Джакарта', x: 68, y: 52, icon: '🏝️' },
+            { name: 'Сидней', x: 76, y: 62, icon: '🏖️' },
+            { name: 'Мельбурн', x: 75, y: 66, icon: '🏙️' },
+            { name: 'Рио-де-Жанейро', x: 28, y: 58, icon: '🌴' },
+            { name: 'Буэнос-Айрес', x: 26, y: 66, icon: '💃' }
+        ];
+        
+        // Враги со сбалансированным здоровьем
+        const enemyTypes = [
+            { icon: '👾', name: 'Инопланетный слизень', baseHealth: 8, damage: 1, difficulty: 'easy', stars: 5 },
+            { icon: '👹', name: 'Мутировавший гоблин', baseHealth: 10, damage: 1, difficulty: 'easy', stars: 5 },
+            { icon: '🐺', name: 'Кибер-волк', baseHealth: 9, damage: 1, difficulty: 'easy', stars: 5 },
+            { icon: '🦇', name: 'Вампир-мутант', baseHealth: 11, damage: 1, difficulty: 'easy', stars: 5 },
+            { icon: '💀', name: 'Некро-скелет', baseHealth: 15, damage: 2, difficulty: 'medium', stars: 10 },
+            { icon: '🧟', name: 'Зомби-мутант', baseHealth: 18, damage: 2, difficulty: 'medium', stars: 10 },
+            { icon: '👻', name: 'Призрак-убийца', baseHealth: 14, damage: 2, difficulty: 'medium', stars: 10 },
+            { icon: '🕷️', name: 'Гигантский паук', baseHealth: 16, damage: 2, difficulty: 'medium', stars: 10 },
+            { icon: '🐉', name: 'Огненный дракон', baseHealth: 25, damage: 3, difficulty: 'hard', stars: 15 },
+            { icon: '🤖', name: 'Боевой робот X-9000', baseHealth: 22, damage: 3, difficulty: 'hard', stars: 15 },
+            { icon: '👿', name: 'Демон бездны', baseHealth: 28, damage: 3, difficulty: 'hard', stars: 15 },
+            { icon: '🦹', name: 'Суперзлодей Моргот', baseHealth: 35, damage: 4, difficulty: 'hard', stars: 15 },
+            { icon: '🦂', name: 'Скорпион-мутант', baseHealth: 20, damage: 3, difficulty: 'hard', stars: 15 },
+            { icon: '👽', name: 'Пришелец-воин', baseHealth: 24, damage: 3, difficulty: 'hard', stars: 15 }
+        ];
+        
+        function getSelectedHero() {
+            return gameState.heroes[gameState.selectedHero];
+        }
+        
+        function initMap() {
+            const worldMap = document.getElementById('worldMap');
+            
+            // Добавляем города
+            cities.forEach(city => {
+                const cityMarker = document.createElement('div');
+                cityMarker.className = 'city-marker';
+                cityMarker.style.left = city.x + '%';
+                cityMarker.style.top = city.y + '%';
+                cityMarker.style.transform = 'translate(-50%, -50%)';
+                cityMarker.innerHTML = `
+                    <div class="city-icon">${city.icon}</div>
+                    <div class="city-name">${city.name}</div>
+                `;
+                worldMap.appendChild(cityMarker);
+            });
+            
+            // Делаем карту перетаскиваемой
+            makeMapDraggable();
+            
+            // Центрируем карту
+            centerMap();
+            
+            generateEnemies();
+        }
+        
+        function centerMap() {
+            const mapArea = document.getElementById('mapArea');
+            const worldMap = document.getElementById('worldMap');
+            mapArea.scrollLeft = (worldMap.offsetWidth - mapArea.offsetWidth) / 2;
+            mapArea.scrollTop = (worldMap.offsetHeight - mapArea.offsetHeight) / 2;
+        }
+        
+        function makeMapDraggable() {
+            const mapArea = document.getElementById('mapArea');
+            let isDragging = false;
+            let startX, startY, scrollLeft, scrollTop;
+            
+            mapArea.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.enemy-marker')) return;
+                isDragging = true;
+                startX = e.pageX - mapArea.offsetLeft;
+                startY = e.pageY - mapArea.offsetTop;
+                scrollLeft = mapArea.scrollLeft;
+                scrollTop = mapArea.scrollTop;
+                mapArea.style.cursor = 'grabbing';
+            });
+            
+            mapArea.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const x = e.pageX - mapArea.offsetLeft;
+                const y = e.pageY - mapArea.offsetTop;
+                const walkX = (x - startX) * 1.5;
+                const walkY = (y - startY) * 1.5;
+                mapArea.scrollLeft = scrollLeft - walkX;
+                mapArea.scrollTop = scrollTop - walkY;
+            });
+            
+            mapArea.addEventListener('mouseup', () => {
+                isDragging = false;
+                mapArea.style.cursor = 'grab';
+            });
+            
+            mapArea.addEventListener('mouseleave', () => {
+                isDragging = false;
+                mapArea.style.cursor = 'grab';
+            });
+        }
+        
+        function zoomIn() {
+            gameState.mapScale = Math.min(2, gameState.mapScale + 0.2);
+            document.getElementById('worldMap').style.transform = `scale(${gameState.mapScale})`;
+        }
+        
+        function zoomOut() {
+            gameState.mapScale = Math.max(0.5, gameState.mapScale - 0.2);
+            document.getElementById('worldMap').style.transform = `scale(${gameState.mapScale})`;
+        }
+        
+        function resetZoom() {
+            gameState.mapScale = 1;
+            document.getElementById('worldMap').style.transform = 'scale(1)';
+            centerMap();
+        }
+        
+        function generateEnemies() {
+            gameState.enemyElements.forEach(el => el.remove());
+            gameState.enemyElements = [];
+            gameState.enemies = [];
+            
+            const hero = getSelectedHero();
+            const worldMap = document.getElementById('worldMap');
+            // Увеличено количество врагов: 20-30 вместо 8-12
+            const count = 20 + Math.floor(Math.random() * 11);
+            
+            for (let i = 0; i < count; i++) {
+                const city = cities[Math.floor(Math.random() * cities.length)];
+                const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                const levelMultiplier = 1 + (hero.level - 1) * 0.2;
+                
+                const enemy = {
+                    id: i,
+                    icon: type.icon,
+                    name: type.name,
+                    maxHealth: Math.round(type.baseHealth * levelMultiplier),
+                    currentHealth: Math.round(type.baseHealth * levelMultiplier),
+                    damage: Math.round(type.damage * levelMultiplier),
+                    difficulty: type.difficulty,
+                    stars: type.stars,
+                    x: city.x + (Math.random() - 0.5) * 6,
+                    y: city.y + (Math.random() - 0.5) * 6,
+                    city: city.name,
+                    defeated: false
+                };
+                
+                gameState.enemies.push(enemy);
+                
+                const enemyEl = document.createElement('div');
+                enemyEl.className = 'enemy-marker';
+                enemyEl.textContent = enemy.icon;
+                enemyEl.style.left = enemy.x + '%';
+                enemyEl.style.top = enemy.y + '%';
+                enemyEl.style.transform = 'translate(-50%, -50%)';
+                enemyEl.dataset.enemyId = i;
+                
+                enemyEl.addEventListener('mouseenter', (e) => {
+                    const tooltip = document.getElementById('enemyTooltip');
+                    tooltip.innerHTML = `
+                        <b>${enemy.name}</b><br>
+                        ${enemy.difficulty === 'easy' ? '🟢 Лёгкий' : enemy.difficulty === 'medium' ? '🟡 Средний' : '🔴 Сложный'}<br>
+                        ❤️ ${enemy.currentHealth}/${enemy.maxHealth}<br>
+                        ⚔️ Урон: ${enemy.damage}<br>
+                        ⭐ Награда: ${enemy.stars} звёзд<br>
+                        📍 ${enemy.city}
+                    `;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                });
+                
+                enemyEl.addEventListener('mousemove', (e) => {
+                    const tooltip = document.getElementById('enemyTooltip');
+                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    tooltip.style.top = (e.clientY - 10) + 'px';
+                });
+                
+                enemyEl.addEventListener('mouseleave', () => {
+                    document.getElementById('enemyTooltip').style.display = 'none';
+                });
+                
+                enemyEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!enemy.defeated) startBattle(enemy);
+                });
+                
+                worldMap.appendChild(enemyEl);
+                gameState.enemyElements.push(enemyEl);
+            }
+            
+            console.log(`Сгенерировано врагов: ${gameState.enemies.length}`);
+        }
+        
+        function startBattle(enemy) {
+            const hero = getSelectedHero();
+            hero.battleLives = 10;
+            hero.abilities.forEach(a => a.used = false);
+            
+            gameState.battleState = {
+                enemy: enemy,
+                heroDefending: false
+            };
+            
+            const battleScreen = document.getElementById('battleScreen');
+            battleScreen.innerHTML = `
+                <div class="battle-header">
+                    <h2>⚔️ ${hero.name} VS ${enemy.name}</h2>
+                    <p>📍 ${enemy.city} | ${enemy.difficulty === 'easy' ? '🟢 Лёгкий' : enemy.difficulty === 'medium' ? '🟡 Средний' : '🔴 Сложный'} враг</p>
+                </div>
+                
+                <div class="battle-lives" style="color: #ff4444;">
+                    ❤️ Жизни героя: <span id="livesDisplay">${'❤️'.repeat(hero.battleLives)}</span>
+                </div>
+                
+                <div class="battle-arena">
+                    <div class="battle-character">
+                        <div class="character-icon">${hero.icon}</div>
+                        <div class="character-name">${hero.name}</div>
+                        <div class="health-bar-battle">
+                            <div class="health-fill-battle" id="heroHealthFill" style="width: 100%"></div>
+                        </div>
+                        <div style="color: white;">❤️ <span id="heroHP">${hero.battleLives}</span>/10</div>
+                    </div>
+                    
+                    <div style="font-size: 3em; color: #ffd700;">VS</div>
+                    
+                    <div class="battle-character">
+                        <div class="character-icon">${enemy.icon}</div>
+                        <div class="character-name">${enemy.name}</div>
+                        <div class="health-bar-battle">
+                            <div class="health-fill-battle" id="enemyHealthFill" style="width: 100%"></div>
+                        </div>
+                        <div style="color: white;">❤️ <span id="enemyHP">${enemy.currentHealth}</span>/${enemy.maxHealth}</div>
+                    </div>
+                </div>
+                
+                <h3 style="color: white; text-align: center;">Способности:</h3>
+                <div class="abilities-grid" id="abilitiesGrid">
+                    ${hero.abilities.map((a, i) => `
+                        <button class="ability-btn ${a.type === 'ultimate' ? 'ultimate' : ''} ${a.type === 'special' ? 'special' : ''}"
+                                onclick="useAbility(${i})" id="ability${i}">
+                            ${a.name}<br>
+                            <small>⚔️${a.damage}</small>
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <div class="basic-actions">
+                    <button class="basic-btn" onclick="basicAttack()">⚔️ Атака (${hero.damage})</button>
+                    <button class="basic-btn" onclick="defendAction()">🛡️ Защита</button>
+                </div>
+                
+                <div class="battle-log" id="battleLog">
+                    <div class="log-entry">⚡ Битва началась! Герой получает 10 жизней!</div>
+                    <div class="log-entry">👾 Враг: ${enemy.maxHealth} HP | Урон врага: ${enemy.damage}</div>
+                </div>
+            `;
+            
+            document.getElementById('battleOverlay').classList.add('show');
+        }
+        
+        function updateBattleDisplay() {
+            const hero = getSelectedHero();
+            const enemy = gameState.battleState.enemy;
+            
+            const heroHP = document.getElementById('heroHP');
+            const enemyHP = document.getElementById('enemyHP');
+            const heroFill = document.getElementById('heroHealthFill');
+            const enemyFill = document.getElementById('enemyHealthFill');
+            const livesDisplay = document.getElementById('livesDisplay');
+            
+            if (heroHP) heroHP.textContent = hero.battleLives;
+            if (enemyHP) enemyHP.textContent = enemy.currentHealth;
+            if (heroFill) heroFill.style.width = (hero.battleLives / 10 * 100) + '%';
+            if (enemyFill) enemyFill.style.width = (enemy.currentHealth / enemy.maxHealth * 100) + '%';
+            if (livesDisplay) livesDisplay.textContent = '❤️'.repeat(Math.max(0, hero.battleLives));
+        }
+        
+        function addBattleLog(message) {
+            const log = document.getElementById('battleLog');
+            if (log) {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.textContent = message;
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+        
+        function basicAttack() {
+            const hero = getSelectedHero();
+            const enemy = gameState.battleState.enemy;
+            
+            if (hero.battleLives <= 0) {
+                addBattleLog('💀 Нет жизней!');
+                return;
+            }
+            
+            let damage = hero.damage;
+            if (Math.random() < 0.2) {
+                damage = Math.round(damage * 1.5);
+                addBattleLog('💥 Критический удар!');
+            }
+            
+            enemy.currentHealth -= damage;
+            addBattleLog(`⚔️ ${hero.name}: -${damage} HP (враг: ${Math.max(0, enemy.currentHealth)}/${enemy.maxHealth})`);
+            updateBattleDisplay();
+            
+            if (enemy.currentHealth <= 0) {
+                enemy.currentHealth = 0;
+                winBattle();
+                return;
+            }
+            
+            setTimeout(enemyTurn, 500);
+        }
+        
+        function useAbility(index) {
+            const hero = getSelectedHero();
+            const enemy = gameState.battleState.enemy;
+            const ability = hero.abilities[index];
+            
+            if (hero.battleLives <= 0) {
+                addBattleLog('💀 Нет жизней!');
+                return;
+            }
+            
+            if (ability.used) {
+                addBattleLog('❌ Способность уже использована!');
+                return;
+            }
+            
+            ability.used = true;
+            const btn = document.getElementById(`ability${index}`);
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = '0.4';
+            }
+            
+            let damage = ability.damage;
+            
+            if (ability.type === 'defense') {
+                gameState.battleState.heroDefending = true;
+                addBattleLog(`🛡️ "${ability.name}": защита активирована!`);
+            } else {
+                if (ability.type === 'ultimate') {
+                    damage = Math.round(damage * 1.3);
+                    addBattleLog('💫 УЛЬТИМАТИВНАЯ СПОСОБНОСТЬ!');
+                }
+                
+                enemy.currentHealth -= damage;
+                addBattleLog(`💥 "${ability.name}": -${damage} HP (враг: ${Math.max(0, enemy.currentHealth)}/${enemy.maxHealth})`);
+            }
+            
+            updateBattleDisplay();
+            
+            if (enemy.currentHealth <= 0) {
+                enemy.currentHealth = 0;
+                winBattle();
+                return;
+            }
+            
+            setTimeout(enemyTurn, 500);
+        }
+        
+        function defendAction() {
+            const hero = getSelectedHero();
+            
+            if (hero.battleLives <= 0) {
+                addBattleLog('💀 Нет жизней!');
+                return;
+            }
+            
+            gameState.battleState.heroDefending = true;
+            addBattleLog(`🛡️ ${hero.name} защищается!`);
+            setTimeout(enemyTurn, 500);
+        }
+        
+        function enemyTurn() {
+            const hero = getSelectedHero();
+            const enemy = gameState.battleState.enemy;
+            
+            let damage = enemy.damage;
+            
+            if (gameState.battleState.heroDefending) {
+                damage = Math.max(0, damage - 1);
+                addBattleLog('🛡️ Защита снижает урон!');
+                gameState.battleState.heroDefending = false;
+            }
+            
+            hero.battleLives -= damage;
+            addBattleLog(`💢 ${enemy.name}: -${damage} жизней! Осталось: ${hero.battleLives}/10`);
+            updateBattleDisplay();
+            
+            if (hero.battleLives <= 0) {
+                hero.battleLives = 0;
+                loseBattle();
+            }
+        }
+        
+        function winBattle() {
+            const hero = getSelectedHero();
+            const enemy = gameState.battleState.enemy;
+            
+            addBattleLog(`🎉 Победа над ${enemy.name}!`);
+            addBattleLog(`⭐ +${enemy.stars} звёзд!`);
+            
+            hero.stars += enemy.stars;
+            gameState.totalStars += enemy.stars;
+            gameState.enemiesDefeated++;
+            enemy.defeated = true;
+            
+            gameState.enemyElements.forEach(el => {
+                if (parseInt(el.dataset.enemyId) === enemy.id) {
+                    el.classList.add('defeated');
+                    el.style.cursor = 'not-allowed';
+                }
+            });
+            
+            checkLevelUp();
+            
+            setTimeout(() => {
+                document.getElementById('battleOverlay').classList.remove('show');
+                updateUI();
+                saveGame();
+            }, 2000);
+        }
+        
+        function loseBattle() {
+            addBattleLog('💀 Поражение! Все жизни потеряны.');
+            addBattleLog('🏥 Миссия провалена.');
+            
+            setTimeout(() => {
+                document.getElementById('battleOverlay').classList.remove('show');
+                updateUI();
+                saveGame();
+            }, 2000);
+        }
+        
+        function checkLevelUp() {
+            const hero = getSelectedHero();
+            let starsNeeded = 15 + (hero.level - 1) * 10;
+            
+            while (hero.stars >= starsNeeded) {
+                hero.stars -= starsNeeded;
+                hero.level++;
+                hero.maxHealth += 5;
+                hero.currentHealth = hero.maxHealth;
+                hero.damage += 2;
+                hero.abilities.forEach(a => a.damage += 1);
+                starsNeeded = 15 + (hero.level - 1) * 10;
+                showNotification(`🎉 ${hero.name} достиг ${hero.level} уровня!`);
+                checkNewHeroes();
+            }
+        }
+        
+        function checkNewHeroes() {
+            const hero = getSelectedHero();
+            gameState.heroes.forEach(h => {
+                if (!h.unlocked && hero.level >= h.unlockLevel) {
+                    h.unlocked = true;
+                    showNotification(`🎉 Открыт герой: ${h.name}!`);
+                }
+            });
+        }
+        
+        function healHero() {
+            const hero = getSelectedHero();
+            if (gameState.totalStars >= 50 && hero.currentHealth < hero.maxHealth) {
+                gameState.totalStars -= 50;
+                hero.currentHealth = hero.maxHealth;
+                showNotification('🏥 Герой вылечен!');
+                updateUI();
+                saveGame();
+            }
+        }
+        
+        function selectHero(index) {
+            if (!gameState.heroes[index].unlocked) return;
+            gameState.selectedHero = index;
+            generateEnemies();
+            updateUI();
+            saveGame();
+        }
+        
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        function updateUI() {
+            const hero = getSelectedHero();
+            
+            document.getElementById('heroSelector').innerHTML = gameState.heroes.map((h, i) => `
+                <div class="hero-card ${i === gameState.selectedHero ? 'selected' : ''} ${!h.unlocked ? 'locked' : ''}"
+                     onclick="${h.unlocked ? `selectHero(${i})` : ''}">
+                    <div class="hero-avatar">${h.icon}</div>
+                    <div class="hero-info">
+                        <div class="hero-name">${h.name}</div>
+                        <div class="hero-level">⭐ Ур. ${h.level}</div>
+                        <div class="hero-hp">❤️ ${h.currentHealth}/${h.maxHealth}</div>
+                    </div>
+                    ${!h.unlocked ? '<div style="color: #ff6b6b;">🔒 Ур. '+h.unlockLevel+'</div>' : ''}
+                </div>
+            `).join('');
+            
+            document.getElementById('totalStars').textContent = gameState.totalStars;
+            document.getElementById('enemiesDefeated').textContent = gameState.enemiesDefeated;
+            document.getElementById('currentHealth').textContent = hero.currentHealth;
+            document.getElementById('heroLevel').textContent = hero.level;
+        }
+        
+        function saveGame() {
+            try {
+                const saveData = {
+                    totalStars: gameState.totalStars,
+                    enemiesDefeated: gameState.enemiesDefeated,
+                    selectedHero: gameState.selectedHero,
+                    heroes: gameState.heroes.map(h => ({
+                        level: h.level,
+                        stars: h.stars,
+                        unlocked: h.unlocked,
+                        currentHealth: h.currentHealth,
+                        maxHealth: h.maxHealth,
+                        damage: h.damage
+                    }))
+                };
+                localStorage.setItem('superheroGame', JSON.stringify(saveData));
+            } catch(e) {
+                console.log('Ошибка сохранения:', e);
+            }
+        }
+        
+        function loadGame() {
+            try {
+                const saved = localStorage.getItem('superheroGame');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    gameState.totalStars = parsed.totalStars || 0;
+                    gameState.enemiesDefeated = parsed.enemiesDefeated || 0;
+                    gameState.selectedHero = parsed.selectedHero || 0;
+                    
+                    if (parsed.heroes) {
+                        parsed.heroes.forEach((savedHero, index) => {
+                            if (gameState.heroes[index]) {
+                                gameState.heroes[index].level = savedHero.level || 1;
+                                gameState.heroes[index].stars = savedHero.stars || 0;
+                                gameState.heroes[index].unlocked = savedHero.unlocked || false;
+                                gameState.heroes[index].currentHealth = savedHero.currentHealth || gameState.heroes[index].maxHealth;
+                                gameState.heroes[index].maxHealth = savedHero.maxHealth || gameState.heroes[index].maxHealth;
+                                gameState.heroes[index].damage = savedHero.damage || gameState.heroes[index].damage;
+                            }
+                        });
+                    }
+                    
+                    gameState.heroes[0].unlocked = true;
+                }
+            } catch(e) {
+                console.log('Ошибка загрузки:', e);
+            }
+        }
+        
+        function init() {
+            console.log('Инициализация игры...');
+            loadGame();
+            initMap();
+            updateUI();
+            console.log('Игра готова!');
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>

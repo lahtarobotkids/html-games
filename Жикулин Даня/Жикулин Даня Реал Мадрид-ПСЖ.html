@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Сантианга Барнебео • ПСЖ vs Рял Мадрид</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a3a1a;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+      z-index: 10;
+      pointer-events: none;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .scoreboard {
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      padding: 15px 25px;
+      border-radius: 20px;
+      color: white;
+      font-size: 22px;
+      font-weight: bold;
+      text-align: center;
+      border: 3px solid #ffd700;
+      box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+    }
+
+    .scoreboard .score {
+      font-size: 48px;
+      color: #ffd700;
+      text-shadow: 0 0 20px #ffd700;
+    }
+
+    .commentary {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #00ff88;
+      padding: 15px 25px;
+      border-radius: 20px;
+      z-index: 10;
+      font-size: 16px;
+      text-align: center;
+      max-width: 90%;
+      border: 2px solid #00ff88;
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+      pointer-events: none;
+      transition: all 0.3s;
+    }
+
+    #time-display {
+      color: #ffd700;
+      font-size: 18px;
+    }
+
+    .controls {
+      position: fixed;
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 20;
+    }
+
+    button {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border: 2px solid #ffd700;
+      padding: 12px 20px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: 0.2s;
+      font-family: inherit;
+    }
+
+    button:hover {
+      background: #ffd700;
+      color: black;
+      box-shadow: 0 0 20px #ffd700;
+    }
+
+    #goal-flash {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 72px;
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+      animation: goalPulse 0.5s ease-out;
+    }
+
+    @keyframes goalPulse {
+      0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+      50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="scoreboard">
+      🏟️ Сантианга Барнебео<br>
+      <span style="color:#ff6b6b">Рял Мадрид</span> 
+      <span class="score" id="score-ryo">0</span> - 
+      <span class="score" id="score-psg">0</span> 
+      <span style="color:#4da6ff">ПСЖ</span><br>
+      <div id="time-display">🕘 9:27 | 1-й тайм</div>
+    </div>
+  </div>
+
+  <div class="commentary" id="commentary">
+    🎙️ Разводит Ряо! Матч начинается!
+  </div>
+
+  <div id="goal-flash">⚽</div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="controls">
+    <button onclick="speedUp()">⏩ Ускорить</button>
+    <button onclick="slowDown()">⏪ Замедлить</button>
+    <button onclick="restartMatch()">🔄 Заново</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ==================== СОСТОЯНИЕ МАТЧА ====================
+    let scoreRyo = 0;
+    let scorePSG = 0;
+    let matchTime = 0; // в секундах от начала матча
+    let half = 1;
+    let matchRunning = true;
+    let matchPaused = false;
+    let gameSpeed = 1;
+
+    // Игроки на поле
+    let players = [];
+    let ball = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      vx: 0,
+      vy: 0,
+      size: 12
+    };
+
+    // ==================== КОММЕНТАРИЙ ====================
+    const commentaryEl = document.getElementById('commentary');
+    const timeDisplay = document.getElementById('time-display');
+    const goalFlash = document.getElementById('goal-flash');
+
+    const commentaryLines = [
+      { time: 0, text: "🎙️ Разводит Ряо, потому что это его арена и его город! Пасски Ляном Бапе!" },
+      { time: 3, text: "⚡ Килям Бапе дает Пасс Венисиусу! Винисиум Жуниор несет мяч творота!" },
+      { time: 6, text: "🔥 Рядом с ним Джудбелингем! Пасс Джудбелингем! Джудбегеем отдает Пас Лука Мудричу!" },
+      { time: 9, text: "👑 Лука Модрич дает пас Келяну Мбапе! Килям Бапе забивает гол!!!" },
+      { time: 10, text: "🥅 Матвеев Сафонову! ОДИН НОЛЬ! Ведет Ряо!" },
+      { time: 13, text: "🔄 Разводит Парисмен! Пас Квародхели!" },
+      { time: 16, text: "💨 Кварацхелия своим дриблингом обходит всех! Он видит никого!" },
+      { time: 19, text: "🏃 Все дают ему проход! Кварасхелия бежит, выбегает на страшную зону!" },
+      { time: 22, text: "⚽ Кварасхелия забивает гол!!! Сравняют счет! 1:1!" },
+      { time: 25, text: "🔄 Опять разводим! К Ряо разводит! Пас Джуд Беллингем!" },
+      { time: 28, text: "🎯 Пас Винизиус УЖНР! Винисиус попадает в перекладину!" },
+      { time: 31, text: "💥 Да бе в штангу от Киляном Бапе! Килян Бапе тоже не попадает!" },
+      { time: 34, text: "🧤 Матвей Сафонов отбивает третье удар Джуд Беллингема! Хватает мяч!" },
+      { time: 37, text: "🚀 Бросает его квадрат Хелия! Кварат Хеле бежит, бежит, бежит!" },
+      { time: 40, text: "⚽⚽ ВТОРОЙ ГОЛ!!! Кварасхелия забивает! 2:1! ПСЖ выходит вперед!" },
+      { time: 43, text: "⏸️ Первый тайм окончен! Перерыв 30 минут! Тик-так, тик-так..." },
+      { time: 45, text: "🕐 Перерыв... Игроки отдыхают..." },
+      { time: 50, text: "🕑 Перерыв... Тренеры дают указания..." },
+      { time: 55, text: "🕒 Перерыв почти закончен..." },
+      { time: 60, text: "🔄 Перерыв прошел! Разводит второй тайм Парис Сенджармен!" },
+      { time: 63, text: "🧤 Парис Сенджармен Пас вратарю! Матвей Сафонов выбивает мяч!" },
+      { time: 66, text: "👀 А там уже открываются лучшие нападающие! Но рядом с ними Кварасхели!" },
+      { time: 69, text: "🎯 Это был Пасху Расхели! И Кварас Ели забивает третий гол!!!" },
+      { time: 72, text: "💪 ТРИ ОДИН! Парис Инджимен выигрывает!" },
+      { time: 75, text: "🔄 Опять разводит Ря! Рямадрит! Пас Д Д Джудбелинги!" },
+      { time: 78, text: "⚡ Пасски ляном Мбапе! Келямбапе продвигается! Ударяет от ворот!" },
+      { time: 81, text: "🧤 Матвей Сафон опять выпыливает мяч! Достает опять до Кварацхели!" },
+      { time: 84, text: "⚽⚽⚽⚽ Кварасхели забивает четвертый гол!!! ХЕТ-ТРИК Кварасхели!" },
+      { time: 88, text: "⏰ Матч закончен! Ряо проиграл на своей арене!" },
+      { time: 90, text: "🏆 ГОСТИ ВЫИГРАЛИ! Домовые проиграли! ПСЖ 4:1 Рял Мадрид!" }
+    ];
+
+    let currentCommentaryIndex = 0;
+
+    function showCommentary(text) {
+      commentaryEl.textContent = text;
+      commentaryEl.style.transform = 'translateX(-50%) scale(1.05)';
+      setTimeout(() => {
+        commentaryEl.style.transform = 'translateX(-50%) scale(1)';
+      }, 200);
+    }
+
+    function flashGoal() {
+      goalFlash.style.display = 'block';
+      goalFlash.style.animation = 'none';
+      goalFlash.offsetHeight;
+      goalFlash.style.animation = 'goalPulse 0.8s ease-out';
+      setTimeout(() => {
+        goalFlash.style.display = 'none';
+      }, 800);
+    }
+
+    function updateScoreboard() {
+      document.getElementById('score-ryo').textContent = scoreRyo;
+      document.getElementById('score-psg').textContent = scorePSG;
+      
+      const mins = Math.floor(matchTime);
+      const hours = 9 + Math.floor(mins / 60);
+      const minutes = 27 + (mins % 60);
+      const displayMins = minutes % 60;
+      const displayHours = hours + Math.floor(minutes / 60);
+      
+      if (matchTime < 45) {
+        timeDisplay.textContent = `🕘 ${displayHours}:${displayMins.toString().padStart(2, '0')} | 1-й тайм`;
+      } else if (matchTime < 75) {
+        timeDisplay.textContent = `⏸️ ПЕРЕРЫВ`;
+      } else {
+        timeDisplay.textContent = `🕘 ${displayHours}:${displayMins.toString().padStart(2, '0')} | 2-й тайм`;
+      }
+    }
+
+    // ==================== СОЗДАНИЕ ИГРОКОВ ====================
+    function createPlayers() {
+      players = [];
+      
+      // Рял Мадрид (красные)
+      const ryoPlayers = [
+        { name: 'Килян Бапе', x: canvas.width * 0.7, y: canvas.height * 0.3, team: 'ryo', number: 9 },
+        { name: 'Винисиус', x: canvas.width * 0.75, y: canvas.height * 0.5, team: 'ryo', number: 7 },
+        { name: 'Джудбелингем', x: canvas.width * 0.7, y: canvas.height * 0.7, team: 'ryo', number: 5 },
+        { name: 'Лука Модрич', x: canvas.width * 0.6, y: canvas.height * 0.5, team: 'ryo', number: 10 },
+        { name: 'Вратарь Ряо', x: canvas.width * 0.85, y: canvas.height * 0.5, team: 'ryo', number: 1, isKeeper: true }
+      ];
+      
+      // ПСЖ (синие)
+      const psgPlayers = [
+        { name: 'Кварацхелия', x: canvas.width * 0.2, y: canvas.height * 0.3, team: 'psg', number: 77 },
+        { name: 'Матвей Сафонов', x: canvas.width * 0.1, y: canvas.height * 0.5, team: 'psg', number: 1, isKeeper: true },
+        { name: 'Квародхели', x: canvas.width * 0.25, y: canvas.height * 0.5, team: 'psg', number: 11 },
+        { name: 'Пасху Расхели', x: canvas.width * 0.2, y: canvas.height * 0.7, team: 'psg', number: 22 }
+      ];
+      
+      [...ryoPlayers, ...psgPlayers].forEach(p => {
+        players.push({
+          ...p,
+          baseX: p.x,
+          baseY: p.y,
+          size: p.isKeeper ? 22 : 16,
+          vx: 0,
+          vy: 0,
+          targetX: p.x,
+          targetY: p.y
+        });
+      });
+    }
+
+    function movePlayers() {
+      players.forEach(p => {
+        if (p.isKeeper) {
+          // Вратари двигаются только по вертикали
+          p.targetY = ball.y;
+          p.targetX = p.baseX;
+        } else {
+          // Полевые игроки двигаются к мячу или на позиции
+          const dx = ball.x - p.x;
+          const dy = ball.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist < 200) {
+            p.targetX = ball.x + (Math.random() - 0.5) * 80;
+            p.targetY = ball.y + (Math.random() - 0.5) * 80;
+          } else {
+            p.targetX = p.baseX + Math.sin(matchTime * 0.5 + p.number) * 50;
+            p.targetY = p.baseY + Math.cos(matchTime * 0.5 + p.number) * 30;
+          }
+        }
+        
+        p.x += (p.targetX - p.x) * 0.05;
+        p.y += (p.targetY - p.y) * 0.05;
+      });
+    }
+
+    // ==================== ЛОГИКА МЯЧА ====================
+    function updateBall() {
+      // Мяч следует сценарию
+      const scenarios = [
+        // Гол Ряо (0-10 сек)
+        { time: [0, 9], targetX: canvas.width * 0.85, targetY: canvas.height * 0.5 },
+        // Гол ПСЖ (13-22 сек)
+        { time: [13, 21], targetX: canvas.width * 0.12, targetY: canvas.height * 0.5 },
+        // Штанга (25-34 сек)
+        { time: [25, 33], targetX: canvas.width * 0.15, targetY: canvas.height * 0.4 },
+        // Второй гол ПСЖ (37-40 сек)
+        { time: [37, 40], targetX: canvas.width * 0.1, targetY: canvas.height * 0.5 },
+        // Третий гол ПСЖ (63-69 сек)
+        { time: [63, 69], targetX: canvas.width * 0.1, targetY: canvas.height * 0.5 },
+        // Четвертый гол ПСЖ (81-84 сек)
+        { time: [81, 84], targetX: canvas.width * 0.1, targetY: canvas.height * 0.5 }
+      ];
+
+      let targetX = ball.x;
+      let targetY = ball.y;
+
+      for (let scenario of scenarios) {
+        if (matchTime >= scenario.time[0] && matchTime <= scenario.time[1]) {
+          targetX = scenario.targetX;
+          targetY = scenario.targetY;
+          break;
+        }
+      }
+
+      // Случайное движение между сценариями
+      if (targetX === ball.x && targetY === ball.y) {
+        targetX = canvas.width / 2 + Math.sin(matchTime * 0.3) * 200;
+        targetY = canvas.height / 2 + Math.cos(matchTime * 0.3) * 150;
+      }
+
+      ball.x += (targetX - ball.x) * 0.08;
+      ball.y += (targetY - ball.y) * 0.08;
+    }
+
+    // ==================== СОБЫТИЯ ГОЛОВ ====================
+    const goalEvents = [
+      { time: 10, scorer: 'ryo', text: "⚽ ГОЛ! Килям Бапе забивает! 1:0!" },
+      { time: 22, scorer: 'psg', text: "⚽ ГОЛ! Кварасхелия сравнивает! 1:1!" },
+      { time: 40, scorer: 'psg', text: "⚽ ГОЛ! Кварасхелия оформляет дубль! 2:1!" },
+      { time: 69, scorer: 'psg', text: "⚽ ГОЛ! Хет-трик Кварасхелии! 3:1!" },
+      { time: 84, scorer: 'psg', text: "⚽ ГОЛ! Кварасхелия забивает четвертый! 4:1!" }
+    ];
+
+    let goalsTriggered = new Set();
+
+    function checkGoals() {
+      for (let event of goalEvents) {
+        if (matchTime >= event.time && !goalsTriggered.has(event.time)) {
+          goalsTriggered.add(event.time);
+          
+          if (event.scorer === 'ryo') {
+            scoreRyo++;
+          } else {
+            scorePSG++;
+          }
+          
+          showCommentary(event.text);
+          flashGoal();
+          updateScoreboard();
+        }
+      }
+    }
+
+    // ==================== ОСНОВНОЙ ЦИКЛ ====================
+    function update() {
+      if (!matchRunning || matchPaused) return;
+      
+      matchTime += 0.05 * gameSpeed;
+      
+      // Проверка голов
+      checkGoals();
+      
+      // Обновление комментария
+      if (currentCommentaryIndex < commentaryLines.length) {
+        if (matchTime >= commentaryLines[currentCommentaryIndex].time) {
+          showCommentary(commentaryLines[currentCommentaryIndex].text);
+          currentCommentaryIndex++;
+        }
+      }
+      
+      // Завершение матча
+      if (matchTime >= 90 && matchRunning) {
+        matchRunning = false;
+        showCommentary("🏆 МАТЧ ОКОНЧЕН! ПСЖ 4:1 Рял Мадрид! Гости выиграли, домовые проиграли!");
+        updateScoreboard();
+      }
+      
+      movePlayers();
+      updateBall();
+      updateScoreboard();
+    }
+
+    function draw() {
+      // Газон
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#2d5a27');
+      gradient.addColorStop(0.5, '#3a7a33');
+      gradient.addColorStop(1, '#2d5a27');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Полосы газона
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      for (let i = 0; i < canvas.width; i += 80) {
+        if (Math.floor(i / 80) % 2 === 0) {
+          ctx.fillRect(i, 0, 80, canvas.height);
+        }
+      }
+      
+      // Разметка поля
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(50, 30, canvas.width - 100, canvas.height - 60);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 30);
+      ctx.lineTo(canvas.width / 2, canvas.height - 30);
+      ctx.stroke();
+      
+      // Центральный круг
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Штрафные
+      ctx.strokeRect(50, canvas.height / 2 - 120, 120, 240);
+      ctx.strokeRect(canvas.width - 170, canvas.height / 2 - 120, 120, 240);
+      
+      // Ворота
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillRect(10, canvas.height / 2 - 80, 40, 160);
+      ctx.fillRect(canvas.width - 50, canvas.height / 2 - 80, 40, 160);
+      ctx.strokeStyle = 'white';
+      ctx.strokeRect(10, canvas.height / 2 - 80, 40, 160);
+      ctx.strokeRect(canvas.width - 50, canvas.height / 2 - 80, 40, 160);
+      
+      // Игроки
+      players.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        // Тень
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 8;
+        
+        // Тело
+        ctx.fillStyle = p.team === 'ryo' ? '#ff4444' : '#4488ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Номер
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.number, 0, 4);
+        
+        // Имя
+        ctx.font = '8px Arial';
+        ctx.fillText(p.name, 0, p.size + 12);
+        
+        ctx.restore();
+      });
+      
+      // Мяч
+      ctx.save();
+      ctx.translate(ball.x, ball.y);
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Узор мяча
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // Название стадиона
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('🏟️ САНТИАНГА БАРНЕБЕО', canvas.width / 2, 25);
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function speedUp() {
+      gameSpeed = Math.min(gameSpeed * 2, 16);
+      showCommentary(`⏩ Скорость: ×${gameSpeed}`);
+    }
+
+    function slowDown() {
+      gameSpeed = Math.max(gameSpeed / 2, 0.25);
+      showCommentary(`⏪ Скорость: ×${gameSpeed}`);
+    }
+
+    function restartMatch() {
+      scoreRyo = 0;
+      scorePSG = 0;
+      matchTime = 0;
+      half = 1;
+      matchRunning = true;
+      matchPaused = false;
+      gameSpeed = 1;
+      goalsTriggered.clear();
+      currentCommentaryIndex = 0;
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      createPlayers();
+      updateScoreboard();
+      showCommentary("🎙️ Разводит Ряо! Матч начинается!");
+    }
+
+    // Запуск
+    createPlayers();
+    updateScoreboard();
+    gameLoop();
+
+    console.log('🏟️ Сантианга Барнебео • ПСЖ vs Рял Мадрид');
+    console.log('⚽ Смотри легендарный матч!');
+  </script>
+</body>
+</html>

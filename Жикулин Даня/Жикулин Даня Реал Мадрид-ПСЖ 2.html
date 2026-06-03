@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Сантианга Барнебео • Случайный матч</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a3a1a;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 15px;
+      z-index: 10;
+      pointer-events: none;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .scoreboard {
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      padding: 12px 20px;
+      border-radius: 20px;
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+      border: 3px solid #ffd700;
+      box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+    }
+
+    .scoreboard .score {
+      font-size: 44px;
+      color: #ffd700;
+      text-shadow: 0 0 20px #ffd700;
+    }
+
+    .stat-box {
+      background: rgba(0, 0, 0, 0.8);
+      padding: 8px 15px;
+      border-radius: 15px;
+      color: white;
+      font-size: 14px;
+      text-align: center;
+      border: 2px solid #888;
+    }
+
+    .commentary {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: #00ff88;
+      padding: 12px 22px;
+      border-radius: 20px;
+      z-index: 10;
+      font-size: 15px;
+      text-align: center;
+      max-width: 90%;
+      border: 2px solid #00ff88;
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+      pointer-events: none;
+      transition: all 0.3s;
+    }
+
+    #time-display {
+      color: #ffd700;
+      font-size: 16px;
+    }
+
+    .controls {
+      position: fixed;
+      top: 50%;
+      right: 15px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    button {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border: 2px solid #ffd700;
+      padding: 10px 16px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      transition: 0.2s;
+      font-family: inherit;
+    }
+
+    button:hover {
+      background: #ffd700;
+      color: black;
+      box-shadow: 0 0 20px #ffd700;
+    }
+
+    #goal-flash {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 64px;
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+    }
+
+    @keyframes goalPulse {
+      0% { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 1; }
+      50% { transform: translate(-50%, -50%) scale(1.8) rotate(180deg); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(2.5) rotate(360deg); opacity: 0; }
+    }
+
+    #events-log {
+      position: fixed;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 15;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .event-item {
+      background: rgba(0,0,0,0.7);
+      color: #ffd700;
+      padding: 5px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="scoreboard">
+      🏟️ Сантианга Барнебео<br>
+      <span style="color:#ff6b6b">Рял Мадрид</span> 
+      <span class="score" id="score-ryo">0</span> - 
+      <span class="score" id="score-psg">0</span> 
+      <span style="color:#4da6ff">ПСЖ</span><br>
+      <div id="time-display">🕘 9:27 | 1-й тайм</div>
+    </div>
+    <div class="stat-box">
+      🎯 Удары: <span id="shots">0</span><br>
+      🧤 Сейвы: <span id="saves">0</span>
+    </div>
+    <div class="stat-box">
+      🔄 Владение<br>
+      <span id="possession">50% / 50%</span>
+    </div>
+  </div>
+
+  <div class="commentary" id="commentary">
+    🎙️ Случайный матч начинается! Всё может случиться!
+  </div>
+
+  <div id="goal-flash">⚽</div>
+  <div id="events-log"></div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="controls">
+    <button onclick="changeSpeed(2)">⏩ ×2</button>
+    <button onclick="changeSpeed(0.5)">⏪ ×0.5</button>
+    <button onclick="changeSpeed(1)">▶️ ×1</button>
+    <button onclick="restartMatch()">🔄 Новый матч</button>
+    <button onclick="triggerRandomEvent()">🎲 Случайное событие</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ==================== СОСТОЯНИЕ МАТЧА ====================
+    let scoreRyo = 0;
+    let scorePSG = 0;
+    let matchTime = 0;
+    let matchRunning = true;
+    let gameSpeed = 1;
+    let totalShots = 0;
+    let totalSaves = 0;
+    let possessionRyo = 50;
+
+    // Игроки
+    let players = [];
+    let ball = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      vx: 0,
+      vy: 0,
+      size: 12,
+      lastTouched: null
+    };
+
+    // Случайные факторы
+    let wind = { x: 0, y: 0 };
+    let pitchCondition = 1.0; // 1.0 = идеальное, < 1.0 = скользкое
+    let crowdExcitement = 5;
+
+    // ==================== СЛУЧАЙНЫЕ СОБЫТИЯ ====================
+    const randomEvents = [
+      "🔥 Трибуны взорвались! Атмосфера накаляется!",
+      "💨 Ветер усилился! Мяч ведёт себя непредсказуемо!",
+      "🟨 Жёлтая карточка! Грубая игра!",
+      "🟥 КРАСНАЯ КАРТОЧКА!!! Кто-то удалён!",
+      "🤕 Игрок лежит на газоне... Врачи выбегают!",
+      "🌈 Над стадионом появилась радуга!",
+      "📱 Кто-то из игроков проверяет телефон!",
+      "🍿 Зрители едят попкорн и не смотрят на поле!",
+      "🐕 На поле выбежала собака!",
+      "⚡ Молния ударила рядом со стадионом!",
+      "🎉 Фанаты запустили фейерверки!",
+      "💃 Танцующий болельщик на трибуне!",
+      "🎵 По стадиону играет громкая музыка!",
+      "🤝 Игроки обнимаются после стычки!",
+      "🧤 Вратарь делает невероятный сейв!"
+    ];
+
+    const playerNamesRyo = [
+      'Килян Бапе', 'Винисиус Жуниор', 'Джудбелингем', 
+      'Лука Модрич', 'Родриго', 'Вальверде', 'Куртуа'
+    ];
+
+    const playerNamesPSG = [
+      'Кварацхелия', 'Матвей Сафонов', 'Квародхели',
+      'Пасху Расхели', 'Дембеле', 'Хакими', 'Маркиньос'
+    ];
+
+    function randomCommentary() {
+      const phrases = [
+        "Мяч уходит в аут!",
+        "Опасный момент у ворот!",
+        "Игроки борются за мяч в центре поля!",
+        "Пас! Пас! Ещё пас!",
+        "Дриблинг! Обходит одного, второго!",
+        "Удар! Мимо ворот!",
+        "Угловой удар!",
+        "Штанга! Мяч попадает в штангу!",
+        "Вратарь выходит из ворот!",
+        "Контратака! Опасная контратака!",
+        "Навес в штрафную!",
+        "Защитник выбивает мяч головой!",
+        "Судья свистит! Нарушение правил!",
+        "Штрафной удар! Опасная позиция!",
+        "Игроки требуют пенальти! Судья не реагирует!"
+      ];
+      return phrases[Math.floor(Math.random() * phrases.length)];
+    }
+
+    function triggerRandomEvent() {
+      const event = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+      showCommentary(event);
+      addEventLog(event);
+      
+      // Случайные эффекты
+      if (Math.random() < 0.3) {
+        wind.x = (Math.random() - 0.5) * 10;
+        wind.y = (Math.random() - 0.5) * 10;
+      }
+      if (Math.random() < 0.2) {
+        pitchCondition = 0.5 + Math.random() * 0.5;
+      }
+      crowdExcitement = Math.floor(Math.random() * 10) + 1;
+    }
+
+    function addEventLog(text) {
+      const log = document.getElementById('events-log');
+      const item = document.createElement('div');
+      item.className = 'event-item';
+      item.textContent = text;
+      log.appendChild(item);
+      
+      setTimeout(() => {
+        item.style.opacity = '0';
+        item.style.transition = 'opacity 1s';
+        setTimeout(() => item.remove(), 1000);
+      }, 3000);
+    }
+
+    // ==================== КОММЕНТАРИЙ ====================
+    const commentaryEl = document.getElementById('commentary');
+    const timeDisplay = document.getElementById('time-display');
+    const goalFlash = document.getElementById('goal-flash');
+
+    function showCommentary(text) {
+      commentaryEl.textContent = text;
+      commentaryEl.style.transform = 'translateX(-50%) scale(1.05)';
+      setTimeout(() => {
+        commentaryEl.style.transform = 'translateX(-50%) scale(1)';
+      }, 200);
+    }
+
+    function flashGoal() {
+      goalFlash.style.display = 'block';
+      goalFlash.style.animation = 'none';
+      goalFlash.offsetHeight;
+      goalFlash.style.animation = 'goalPulse 0.8s ease-out';
+      setTimeout(() => {
+        goalFlash.style.display = 'none';
+      }, 800);
+    }
+
+    function updateScoreboard() {
+      document.getElementById('score-ryo').textContent = scoreRyo;
+      document.getElementById('score-psg').textContent = scorePSG;
+      document.getElementById('shots').textContent = totalShots;
+      document.getElementById('saves').textContent = totalSaves;
+      document.getElementById('possession').textContent = `${Math.round(possessionRyo)}% / ${Math.round(100-possessionRyo)}%`;
+      
+      const mins = Math.floor(matchTime);
+      const hours = 9 + Math.floor(mins / 60);
+      const minutes = 27 + (mins % 60);
+      const displayMins = minutes % 60;
+      const displayHours = hours + Math.floor(minutes / 60);
+      
+      if (matchTime < 45) {
+        timeDisplay.textContent = `🕘 ${displayHours}:${displayMins.toString().padStart(2, '0')} | 1-й тайм`;
+      } else if (matchTime < 60) {
+        timeDisplay.textContent = `⏸️ ПЕРЕРЫВ`;
+      } else if (matchTime < 105) {
+        timeDisplay.textContent = `🕘 ${displayHours}:${displayMins.toString().padStart(2, '0')} | 2-й тайм`;
+      } else {
+        timeDisplay.textContent = `🏁 Матч окончен`;
+      }
+    }
+
+    // ==================== СОЗДАНИЕ ИГРОКОВ ====================
+    function createPlayers() {
+      players = [];
+      
+      // Рял Мадрид
+      playerNamesRyo.forEach((name, i) => {
+        const isKeeper = i === 6;
+        players.push({
+          name,
+          x: canvas.width * (0.55 + Math.random() * 0.3),
+          y: canvas.height * (0.1 + Math.random() * 0.8),
+          team: 'ryo',
+          number: [9,7,5,10,11,8,1][i] || Math.floor(Math.random()*20)+1,
+          size: isKeeper ? 22 : 16,
+          isKeeper,
+          baseX: canvas.width * (0.55 + i * 0.04),
+          baseY: canvas.height * (0.15 + i * 0.12),
+          speed: 1 + Math.random() * 2,
+          targetX: 0,
+          targetY: 0,
+          vx: 0,
+          vy: 0,
+          energy: 100,
+          morale: 50 + Math.random() * 50
+        });
+      });
+      
+      // ПСЖ
+      playerNamesPSG.forEach((name, i) => {
+        const isKeeper = i === 1;
+        players.push({
+          name,
+          x: canvas.width * (0.1 + Math.random() * 0.3),
+          y: canvas.height * (0.1 + Math.random() * 0.8),
+          team: 'psg',
+          number: [77,1,11,22,10,2,5][i] || Math.floor(Math.random()*20)+1,
+          size: isKeeper ? 22 : 16,
+          isKeeper,
+          baseX: canvas.width * (0.15 + i * 0.04),
+          baseY: canvas.height * (0.15 + i * 0.12),
+          speed: 1 + Math.random() * 2,
+          targetX: 0,
+          targetY: 0,
+          vx: 0,
+          vy: 0,
+          energy: 100,
+          morale: 50 + Math.random() * 50
+        });
+      });
+      
+      players.forEach(p => {
+        p.targetX = p.x;
+        p.targetY = p.y;
+      });
+    }
+
+    function movePlayers() {
+      players.forEach(p => {
+        if (p.energy < 100) p.energy += 0.01;
+        
+        const dx = ball.x - p.x;
+        const dy = ball.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Случайное поведение
+        if (Math.random() < 0.005) {
+          p.morale += (Math.random() - 0.5) * 20;
+          p.morale = Math.max(0, Math.min(100, p.morale));
+        }
+        
+        if (p.isKeeper) {
+          p.targetY = ball.y + (Math.random() - 0.5) * 40;
+          p.targetX = p.baseX + (Math.random() - 0.5) * 20;
+        } else if (dist < 150 && Math.random() < 0.7) {
+          p.targetX = ball.x + (Math.random() - 0.5) * 60;
+          p.targetY = ball.y + (Math.random() - 0.5) * 60;
+        } else {
+          p.targetX = p.baseX + Math.sin(matchTime * 0.3 + p.number) * 60 + (Math.random() - 0.5) * 30;
+          p.targetY = p.baseY + Math.cos(matchTime * 0.3 + p.number) * 40 + (Math.random() - 0.5) * 30;
+        }
+        
+        const moveSpeed = p.speed * p.energy / 100 * pitchCondition;
+        p.x += (p.targetX - p.x) * 0.03 * moveSpeed;
+        p.y += (p.targetY - p.y) * 0.03 * moveSpeed;
+        
+        // Границы поля
+        p.x = Math.max(30, Math.min(canvas.width - 30, p.x));
+        p.y = Math.max(30, Math.min(canvas.height - 30, p.y));
+      });
+    }
+
+    // ==================== ЛОГИКА МЯЧА ====================
+    function updateBall() {
+      // Случайные касания мяча
+      if (Math.random() < 0.02) {
+        const touchingPlayer = players[Math.floor(Math.random() * players.length)];
+        if (!touchingPlayer.isKeeper || Math.random() < 0.3) {
+          ball.lastTouched = touchingPlayer.team;
+          
+          if (Math.random() < 0.1) {
+            // Удар по воротам
+            totalShots++;
+            const targetX = touchingPlayer.team === 'ryo' ? canvas.width - 40 : 40;
+            const targetY = canvas.height / 2 + (Math.random() - 0.5) * 200;
+            ball.vx = (targetX - ball.x) * 0.3;
+            ball.vy = (targetY - ball.y) * 0.3;
+            
+            if (Math.random() < 0.3) {
+              // ГОЛ!
+              if (touchingPlayer.team === 'ryo') scoreRyo++;
+              else scorePSG++;
+              
+              const scorer = touchingPlayer.name;
+              showCommentary(`⚽ ГООООЛ!!! ${scorer} забивает!!! Счёт ${scoreRyo}:${scorePSG}!`);
+              flashGoal();
+              addEventLog(`⚽ Гол! ${scorer} (${scoreRyo}:${scorePSG})`);
+              
+              // Сброс мяча в центр
+              ball.x = canvas.width / 2;
+              ball.y = canvas.height / 2;
+              ball.vx = 0;
+              ball.vy = 0;
+              
+              // Случайное изменение владения
+              possessionRyo = Math.random() * 100;
+            } else if (Math.random() < 0.5) {
+              // Сейв
+              totalSaves++;
+              const keeper = players.find(p => p.isKeeper && p.team !== touchingPlayer.team);
+              if (keeper) {
+                showCommentary(`🧤 ${keeper.name} делает сейв! Невероятно!`);
+                addEventLog(`🧤 Сейв ${keeper.name}`);
+              }
+            }
+          }
+        }
+      }
+      
+      // Движение мяча с ветром
+      ball.vx += wind.x * 0.01;
+      ball.vy += wind.y * 0.01;
+      
+      // Трение
+      ball.vx *= 0.95;
+      ball.vy *= 0.95;
+      
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+      
+      // Отскок от границ
+      if (ball.x < 30 || ball.x > canvas.width - 30) ball.vx *= -0.8;
+      if (ball.y < 30 || ball.y > canvas.height - 30) ball.vy *= -0.8;
+      
+      ball.x = Math.max(20, Math.min(canvas.width - 20, ball.x));
+      ball.y = Math.max(20, Math.min(canvas.height - 20, ball.y));
+      
+      // Случайный комментарий
+      if (Math.random() < 0.003) {
+        showCommentary(randomCommentary());
+      }
+      
+      // Случайное событие
+      if (Math.random() < 0.001) {
+        triggerRandomEvent();
+      }
+    }
+
+    // ==================== ОСНОВНОЙ ЦИКЛ ====================
+    function update() {
+      if (!matchRunning) return;
+      
+      matchTime += 0.05 * gameSpeed;
+      
+      // Перерыв
+      if (matchTime >= 45 && matchTime < 60) {
+        if (matchTime - 0.05 * gameSpeed < 45) {
+          showCommentary("⏸️ ПЕРЕРЫВ! Игроки отдыхают 15 минут!");
+          addEventLog("⏸️ Перерыв");
+        }
+      }
+      
+      // Конец матча
+      if (matchTime >= 105) {
+        matchRunning = false;
+        const winner = scoreRyo > scorePSG ? 'Рял Мадрид' : (scorePSG > scoreRyo ? 'ПСЖ' : 'Ничья');
+        showCommentary(`🏆 МАТЧ ОКОНЧЕН! ${winner}! Итоговый счёт ${scoreRyo}:${scorePSG}!`);
+        addEventLog(`🏁 Финал: ${scoreRyo}:${scorePSG}`);
+        updateScoreboard();
+        return;
+      }
+      
+      // Случайное владение
+      possessionRyo += (Math.random() - 0.5) * 2;
+      possessionRyo = Math.max(20, Math.min(80, possessionRyo));
+      
+      movePlayers();
+      updateBall();
+      updateScoreboard();
+      
+      // Постепенное затухание ветра
+      wind.x *= 0.99;
+      wind.y *= 0.99;
+    }
+
+    function draw() {
+      // Газон
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#2d5a27');
+      gradient.addColorStop(0.5, '#3a7a33');
+      gradient.addColorStop(1, '#2d5a27');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Эффект погоды
+      if (pitchCondition < 0.8) {
+        ctx.fillStyle = 'rgba(200, 200, 255, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Полосы газона
+      for (let i = 0; i < canvas.width; i += 80) {
+        if (Math.floor(i / 80) % 2 === 0) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+          ctx.fillRect(i, 0, 80, canvas.height);
+        }
+      }
+      
+      // Разметка
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(50, 30, canvas.width - 100, canvas.height - 60);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 30);
+      ctx.lineTo(canvas.width / 2, canvas.height - 30);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeRect(50, canvas.height / 2 - 120, 120, 240);
+      ctx.strokeRect(canvas.width - 170, canvas.height / 2 - 120, 120, 240);
+      
+      // Ворота
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillRect(10, canvas.height / 2 - 80, 40, 160);
+      ctx.fillRect(canvas.width - 50, canvas.height / 2 - 80, 40, 160);
+      
+      // Игроки
+      players.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 6;
+        
+        ctx.fillStyle = p.team === 'ryo' ? '#ff4444' : '#4488ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Индикатор энергии
+        if (p.energy < 50) {
+          ctx.fillStyle = 'rgba(255,255,0,0.5)';
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size + 3, 0, Math.PI * 2 * p.energy/100);
+          ctx.strokeStyle = '#ff0';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.number, 0, 3);
+        ctx.font = '7px Arial';
+        ctx.fillText(p.name.split(' ')[0], 0, p.size + 10);
+        
+        ctx.restore();
+      });
+      
+      // Мяч
+      ctx.save();
+      ctx.translate(ball.x, ball.y);
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 8;
+      
+      // Эффект скорости мяча
+      const ballSpeed = Math.sqrt(ball.vx**2 + ball.vy**2);
+      if (ballSpeed > 5) {
+        ctx.strokeStyle = 'rgba(255,255,0,0.6)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, ball.size + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // Ветер (визуализация)
+      if (Math.abs(wind.x) > 1 || Math.abs(wind.y) > 1) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 5; i++) {
+          const wx = Math.random() * canvas.width;
+          const wy = Math.random() * canvas.height;
+          ctx.beginPath();
+          ctx.moveTo(wx, wy);
+          ctx.lineTo(wx + wind.x * 5, wy + wind.y * 5);
+          ctx.stroke();
+        }
+      }
+      
+      // Название стадиона
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('🏟️ САНТИАНГА БАРНЕБЕО', canvas.width / 2, 25);
+      
+      // Crowd excitement
+      if (crowdExcitement > 7) {
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function changeSpeed(speed) {
+      gameSpeed = speed;
+      showCommentary(`⏩ Скорость: ×${speed}`);
+    }
+
+    function restartMatch() {
+      scoreRyo = 0;
+      scorePSG = 0;
+      matchTime = 0;
+      matchRunning = true;
+      gameSpeed = 1;
+      totalShots = 0;
+      totalSaves = 0;
+      possessionRyo = 50;
+      wind = { x: 0, y: 0 };
+      pitchCondition = 0.8 + Math.random() * 0.2;
+      crowdExcitement = 5;
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.vx = 0;
+      ball.vy = 0;
+      ball.lastTouched = null;
+      document.getElementById('events-log').innerHTML = '';
+      createPlayers();
+      updateScoreboard();
+      showCommentary("🎲 НОВЫЙ СЛУЧАЙНЫЙ МАТЧ! Всё может случиться!");
+      addEventLog("🔄 Новый матч");
+    }
+
+    // Запуск
+    createPlayers();
+    updateScoreboard();
+    gameLoop();
+
+    console.log('🏟️ Сантианга Барнебео • СЛУЧАЙНЫЙ МАТЧ');
+    console.log('🎲 Каждый матч уникален!');
+    console.log('💡 Нажми "Случайное событие" для сюрпризов!');
+  </script>
+</body>
+</html>

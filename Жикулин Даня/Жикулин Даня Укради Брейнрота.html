@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Укради Брейнрот • Медленная версия</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      overflow: hidden;
+      font-family: 'Comic Sans MS', 'Segoe UI', sans-serif;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .ui-card {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      padding: 12px 24px;
+      border-radius: 20px;
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      border: 3px solid #ff69b4;
+      text-shadow: 0 0 10px #ff69b4;
+      box-shadow: 0 0 20px rgba(255, 105, 180, 0.4);
+      text-align: center;
+    }
+
+    .ui-card.brainrot {
+      border-color: #00ff88;
+      text-shadow: 0 0 10px #00ff88;
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+    }
+
+    .ui-card.speed {
+      border-color: #ffff00;
+      text-shadow: 0 0 10px #ffff00;
+      box-shadow: 0 0 20px rgba(255, 255, 0, 0.4);
+      font-size: 16px;
+    }
+
+    #instructions {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 20px;
+      border-radius: 25px;
+      z-index: 10;
+      font-size: 14px;
+      text-align: center;
+      pointer-events: none;
+      border: 2px solid #ff69b4;
+    }
+
+    #game-over {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 40px;
+      border-radius: 30px;
+      z-index: 20;
+      text-align: center;
+      display: none;
+      border: 4px solid #ff4444;
+      box-shadow: 0 0 50px rgba(255, 0, 0, 0.6);
+    }
+
+    #game-over h2 {
+      font-size: 36px;
+      color: #ff4444;
+      margin-bottom: 15px;
+      text-shadow: 0 0 20px #ff0000;
+    }
+
+    #game-over button {
+      background: #ff69b4;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 22px;
+      border-radius: 30px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 15px;
+      transition: 0.2s;
+      font-family: inherit;
+    }
+
+    #game-over button:hover {
+      background: #ff1493;
+      transform: scale(1.1);
+      box-shadow: 0 0 30px #ff69b4;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="ui-card brainrot">🧠 Брейнрот: <span id="score">0</span></div>
+    <div class="ui-card">⏱️ <span id="timer">600</span>с</div>
+    <div class="ui-card speed">🐌 ×0.1 скорость</div>
+  </div>
+
+  <div id="instructions">
+    🏃 WASD - бегать | 🧠 Собирай Скибиди Туалеты и Сигма-кубы<br>
+    👮 Уклоняйся от Анти-Брейнрот Стражников! (очень медленных)
+  </div>
+
+  <div id="game-over">
+    <h2>💀 ТЕБЯ ПОЙМАЛИ!</h2>
+    <p>Ты украл <span id="final-score">0</span> брейнротов!</p>
+    <p style="color:#ff69b4; font-size:18px;">Это очень сигма!</p>
+    <button onclick="restartGame()">🔄 ИГРАТЬ СНОВА</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Размер канваса
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ==================== КОНСТАНТЫ СКОРОСТИ ====================
+    const SPEED_MULTIPLIER = 0.1; // В 10 раз медленнее!
+    
+    // ==================== ИГРОВЫЕ ПЕРЕМЕННЫЕ ====================
+    let player = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      size: 40,
+      speed: 8 * SPEED_MULTIPLIER  // Было 5, теперь 0.5 (игрок тоже медленнее для баланса)
+    };
+
+    let brainrots = [];
+    let guards = [];
+    let score = 0;
+    let timeLeft = 600; // 10 минут вместо 60 секунд
+    let gameRunning = true;
+    let gameOver = false;
+
+    // Таймеры спавна (замедлены)
+    let brainrotSpawnTimer = 0;
+    let guardSpawnTimer = 0;
+    
+    const BRAINROT_SPAWN_RATE = 400; // Было 40, теперь 400
+    const GUARD_SPAWN_RATE = 1200;   // Было 120, теперь 1200
+
+    // Клавиши
+    const keys = {
+      w: false, a: false, s: false, d: false
+    };
+
+    // ==================== КЛАССЫ ПРЕДМЕТОВ ====================
+    class Brainrot {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 30;
+        this.type = Math.random() > 0.5 ? 'skibidi' : 'sigma';
+        this.bobOffset = Math.random() * Math.PI * 2;
+        this.collected = false;
+      }
+
+      update() {
+        this.bobOffset += 0.02 * SPEED_MULTIPLIER; // Медленная анимация
+      }
+
+      draw(ctx) {
+        const bob = Math.sin(this.bobOffset) * 5;
+        
+        ctx.save();
+        ctx.translate(this.x, this.y + bob);
+        
+        if (this.type === 'skibidi') {
+          // Скибиди Туалет
+          ctx.fillStyle = '#ff69b4';
+          ctx.beginPath();
+          ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'white';
+          ctx.font = '20px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('🚽', 0, 8);
+        } else {
+          // Сигма-куб
+          ctx.fillStyle = '#00ff88';
+          ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+          ctx.fillStyle = 'white';
+          ctx.font = '18px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('🗿', 0, 6);
+        }
+        
+        // Свечение
+        ctx.shadowColor = this.type === 'skibidi' ? '#ff69b4' : '#00ff88';
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = ctx.shadowColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size / 2 + 2, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+    }
+
+    class Guard {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 45;
+        this.speed = (1.5 + Math.random() * 1.5) * SPEED_MULTIPLIER; // Очень медленные!
+        this.angle = Math.random() * Math.PI * 2;
+        this.patrolTimer = Math.random() * 100;
+      }
+
+      update(playerX, playerY) {
+        this.patrolTimer++;
+        
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 300) {
+          // Медленное преследование
+          const angle = Math.atan2(dy, dx);
+          this.x += Math.cos(angle) * this.speed * 1.2;
+          this.y += Math.sin(angle) * this.speed * 1.2;
+        } else {
+          // Медленное патрулирование
+          this.x += Math.cos(this.angle) * this.speed * 0.3;
+          this.y += Math.sin(this.angle) * this.speed * 0.3;
+          
+          if (this.patrolTimer > 300) { // Меняют направление реже
+            this.angle = Math.random() * Math.PI * 2;
+            this.patrolTimer = 0;
+          }
+        }
+        
+        // Отскок от стен
+        if (this.x < this.size) this.x = this.size;
+        if (this.x > canvas.width - this.size) this.x = canvas.width - this.size;
+        if (this.y < this.size) this.y = this.size;
+        if (this.y > canvas.height - this.size) this.y = canvas.height - this.size;
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Тело стражника
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Значок "Анти-брейнрот"
+        ctx.fillStyle = 'white';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('👮', 0, 8);
+        
+        // Красное свечение
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size / 2 + 2, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+    }
+
+    // ==================== ФУНКЦИИ ====================
+    function spawnBrainrot() {
+      const x = Math.random() * (canvas.width - 60) + 30;
+      const y = Math.random() * (canvas.height - 60) + 30;
+      brainrots.push(new Brainrot(x, y));
+    }
+
+    function spawnGuard() {
+      let x, y;
+      const side = Math.floor(Math.random() * 4);
+      switch(side) {
+        case 0: x = Math.random() * canvas.width; y = -40; break;
+        case 1: x = canvas.width + 40; y = Math.random() * canvas.height; break;
+        case 2: x = Math.random() * canvas.width; y = canvas.height + 40; break;
+        case 3: x = -40; y = Math.random() * canvas.height; break;
+      }
+      guards.push(new Guard(x, y));
+    }
+
+    function checkCollision(a, b, aSize, bSize) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return dist < (aSize + bSize) / 2;
+    }
+
+    function restartGame() {
+      player.x = canvas.width / 2;
+      player.y = canvas.height / 2;
+      brainrots = [];
+      guards = [];
+      score = 0;
+      timeLeft = 600; // 10 минут
+      gameRunning = true;
+      gameOver = false;
+      brainrotSpawnTimer = 0;
+      guardSpawnTimer = 0;
+      document.getElementById('game-over').style.display = 'none';
+      updateUI();
+      
+      // Начальные предметы
+      for (let i = 0; i < 5; i++) spawnBrainrot();
+      for (let i = 0; i < 2; i++) spawnGuard();
+    }
+
+    function updateUI() {
+      document.getElementById('score').textContent = score;
+      const seconds = Math.ceil(timeLeft);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      document.getElementById('timer').textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function endGame() {
+      gameRunning = false;
+      gameOver = true;
+      document.getElementById('final-score').textContent = score;
+      document.getElementById('game-over').style.display = 'block';
+    }
+
+    // ==================== ОБРАБОТЧИКИ КЛАВИШ ====================
+    document.addEventListener('keydown', (e) => {
+      switch(e.key.toLowerCase()) {
+        case 'w': keys.w = true; break;
+        case 'a': keys.a = true; break;
+        case 's': keys.s = true; break;
+        case 'd': keys.d = true; break;
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      switch(e.key.toLowerCase()) {
+        case 'w': keys.w = false; break;
+        case 'a': keys.a = false; break;
+        case 's': keys.s = false; break;
+        case 'd': keys.d = false; break;
+      }
+    });
+
+    // ==================== ИГРОВОЙ ЦИКЛ ====================
+    function update() {
+      if (!gameRunning) return;
+      
+      // Таймер (медленный)
+      timeLeft -= 1/60;
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        endGame();
+        return;
+      }
+      
+      // Движение игрока
+      let dx = 0, dy = 0;
+      if (keys.w) dy -= 1;
+      if (keys.s) dy += 1;
+      if (keys.a) dx -= 1;
+      if (keys.d) dx += 1;
+      
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.sqrt(dx * dx + dy * dy);
+        dx /= len;
+        dy /= len;
+      }
+      
+      player.x += dx * player.speed;
+      player.y += dy * player.speed;
+      
+      // Границы
+      if (player.x < player.size) player.x = player.size;
+      if (player.x > canvas.width - player.size) player.x = canvas.width - player.size;
+      if (player.y < player.size) player.y = player.size;
+      if (player.y > canvas.height - player.size) player.y = canvas.height - player.size;
+      
+      // Спавн предметов (очень медленный)
+      brainrotSpawnTimer++;
+      if (brainrotSpawnTimer > BRAINROT_SPAWN_RATE && brainrots.length < 10) {
+        spawnBrainrot();
+        brainrotSpawnTimer = 0;
+      }
+      
+      guardSpawnTimer++;
+      if (guardSpawnTimer > GUARD_SPAWN_RATE && guards.length < 5) {
+        spawnGuard();
+        guardSpawnTimer = 0;
+      }
+      
+      // Обновление брейнротов
+      brainrots.forEach(b => b.update());
+      
+      // Обновление стражников
+      guards.forEach(g => g.update(player.x, player.y));
+      
+      // Сбор брейнротов
+      for (let i = brainrots.length - 1; i >= 0; i--) {
+        if (checkCollision(player, brainrots[i], player.size, brainrots[i].size)) {
+          score += brainrots[i].type === 'skibidi' ? 10 : 15;
+          brainrots.splice(i, 1);
+          updateUI();
+        }
+      }
+      
+      // Столкновение со стражниками
+      for (let i = guards.length - 1; i >= 0; i--) {
+        if (checkCollision(player, guards[i], player.size, guards[i].size)) {
+          endGame();
+          return;
+        }
+      }
+      
+      updateUI();
+    }
+
+    function draw() {
+      // Фон
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#1a1a2e');
+      gradient.addColorStop(0.5, '#16213e');
+      gradient.addColorStop(1, '#0f3460');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Сетка
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = 1;
+      const gridSize = 50;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      
+      // Частицы фона
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      for (let i = 0; i < 30; i++) {
+        const px = (i * 137 + Date.now() * 0.01) % canvas.width;
+        const py = (i * 251 + Date.now() * 0.015) % canvas.height;
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Рисуем брейнроты
+      brainrots.forEach(b => b.draw(ctx));
+      
+      // Рисуем стражников
+      guards.forEach(g => g.draw(ctx));
+      
+      // Рисуем игрока
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      
+      // Свечение игрока
+      ctx.shadowColor = '#ff69b4';
+      ctx.shadowBlur = 25;
+      
+      // Тело
+      ctx.fillStyle = '#ff69b4';
+      ctx.beginPath();
+      ctx.arc(0, 0, player.size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Лицо
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(0, -5, player.size / 3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Глаза
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(-8, -8, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(8, -8, 5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Улыбка
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -2, 12, 0.1 * Math.PI, 0.9 * Math.PI);
+      ctx.stroke();
+      
+      ctx.restore();
+      
+      // Индикатор "замедления"
+      ctx.fillStyle = 'rgba(255, 255, 0, 0.15)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ==================== ЗАПУСК ====================
+    for (let i = 0; i < 5; i++) spawnBrainrot();
+    for (let i = 0; i < 2; i++) spawnGuard();
+    
+    updateUI();
+    gameLoop();
+
+    console.log('🐌 Медленная версия запущена!');
+    console.log('⏱️ 10 минут на сбор брейнротов!');
+    console.log('👮 Стражники еле двигаются - легко убежать!');
+  </script>
+</body>
+</html>
