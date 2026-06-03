@@ -8,8 +8,16 @@
     :root {
       color-scheme: dark;
       font-family: Arial, sans-serif;
-      background: #111318;
-      color: #f5f7fb;
+      background: #141418;
+      color: #f7f4ee;
+      --panel: #1d1d25;
+      --panel-strong: #252531;
+      --line: rgba(255, 255, 255, 0.12);
+      --muted: #beb8c8;
+      --mint: #7bf0c1;
+      --gold: #ffd166;
+      --coral: #ff7a6b;
+      --sky: #7fb8ff;
     }
 
     * {
@@ -19,107 +27,553 @@
     body {
       margin: 0;
       min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
       background:
-        radial-gradient(circle at 20% 10%, rgba(57, 117, 255, 0.24), transparent 34%),
-        radial-gradient(circle at 80% 90%, rgba(0, 190, 150, 0.18), transparent 32%),
-        #111318;
-    }
-
-    main {
-      width: min(760px, 100%);
-    }
-
-    h1 {
-      margin: 0 0 10px;
-      font-size: clamp(32px, 7vw, 58px);
-      line-height: 1;
-    }
-
-    p {
-      margin: 0 0 28px;
-      color: #b8c0d4;
-      font-size: 18px;
-      line-height: 1.5;
-    }
-
-    .games {
-      display: grid;
-      gap: 12px;
-    }
-
-    .soundtrack-link {
-      margin-bottom: 18px;
-      background: rgba(157, 235, 214, 0.14);
-      border-color: rgba(157, 235, 214, 0.34);
+        linear-gradient(180deg, #171720 0%, #111116 46%, #18151c 100%);
     }
 
     a {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      min-height: 64px;
-      padding: 18px 20px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.07);
       color: inherit;
       text-decoration: none;
-      font-size: 20px;
-      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
     }
 
-    a:hover,
-    a:focus-visible {
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .page {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 22px 18px 34px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+      gap: 22px;
+      align-items: stretch;
+      min-height: 340px;
+      padding: 22px 0 24px;
+    }
+
+    .hero-copy {
+      display: flex;
+      min-height: 300px;
+      flex-direction: column;
+      justify-content: center;
+      padding-right: 6px;
+    }
+
+    .kicker {
+      width: fit-content;
+      margin: 0 0 16px;
+      padding: 7px 11px;
+      border: 1px solid rgba(123, 240, 193, 0.38);
+      border-radius: 999px;
+      color: var(--mint);
+      background: rgba(123, 240, 193, 0.08);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 720px;
+      margin: 0;
+      font-size: clamp(38px, 7vw, 78px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 620px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.5;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .button {
+      display: inline-flex;
+      min-height: 46px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      padding: 12px 16px;
+      background: #f7f4ee;
+      color: #171720;
+      font-size: 16px;
+      font-weight: 800;
+      transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+    }
+
+    .button.secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f7f4ee;
+    }
+
+    .button:hover,
+    .button:focus-visible,
+    .game-card:hover .button,
+    .game-card:focus-visible .button {
       transform: translateY(-2px);
-      border-color: rgba(255, 255, 255, 0.28);
-      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.36);
       outline: none;
     }
 
-    span {
-      color: #9debd6;
-      font-size: 22px;
-      padding-left: 14px;
+    .hero-preview {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: var(--panel);
+      min-height: 300px;
     }
 
-    @media (max-width: 520px) {
-      body {
-        padding: 16px;
+    .hero-preview img {
+      width: 100%;
+      height: 100%;
+      min-height: 300px;
+      object-fit: cover;
+    }
+
+    .hero-preview::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 20%, rgba(0, 0, 0, 0.7) 100%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: calc(100% - 32px);
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(20, 20, 24, 0.82);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-badge strong {
+      font-size: 18px;
+    }
+
+    .hero-badge small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 10px 0 16px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 42px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .count {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .game-card {
+      display: flex;
+      min-height: 100%;
+      overflow: hidden;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+    }
+
+    .game-card:hover,
+    .game-card:focus-visible {
+      transform: translateY(-4px);
+      border-color: rgba(255, 255, 255, 0.26);
+      background: var(--panel-strong);
+      outline: none;
+    }
+
+    .thumb {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: #0d0d12;
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 220ms ease;
+    }
+
+    .game-card:hover .thumb img,
+    .game-card:focus-visible .thumb img {
+      transform: scale(1.05);
+    }
+
+    .tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      background: rgba(20, 20, 24, 0.78);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      backdrop-filter: blur(8px);
+    }
+
+    .tag.action {
+      color: var(--coral);
+    }
+
+    .tag.arcade {
+      color: var(--gold);
+    }
+
+    .tag.puzzle {
+      color: var(--mint);
+    }
+
+    .tag.mobile {
+      color: var(--sky);
+    }
+
+    .card-body {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .card-body .button {
+      width: 100%;
+      margin-top: auto;
+      min-height: 42px;
+      padding: 10px 12px;
+      font-size: 15px;
+    }
+
+    .soundtrack-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      margin: 26px 0;
+      padding: 18px;
+      border: 1px solid rgba(255, 209, 102, 0.32);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(255, 209, 102, 0.14), rgba(255, 122, 107, 0.08)),
+        var(--panel);
+    }
+
+    .soundtrack-panel h2 {
+      font-size: clamp(24px, 4vw, 38px);
+    }
+
+    .soundtrack-panel p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    @media (max-width: 980px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: 0;
       }
 
-      p {
+      .hero-copy {
+        min-height: 0;
+      }
+
+      .game-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 16px 12px 28px;
+      }
+
+      .hero {
+        gap: 16px;
+        padding-top: 8px;
+      }
+
+      .lead {
         font-size: 16px;
       }
 
-      a {
+      .section-head,
+      .soundtrack-panel {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .soundtrack-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .game-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      h3 {
         font-size: 17px;
-        min-height: 58px;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .button {
+        width: 100%;
+      }
+
+      .game-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
-  <main>
-    <h1>HTML игры</h1>
-    <p>Выберите игру. Страница работает с компьютера и смартфона.</p>
-    <a class="soundtrack-link" href="soundtracks.html">Саундтреки <span aria-hidden="true">›</span></a>
-    <nav class="games" aria-label="Список игр">
-      <a href="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.html">Маша Mobile Legends <span aria-hidden="true">›</span></a>
-      <a href="Смартфон%20Маша%20Mobile%20Legends/Смартфон%20Маша%20Mobile%20Legends.html">Смартфон Маша Mobile Legends <span aria-hidden="true">›</span></a>
-      <a href="Тимофей/Тимофей%20BUBG.html">Тимофей BUBG <span aria-hidden="true">›</span></a>
-      <a href="Тимофей/Тимофей%20паркур.html">Тимофей паркур <span aria-hidden="true">›</span></a>
-      <a href="Смартфон%20Тимофей/Смартфон%20Тимофей%20BUBG.html">Смартфон Тимофей BUBG <span aria-hidden="true">›</span></a>
-      <a href="Смартфон%20Тимофей/Смартфон%20Тимофей%20паркур.html">Смартфон Тимофей паркур <span aria-hidden="true">›</span></a>
-      <a href="Иван/Иван%20StarWars.html">Иван StarWars <span aria-hidden="true">›</span></a>
-      <a href="Матвей/Матвей%20Бравл%20Старс.html">Матвей Бравл Старс <span aria-hidden="true">›</span></a>
-      <a href="Матвей/Матвей%20крестики-нолики.html">Матвей крестики-нолики <span aria-hidden="true">›</span></a>
-      <a href="Матвей/Матвей%20Часы.html">Матвей Часы <span aria-hidden="true">›</span></a>
-      <a href="Матвей/Матвей%20Шарики.html">Матвей Шарики <span aria-hidden="true">›</span></a>
-      <a href="Рома/Рома%20битва.html">Рома битва <span aria-hidden="true">›</span></a>
-    </nav>
+  <main class="page">
+    <section class="hero" aria-label="Главная витрина">
+      <div class="hero-copy">
+        <p class="kicker">Онлайн-аркада</p>
+        <h1>HTML игры</h1>
+        <p class="lead">Запускайте игры прямо в браузере на компьютере или смартфоне. Выберите карточку и нажмите старт.</p>
+        <div class="hero-actions">
+          <a class="button" href="#games">Смотреть игры</a>
+          <a class="button secondary" href="soundtracks.html">Саундтреки</a>
+        </div>
+      </div>
+      <a class="hero-preview" href="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.html" aria-label="Запустить Маша Mobile Legends">
+        <img src="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.png" alt="Скриншот игры Маша Mobile Legends">
+        <span class="hero-badge">
+          <strong>Маша Mobile Legends</strong>
+          <small>Рекомендуем начать отсюда</small>
+        </span>
+      </a>
+    </section>
+
+    <section class="soundtrack-panel" aria-label="Саундтреки">
+      <div>
+        <h2>Музыка и саундтреки</h2>
+        <p>Отдельная страница с онлайн-плеерами для всех загруженных MP3.</p>
+      </div>
+      <a class="button secondary" href="soundtracks.html">Открыть музыку</a>
+    </section>
+
+    <section id="games" aria-label="Список игр">
+      <div class="section-head">
+        <h2>Игры</h2>
+        <p class="count">12 запусков</p>
+      </div>
+
+      <div class="game-grid">
+        <a class="game-card" href="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.html">
+          <div class="thumb">
+            <img loading="lazy" src="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.png" alt="Скриншот Маша Mobile Legends">
+            <span class="tag action">Action</span>
+          </div>
+          <div class="card-body">
+            <h3>Маша Mobile Legends</h3>
+            <p class="meta">Боевая арена с героями и навыками.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Смартфон%20Маша%20Mobile%20Legends/Смартфон%20Маша%20Mobile%20Legends.html">
+          <div class="thumb">
+            <img loading="lazy" src="Смартфон%20Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.png" alt="Скриншот смартфон Маша Mobile Legends">
+            <span class="tag mobile">Mobile</span>
+          </div>
+          <div class="card-body">
+            <h3>Смартфон Маша Mobile Legends</h3>
+            <p class="meta">Версия с управлением под телефон.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Тимофей/Тимофей%20BUBG.html">
+          <div class="thumb">
+            <img loading="lazy" src="Тимофей/Тимофей%20BUBG.png" alt="Скриншот Тимофей BUBG">
+            <span class="tag action">Shooter</span>
+          </div>
+          <div class="card-body">
+            <h3>Тимофей BUBG</h3>
+            <p class="meta">Экшен-выживание с быстрым стартом.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Тимофей/Тимофей%20паркур.html">
+          <div class="thumb">
+            <img loading="lazy" src="Тимофей/Тимофей%20паркур.png" alt="Скриншот Тимофей паркур">
+            <span class="tag arcade">Arcade</span>
+          </div>
+          <div class="card-body">
+            <h3>Тимофей паркур</h3>
+            <p class="meta">Прыжки, препятствия и реакция.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Смартфон%20Тимофей/Смартфон%20Тимофей%20BUBG.html">
+          <div class="thumb">
+            <img loading="lazy" src="Смартфон%20Тимофей/Тимофей%20BUBG.png" alt="Скриншот смартфон Тимофей BUBG">
+            <span class="tag mobile">Mobile</span>
+          </div>
+          <div class="card-body">
+            <h3>Смартфон Тимофей BUBG</h3>
+            <p class="meta">Мобильный запуск экшен-игры.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Смартфон%20Тимофей/Смартфон%20Тимофей%20паркур.html">
+          <div class="thumb">
+            <img loading="lazy" src="Смартфон%20Тимофей/Тимофей%20паркур.png" alt="Скриншот смартфон Тимофей паркур">
+            <span class="tag mobile">Mobile</span>
+          </div>
+          <div class="card-body">
+            <h3>Смартфон Тимофей паркур</h3>
+            <p class="meta">Паркур с удобным запуском на телефоне.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Иван/Иван%20StarWars.html">
+          <div class="thumb">
+            <img loading="lazy" src="Иван/pic.png" alt="Скриншот Иван StarWars">
+            <span class="tag action">Space</span>
+          </div>
+          <div class="card-body">
+            <h3>Иван StarWars</h3>
+            <p class="meta">Космическая битва в стиле Star Wars.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Матвей/Матвей%20Бравл%20Старс.html">
+          <div class="thumb">
+            <img loading="lazy" src="Матвей/Бравл%20Старс.png" alt="Скриншот Матвей Бравл Старс">
+            <span class="tag action">Battle</span>
+          </div>
+          <div class="card-body">
+            <h3>Матвей Бравл Старс</h3>
+            <p class="meta">Динамичная битва с аркадным темпом.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Матвей/Матвей%20крестики-нолики.html">
+          <div class="thumb">
+            <img loading="lazy" src="Матвей/Крестики-нолики.png" alt="Скриншот Матвей крестики-нолики">
+            <span class="tag puzzle">Puzzle</span>
+          </div>
+          <div class="card-body">
+            <h3>Матвей крестики-нолики</h3>
+            <p class="meta">Классическая логическая дуэль.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Матвей/Матвей%20Часы.html">
+          <div class="thumb">
+            <img loading="lazy" src="Матвей/часы.png" alt="Скриншот Матвей Часы">
+            <span class="tag puzzle">Logic</span>
+          </div>
+          <div class="card-body">
+            <h3>Матвей Часы</h3>
+            <p class="meta">Мини-игра с часами и вниманием.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Матвей/Матвей%20Шарики.html">
+          <div class="thumb">
+            <img loading="lazy" src="Матвей/шарики.png" alt="Скриншот Матвей Шарики">
+            <span class="tag arcade">Arcade</span>
+          </div>
+          <div class="card-body">
+            <h3>Матвей Шарики</h3>
+            <p class="meta">Цветная аркада с шариками.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+
+        <a class="game-card" href="Рома/Рома%20битва.html">
+          <div class="thumb">
+            <img loading="lazy" src="Рома/битва.png" alt="Скриншот Рома битва">
+            <span class="tag action">Action</span>
+          </div>
+          <div class="card-body">
+            <h3>Рома битва</h3>
+            <p class="meta">Битва с большим экраном действия.</p>
+            <span class="button">Играть</span>
+          </div>
+        </a>
+      </div>
+    </section>
   </main>
 </body>
 </html>
