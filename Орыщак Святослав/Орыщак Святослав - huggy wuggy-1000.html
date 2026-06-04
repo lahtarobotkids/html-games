@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кругама – Жуткий Huggy Wuggy (уменьшенный)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; user-select: none; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #ff4444; font-size: 24px; font-weight: bold; text-shadow: 0 0 15px #ff0000; pointer-events: none; z-index: 10; }
+        #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 32px; pointer-events: none; z-index: 10; }
+        #deathScreen, #winScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(80,0,0,0.9); display: none; justify-content: center; align-items: center; flex-direction: column; z-index: 20; color: #fff; }
+        #winScreen { background: rgba(0,40,20,0.9); }
+        #deathScreen h1, #winScreen h1 { font-size: 80px; animation: pulse 0.5s infinite alternate; }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+        .restartBtn { margin-top: 30px; padding: 15px 40px; font-size: 24px; background: #aa0000; border: 2px solid #ff4444; color: white; cursor: pointer; border-radius: 10px; letter-spacing: 2px; }
+        #hint { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); color: #ffcc00; font-size: 22px; font-weight: bold; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 20px; pointer-events: none; z-index: 10; display: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">🕒 <span id="timer">0</span> сек</div>
+    <div id="message">Кликните для управления</div>
+    <div id="hint">Нажми E, чтобы спрятаться</div>
+    <div id="deathScreen"><h1>💀 СМЕРТЬ 💀</h1><p style="font-size: 28px;">Huggy Wuggy поймал тебя</p><button class="restartBtn" id="restartDeathBtn">Играть заново</button></div>
+    <div id="winScreen"><h1>🏆 ПОБЕДА! 🏆</h1><p style="font-size: 28px;">Ты сбежал от Huggy Wuggy!</p><button class="restartBtn" id="restartWinBtn">Играть заново</button></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // ---------- DOM ----------
+        const timerEl = document.getElementById('timer');
+        const messageEl = document.getElementById('message');
+        const deathScreen = document.getElementById('deathScreen');
+        const winScreen = document.getElementById('winScreen');
+        const hintEl = document.getElementById('hint');
+        const restartDeathBtn = document.getElementById('restartDeathBtn');
+        const restartWinBtn = document.getElementById('restartWinBtn');
+
+        // ---------- Audio ----------
+        let audioCtx = null;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        function playNoise(d = 0.5, vol = 0.05) {
+            if (!audioCtx) return;
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * d, audioCtx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < buf.length; i++) data[i] = (Math.random() * 2 - 1) * vol;
+            const src = audioCtx.createBufferSource(); src.buffer = buf;
+            const g = audioCtx.createGain(); g.gain.setValueAtTime(vol, audioCtx.currentTime);
+            src.connect(g); g.connect(audioCtx.destination); src.start();
+        }
+        function playHeartbeat(intensity = 0.5) {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+            o.type = 'sine'; o.frequency.setValueAtTime(50, audioCtx.currentTime);
+            g.gain.setValueAtTime(intensity * 0.3, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.1);
+        }
+        function playScream() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+            o.type = 'sawtooth'; o.frequency.setValueAtTime(800, audioCtx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 1.5);
+            g.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
+            o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 1.5);
+            playNoise(1.5, 0.3);
+        }
+        function playWinSound() {
+            if (!audioCtx) return;
+            [523, 659, 784, 1047].forEach((f, i) => {
+                const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+                o.type = 'triangle'; o.frequency.setValueAtTime(f, audioCtx.currentTime + i * 0.15);
+                g.gain.setValueAtTime(0.25, audioCtx.currentTime + i * 0.15);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.15 + 0.2);
+                o.connect(g); g.connect(audioCtx.destination);
+                o.start(audioCtx.currentTime + i * 0.15); o.stop(audioCtx.currentTime + i * 0.15 + 0.2);
+            });
+        }
+
+        // ---------- Создание ЖУТКОГО Huggy Wuggy (уменьшенного) ----------
+        function createHuggyWuggy() {
+            const group = new THREE.Group();
+
+            // Материалы
+            const furMat = new THREE.MeshStandardMaterial({ color: 0x2244aa, roughness: 0.7 }); // тёмно-синий мех
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0x3355cc, roughness: 0.5 }); // светлее для лица
+            const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0.4 }); // ладони
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.3, emissive: new THREE.Color(0x330000) }); // губы
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
+            const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1 });
+            const toothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+
+            // Тело (массивный цилиндр)
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 2.5, 16), furMat);
+            body.position.y = 1.25;
+            group.add(body);
+
+            // Голова (большая сфера)
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), furMat);
+            head.position.y = 2.7;
+            group.add(head);
+
+            // Морда (выступающая вперёд)
+            const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.65, 32, 32), skinMat);
+            muzzle.position.set(0, 2.5, 0.6);
+            muzzle.scale.set(0.8, 0.65, 0.5);
+            group.add(muzzle);
+
+            // Глаза (огромные, выпуклые)
+            const eyeGeo = new THREE.SphereGeometry(0.25, 16, 16);
+            const eyeL = new THREE.Mesh(eyeGeo, whiteMat);
+            eyeL.position.set(-0.3, 2.9, 0.7);
+            group.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, whiteMat);
+            eyeR.position.set(0.3, 2.9, 0.7);
+            group.add(eyeR);
+
+            // Зрачки (большие, жуткие)
+            const pupilGeo = new THREE.SphereGeometry(0.15, 8, 8);
+            const pupilL = new THREE.Mesh(pupilGeo, blackMat);
+            pupilL.position.set(-0.3, 2.85, 0.9);
+            group.add(pupilL);
+            const pupilR = new THREE.Mesh(pupilGeo, blackMat);
+            pupilR.position.set(0.3, 2.85, 0.9);
+            group.add(pupilR);
+
+            // Красные губы (широкий тор)
+            const lips = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.1, 16, 32), redMat);
+            lips.position.set(0, 2.3, 0.75);
+            lips.rotation.x = Math.PI / 2;
+            group.add(lips);
+
+            // Зубы (несколько рядов острых конусов)
+            const toothGeo = new THREE.ConeGeometry(0.06, 0.2, 8);
+            for (let row = 0; row < 2; row++) {
+                const zOffset = 0.8 + row * 0.15;
+                const yBase = 2.3 - row * 0.1;
+                for (let i = -3; i <= 3; i++) {
+                    const angle = i * 0.25;
+                    const x = Math.sin(angle) * 0.35;
+                    const y = yBase + Math.cos(angle) * 0.1;
+                    const tooth = new THREE.Mesh(toothGeo, toothMat);
+                    tooth.position.set(x, y, zOffset);
+                    tooth.rotation.x = -0.2;
+                    tooth.rotation.z = angle;
+                    group.add(tooth);
+                }
+            }
+
+            // Руки (непропорционально длинные и тонкие)
+            const armGeo = new THREE.CylinderGeometry(0.15, 0.2, 2.0, 8);
+            const armL = new THREE.Mesh(armGeo, furMat);
+            armL.position.set(-0.9, 2.0, 0);
+            armL.rotation.z = 0.5;
+            armL.rotation.x = 0.3;
+            group.add(armL);
+            const armR = new THREE.Mesh(armGeo, furMat);
+            armR.position.set(0.9, 2.0, 0);
+            armR.rotation.z = -0.5;
+            armR.rotation.x = -0.3;
+            group.add(armR);
+
+            // Ладони (массивные жёлтые)
+            const handGeo = new THREE.SphereGeometry(0.3, 8, 8);
+            const handL = new THREE.Mesh(handGeo, yellowMat);
+            handL.position.set(-1.1, 0.9, 0.2);
+            group.add(handL);
+            const handR = new THREE.Mesh(handGeo, yellowMat);
+            handR.position.set(1.1, 0.9, 0.2);
+            group.add(handR);
+
+            // Ноги (длинные)
+            const legGeo = new THREE.CylinderGeometry(0.25, 0.3, 1.2, 8);
+            const legL = new THREE.Mesh(legGeo, furMat);
+            legL.position.set(-0.35, 0.6, 0);
+            group.add(legL);
+            const legR = new THREE.Mesh(legGeo, furMat);
+            legR.position.set(0.35, 0.6, 0);
+            group.add(legR);
+
+            // Ступни (жёлтые)
+            const footGeo = new THREE.SphereGeometry(0.3, 8, 8);
+            const footL = new THREE.Mesh(footGeo, yellowMat);
+            footL.position.set(-0.4, 0.15, 0);
+            group.add(footL);
+            const footR = new THREE.Mesh(footGeo, yellowMat);
+            footR.position.set(0.4, 0.15, 0);
+            group.add(footR);
+
+            return group;
+        }
+
+        // ---------- Текстура буквы на кубике ----------
+        function createLetterTexture(letter) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 128, 128);
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 80px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(letter, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // ---------- Декорация места появления ----------
+        function createSpawnDecoration(scene) {
+            const centerX = 10, centerZ = 10;
+            const circleGeo = new THREE.CylinderGeometry(3.2, 3.2, 0.1, 32);
+            const circleMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.6, metalness: 0.4 });
+            const circle = new THREE.Mesh(circleGeo, circleMat);
+            circle.position.set(centerX, 0.05, centerZ);
+            circle.receiveShadow = true;
+            circle.castShadow = true;
+            scene.add(circle);
+
+            const letters = [
+                ['H', 7.5], ['U', 8.5], ['G', 9.5], ['G', 10.5], ['Y', 11.5],
+                ['W', 7.5], ['U', 8.5], ['G', 9.5], ['G', 10.5], ['Y', 11.5]
+            ];
+            const cubeSize = 0.5;
+            const yPos = 0.35;
+            const zRow1 = centerZ - 0.5;
+            const zRow2 = centerZ + 0.5;
+
+            letters.slice(0, 5).forEach(([letter, x]) => {
+                const geo = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                const mat = new THREE.MeshStandardMaterial({ map: createLetterTexture(letter), roughness: 0.4 });
+                const cube = new THREE.Mesh(geo, mat);
+                cube.position.set(x, yPos, zRow1);
+                cube.castShadow = true;
+                cube.receiveShadow = true;
+                scene.add(cube);
+            });
+            letters.slice(5).forEach(([letter, x]) => {
+                const geo = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                const mat = new THREE.MeshStandardMaterial({ map: createLetterTexture(letter), roughness: 0.4 });
+                const cube = new THREE.Mesh(geo, mat);
+                cube.position.set(x, yPos, zRow2);
+                cube.castShadow = true;
+                cube.receiveShadow = true;
+                scene.add(cube);
+            });
+        }
+
+        // ---------- Scene ----------
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.FogExp2(0x050510, 0.004);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 1.6, 5);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new PointerLockControls(camera, document.body);
+        controls.addEventListener('lock', () => { messageEl.style.display = 'none'; initAudio(); });
+        controls.addEventListener('unlock', () => { messageEl.style.display = 'block'; });
+        renderer.domElement.addEventListener('click', () => { if (!controls.isLocked) controls.lock(); });
+
+        // Освещение
+        scene.add(new THREE.AmbientLight(0x334466, 1.5));
+        const flashlight = new THREE.SpotLight(0xffffee, 9, 18, Math.PI/6, 0.3);
+        flashlight.position.set(0,0,0); flashlight.castShadow = true;
+        flashlight.shadow.mapSize.set(512,512);
+        camera.add(flashlight);
+        scene.add(camera);
+
+        function addCornerLight(x, z, color = 0xff4422, intensity = 3.0, distance = 14) {
+            const light = new THREE.PointLight(color, intensity, distance);
+            light.position.set(x, 2.8, z);
+            light.castShadow = true;
+            light.shadow.mapSize.set(256, 256);
+            scene.add(light);
+            const lampGroup = new THREE.Group();
+            lampGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x444444 })));
+            lampGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), new THREE.MeshStandardMaterial({ color, emissive: color, roughness: 0.3, emissiveIntensity: 0.8 })));
+            lampGroup.position.copy(light.position);
+            scene.add(lampGroup);
+        }
+        addCornerLight(-18, -18); addCornerLight(18, -18);
+        addCornerLight(-18, 18); addCornerLight(18, 18);
+
+        // Цветной пол
+        const tileSize = 4;
+        const gridCount = 10;
+        const colors = [
+            { color: 0xffffff, weight: 65 },
+            { color: 0x3366ff, weight: 10 },
+            { color: 0xff3333, weight: 10 },
+            { color: 0x33cc33, weight: 8 },
+            { color: 0xffdd00, weight: 7 }
+        ];
+        const colorArray = [];
+        colors.forEach(({ color, weight }) => {
+            for (let i = 0; i < weight; i++) colorArray.push(color);
+        });
+        for (let i = colorArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [colorArray[i], colorArray[j]] = [colorArray[j], colorArray[i]];
+        }
+        const tileGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
+        for (let row = 0; row < gridCount; row++) {
+            for (let col = 0; col < gridCount; col++) {
+                const colorIndex = (row * gridCount + col) % colorArray.length;
+                const material = new THREE.MeshStandardMaterial({ color: colorArray[colorIndex], roughness: 0.7 });
+                const tile = new THREE.Mesh(tileGeometry, material);
+                tile.position.x = -18 + col * tileSize + tileSize/2;
+                tile.position.z = -18 + row * tileSize + tileSize/2;
+                tile.rotation.x = -Math.PI / 2;
+                tile.receiveShadow = true;
+                scene.add(tile);
+            }
+        }
+
+        // Стены
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1a3a, roughness: 0.9 });
+        function addWall(w, h, d, x, y, z) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+            wall.position.set(x, y, z);
+            wall.castShadow = true; wall.receiveShadow = true;
+            scene.add(wall);
+        }
+        addWall(40, 7, 0.5, 0, 3.5, -20);
+        addWall(40, 7, 0.5, 0, 3.5, 20);
+        addWall(0.5, 7, 40, -20, 3.5, 0);
+        addWall(0.5, 7, 40, 20, 3.5, 0);
+
+        // Горки из кубиков
+        const cubeObstacles = [];
+        function addCube(x, y, z, size, color) {
+            const geo = new THREE.BoxGeometry(size, size, size);
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.2 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y + size/2, z);
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            scene.add(mesh);
+            const half = size/2;
+            cubeObstacles.push({
+                mesh,
+                minX: x - half, maxX: x + half,
+                minY: y, maxY: y + size,
+                minZ: z - half, maxZ: z + half
+            });
+        }
+        addCube(-10, 0, -10, 1.2, 0x3366cc);
+        addCube(-10, 1.2, -10, 1.0, 0x44aaff);
+        addCube(-10, 2.2, -10, 0.8, 0x66ccff);
+        addCube(10, 0, -8, 1.2, 0xcc3333);
+        addCube(10, 1.2, -8, 1.0, 0xff6644);
+        addCube(10, 2.2, -8, 0.8, 0xffaa66);
+        addCube(6, 0, 10, 1.2, 0x33aa33);
+        addCube(6, 1.2, 10, 1.2, 0x44cc44);
+        addCube(6, 2.4, 10, 1.2, 0x55ee55);
+        addCube(-8, 0, 12, 1.4, 0x8833aa);
+        addCube(-8, 1.4, 12, 1.2, 0xaa44cc);
+        addCube(-8, 2.6, 12, 1.0, 0xcc66ee);
+        addCube(0, 0, 14, 1.0, 0xffaa00);
+        addCube(14, 0, 0, 1.2, 0x00aacc);
+        addCube(-14, 0, -4, 1.0, 0xcc44aa);
+
+        // Коробки для пряток
+        const boxes = [];
+        const boxPositions = [[-8,-8],[8,-6],[-7,8],[6,9],[0,12],[-12,0],[14,-2]];
+        boxPositions.forEach(([x,z]) => {
+            const box = new THREE.Mesh(new THREE.BoxGeometry(1.6,1.6,1.6), new THREE.MeshStandardMaterial({color:0x5a3a1a, roughness:0.7}));
+            box.position.set(x,0.8,z); box.castShadow = box.receiveShadow = true; scene.add(box);
+            boxes.push(box);
+        });
+
+        // Выход
+        const exitPos = new THREE.Vector3(0, 1.6, -19.2);
+        const exitPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.8, 2.5),
+            new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff44, roughness: 0.2, emissiveIntensity: 1.2, side: THREE.DoubleSide })
+        );
+        exitPlane.position.copy(exitPos); scene.add(exitPlane);
+        const exitLight = new THREE.PointLight(0x00ff44, 2, 5);
+        exitLight.position.copy(exitPos);
+        scene.add(exitLight);
+
+        // Место появления
+        createSpawnDecoration(scene);
+
+        // Враг Huggy Wuggy
+        const huggyGroup = createHuggyWuggy();
+        huggyGroup.position.set(10, 0, 10);
+        // Уменьшен в 2 раза относительно предыдущего гиганта (теперь масштаб 1.1 вместо 2.2)
+        huggyGroup.scale.set(1.1, 1.1, 1.1);
+        huggyGroup.castShadow = true;
+        huggyGroup.receiveShadow = true;
+        scene.add(huggyGroup);
+        const enemyLight = new THREE.PointLight(0xff3333, 3, 10);
+        enemyLight.position.set(0, 2.2, 0.6);
+        huggyGroup.add(enemyLight);
+
+        // Радиус коллизии врага
+        const enemyCollisionRadius = 0.7 * huggyGroup.scale.x;
+
+        // ---------- Игровые переменные ----------
+        let gameActive = true;
+        let startTime = Date.now();
+        const moveSpeed = 4.5;
+        const keys = { w: false, a: false, s: false, d: false, space: false, e: false };
+        const gravity = 20, jumpPower = 8;
+        let playerVelY = 0, isOnGround = false;
+        const playerRadius = 0.4, playerHeight = 1.6;
+        let isHiding = false, currentHidingBox = null;
+        const HIDE_DIST = 2.2;
+        const baseEnemySpeed = 1.0;
+        let enemySpeed = baseEnemySpeed;
+        let enemyWanderTarget = new THREE.Vector3();
+        let enemyWandering = false;
+
+        function getGroundY(posX, posZ) {
+            let groundY = 0;
+            const feetY = camera.position.y - playerHeight;
+            for (const obs of cubeObstacles) {
+                if (posX > obs.minX && posX < obs.maxX && posZ > obs.minZ && posZ < obs.maxZ) {
+                    const topY = obs.maxY;
+                    if (feetY <= topY + 0.1 && feetY >= topY - 0.2) {
+                        groundY = Math.max(groundY, topY);
+                    }
+                }
+            }
+            return groundY;
+        }
+
+        function resolvePlayerCollision() {
+            const playerMinY = camera.position.y - playerHeight;
+            const playerMaxY = camera.position.y;
+            for (const obs of cubeObstacles) {
+                const overlapX = Math.min(obs.maxX, camera.position.x + playerRadius) - Math.max(obs.minX, camera.position.x - playerRadius);
+                const overlapY = Math.min(obs.maxY, playerMaxY) - Math.max(obs.minY, playerMinY);
+                const overlapZ = Math.min(obs.maxZ, camera.position.z + playerRadius) - Math.max(obs.minZ, camera.position.z - playerRadius);
+                if (overlapX > 0 && overlapY > 0 && overlapZ > 0) {
+                    const minOverlap = Math.min(overlapX, overlapY, overlapZ);
+                    if (minOverlap === overlapY) {
+                        if (playerMinY < obs.minY) {
+                            camera.position.y = obs.minY - 0.01;
+                            playerVelY = 0;
+                        } else {
+                            camera.position.y = obs.maxY + playerHeight;
+                            playerVelY = 0;
+                            isOnGround = true;
+                        }
+                    } else if (minOverlap === overlapX) {
+                        if (camera.position.x < obs.minX + overlapX/2) camera.position.x = obs.minX - playerRadius;
+                        else camera.position.x = obs.maxX + playerRadius;
+                    } else {
+                        if (camera.position.z < obs.minZ + overlapZ/2) camera.position.z = obs.minZ - playerRadius;
+                        else camera.position.z = obs.maxZ + playerRadius;
+                    }
+                }
+            }
+        }
+
+        function resolveEnemyCollision(pos, radius) {
+            for (const obs of cubeObstacles) {
+                const closestX = Math.max(obs.minX, Math.min(pos.x, obs.maxX));
+                const closestY = Math.max(obs.minY, Math.min(pos.y, obs.maxY));
+                const closestZ = Math.max(obs.minZ, Math.min(pos.z, obs.maxZ));
+                const dx = pos.x - closestX, dy = pos.y - closestY, dz = pos.z - closestZ;
+                const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                if (dist < radius) {
+                    const norm = new THREE.Vector3(dx, dy, dz).normalize();
+                    pos.addScaledVector(norm, radius - dist);
+                }
+            }
+            return pos;
+        }
+
+        document.addEventListener('keydown', e => {
+            if (!gameActive) return;
+            switch (e.code) {
+                case 'Space': keys.space = true; e.preventDefault(); break;
+                case 'KeyW': keys.w = true; break;
+                case 'KeyA': keys.a = true; break;
+                case 'KeyS': keys.s = true; break;
+                case 'KeyD': keys.d = true; break;
+                case 'KeyE': keys.e = true; break;
+            }
+        });
+        document.addEventListener('keyup', e => {
+            switch (e.code) {
+                case 'Space': keys.space = false; break;
+                case 'KeyW': keys.w = false; break;
+                case 'KeyA': keys.a = false; break;
+                case 'KeyS': keys.s = false; break;
+                case 'KeyD': keys.d = false; break;
+                case 'KeyE': keys.e = false; break;
+            }
+        });
+
+        function toggleHiding() {
+            if (isHiding) {
+                isHiding = false; currentHidingBox = null;
+                camera.position.y = playerHeight; playerVelY = 0; isOnGround = true;
+                return;
+            }
+            const p = camera.position;
+            let best = null, bestDist = Infinity;
+            boxes.forEach(b => {
+                const d = new THREE.Vector2(p.x - b.position.x, p.z - b.position.z).length();
+                if (d < HIDE_DIST && d < bestDist) { bestDist = d; best = b; }
+            });
+            if (best) {
+                isHiding = true; currentHidingBox = best;
+                camera.position.set(best.position.x, best.position.y + 0.6, best.position.z);
+                playerVelY = 0; isOnGround = true;
+            }
+        }
+
+        function checkExit() {
+            if (!gameActive || isHiding) return;
+            if (camera.position.distanceTo(exitPos) < 1.8) winGame();
+        }
+
+        function winGame() { if (!gameActive) return; gameActive = false; controls.unlock(); winScreen.style.display = 'flex'; timerEl.style.color = '#00ff88'; playWinSound(); }
+        function die() { if (!gameActive) return; gameActive = false; controls.unlock(); deathScreen.style.display = 'flex'; timerEl.style.color = '#ff0000'; playScream(); }
+
+        function restartGame() {
+            gameActive = true; startTime = Date.now(); timerEl.textContent = '0'; timerEl.style.color = '#ff4444';
+            deathScreen.style.display = winScreen.style.display = 'none';
+            camera.position.set(0, playerHeight, 5);
+            huggyGroup.position.set(10, 0, 10);
+            enemySpeed = baseEnemySpeed; isHiding = false; currentHidingBox = null;
+            playerVelY = 0; isOnGround = false;
+            controls.lock();
+        }
+        restartDeathBtn.onclick = restartWinBtn.onclick = restartGame;
+
+        // Игровой цикл
+        let lastHeartbeat = 0;
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.2);
+
+            if (gameActive) {
+                timerEl.textContent = Math.floor((Date.now() - startTime) / 1000);
+
+                if (controls.isLocked && !isHiding) {
+                    const speed = moveSpeed * delta;
+                    const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+                    const right = new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+                    if (keys.w) camera.position.addScaledVector(forward, speed);
+                    if (keys.s) camera.position.addScaledVector(forward, -speed);
+                    if (keys.a) camera.position.addScaledVector(right, -speed);
+                    if (keys.d) camera.position.addScaledVector(right, speed);
+
+                    playerVelY -= gravity * delta;
+                    camera.position.y += playerVelY * delta;
+
+                    const feetY = camera.position.y - playerHeight;
+                    const groundY = getGroundY(camera.position.x, camera.position.z);
+                    if (feetY <= groundY) {
+                        camera.position.y = groundY + playerHeight;
+                        playerVelY = 0;
+                        isOnGround = true;
+                    } else {
+                        isOnGround = false;
+                    }
+
+                    if (isOnGround && keys.space) {
+                        playerVelY = jumpPower;
+                        isOnGround = false;
+                    }
+
+                    resolvePlayerCollision();
+
+                    camera.position.x = Math.max(-19.5, Math.min(19.5, camera.position.x));
+                    camera.position.z = Math.max(-19.5, Math.min(19.5, camera.position.z));
+                }
+
+                if (keys.e) { toggleHiding(); keys.e = false; }
+                checkExit();
+
+                const playerPos = camera.position.clone();
+                const enemyPos = huggyGroup.position.clone();
+                const distToPlayer = enemyPos.distanceTo(playerPos);
+
+                if (isHiding) {
+                    if (!enemyWandering || enemyPos.distanceTo(enemyWanderTarget) < 0.5) {
+                        enemyWanderTarget.set((Math.random()-0.5)*35, 0, (Math.random()-0.5)*35);
+                        enemyWandering = true;
+                    }
+                    const dir = new THREE.Vector3().subVectors(enemyWanderTarget, enemyPos).normalize();
+                    const newPos = enemyPos.clone().addScaledVector(dir, enemySpeed * 0.5 * delta);
+                    huggyGroup.position.copy(resolveEnemyCollision(newPos, enemyCollisionRadius));
+                } else {
+                    enemyWandering = false;
+                    const dir = new THREE.Vector3().subVectors(playerPos, enemyPos).normalize();
+                    const newPos = enemyPos.clone().addScaledVector(dir, enemySpeed * delta);
+                    huggyGroup.position.copy(resolveEnemyCollision(newPos, enemyCollisionRadius));
+                    if (distToPlayer < enemyCollisionRadius * 1.4) die();
+                }
+
+                if (!isHiding && distToPlayer < 8) {
+                    const now = Date.now();
+                    if (now - lastHeartbeat > 400 - distToPlayer * 30) {
+                        playHeartbeat(Math.min(0.8, 1.5 / distToPlayer));
+                        lastHeartbeat = now;
+                    }
+                }
+
+                const lookTarget = isHiding ? enemyWanderTarget : playerPos;
+                huggyGroup.lookAt(lookTarget.x, lookTarget.y + 1.0, lookTarget.z);
+                huggyGroup.rotation.z = Math.sin(Date.now() * 0.03) * 0.05;
+                flashlight.intensity = 9 + Math.sin(Date.now() * 0.01) * 0.5;
+
+                let nearBox = false;
+                if (!isHiding) {
+                    for (const b of boxes) {
+                        if (new THREE.Vector2(camera.position.x - b.position.x, camera.position.z - b.position.z).length() < HIDE_DIST) { nearBox = true; break; }
+                    }
+                }
+                hintEl.style.display = nearBox ? 'block' : 'none';
+            }
+            renderer.render(scene, camera);
+        }
+
+        messageEl.style.display = 'block';
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Plants vs Zombie — Полное обнуление после победы</title>
+    <style>
+        * {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(145deg, #1a5f2a 0%, #0e3a1a 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: #5b3e1e;
+            border-radius: 48px;
+            padding: 20px 25px 25px 25px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        canvas {
+            display: block;
+            border-radius: 24px;
+            box-shadow: 0 0 0 5px #ffd966;
+            cursor: crosshair;
+        }
+        .toolbar {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 18px;
+            background: #2c2118;
+            padding: 10px 20px;
+            border-radius: 60px;
+            flex-wrap: wrap;
+        }
+        .plant-icon {
+            background: #4d3a2a;
+            padding: 5px 15px;
+            border-radius: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            transition: 0.1s;
+        }
+        .plant-icon.disabled {
+            opacity: 0.4;
+            filter: grayscale(0.3);
+            cursor: not-allowed;
+        }
+        .icon-circle {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+        }
+        .green-icon { background: radial-gradient(#8eff6a, #2c9e1a); }
+        .darkgreen-icon { background: radial-gradient(#5aa63a, #1a5a0a); }
+        .yellow-icon { background: radial-gradient(#ffea70, #e6ac00); }
+        .orange-icon { background: radial-gradient(#ff8c42, #d45a1a); }
+        .blue-icon { background: radial-gradient(#6ac8ff, #2a6e9e); }
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 18px;
+            background: #1e2a1a;
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: white;
+            font-weight: bold;
+        }
+        button {
+            background: #ffb347;
+            border: none;
+            font-weight: bold;
+            padding: 5px 18px;
+            border-radius: 60px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .selection-hint {
+            margin-top: 12px;
+            text-align: center;
+            color: #ffefb0;
+            font-weight: bold;
+        }
+        .menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .menu-panel {
+            background: #3a3324;
+            border-radius: 50px;
+            padding: 20px 30px;
+            text-align: center;
+            box-shadow: 0 20px 40px black;
+            border: 2px solid #ffd966;
+            min-width: 380px;
+            max-width: 500px;
+            max-height: 85vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .menu-panel::-webkit-scrollbar {
+            width: 10px;
+        }
+        .menu-panel::-webkit-scrollbar-track {
+            background: #5a4a2a;
+            border-radius: 10px;
+        }
+        .menu-panel::-webkit-scrollbar-thumb {
+            background: #ffb347;
+            border-radius: 10px;
+        }
+        .menu-panel h2 { color: #ffd966; margin-top: 0; margin-bottom: 10px; }
+        .menu-btn {
+            background: #ffb347;
+            font-size: 22px;
+            padding: 12px 25px;
+            margin: 5px 0;
+            width: 100%;
+            box-shadow: 0 4px 0 #a45d1a;
+            border-radius: 60px;
+        }
+        .menu-btn:active { transform: translateY(2px); }
+        .shop-item {
+            background: #c9b27c;
+            padding: 14px 20px;
+            border-radius: 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            color: #2c1e0f;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+            font-size: 16px;
+        }
+        .shop-item button {
+            background: #5f9e4e;
+            color: white;
+            padding: 8px 20px;
+            font-size: 16px;
+            white-space: nowrap;
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            background: #c9b27c;
+            padding: 15px 25px;
+            border-radius: 60px;
+            color: #2c1e0f;
+            font-weight: bold;
+        }
+        .toggle-switch {
+            width: 60px;
+            height: 30px;
+            background: #888;
+            border-radius: 30px;
+            cursor: pointer;
+            position: relative;
+        }
+        .toggle-switch.active { background: #6fbf4c; }
+        .toggle-switch::after {
+            content: '';
+            width: 26px;
+            height: 26px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            transition: 0.2s;
+        }
+        .toggle-switch.active::after { left: 31px; }
+        .coins { background: #000000aa; padding: 4px 15px; border-radius: 30px; }
+        .level-counter {
+            background: #ffeb99;
+            color: #2c1e0f;
+            font-weight: bold;
+            font-size: 24px;
+            padding: 10px 20px;
+            border-radius: 60px;
+            text-shadow: none;
+            box-shadow: 0 0 12px #ffcc44;
+        }
+        .preparation-timer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: #ffdd88;
+            text-shadow: 0 0 20px #ff9900;
+            background: rgba(0,0,0,0.6);
+            padding: 20px 40px;
+            border-radius: 80px;
+            pointer-events: none;
+            z-index: 50;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+        .shop-coins {
+            background: #ffd966;
+            color: #2c1e0f;
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 20px;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer" class="game-container">
+    <div class="toolbar">
+        <div class="plant-icon" id="icon-pea">
+            <div class="icon-circle green-icon"></div>
+            <span id="peaName">🌱 Горохострел</span>
+            <div style="background:gold;border-radius:20px;padding:0 8px;">🌞50</div>
+        </div>
+        <div class="plant-icon" id="icon-sun">
+            <div class="icon-circle yellow-icon"></div>
+            <span id="sunName">🌻 Подсолнух</span>
+            <div style="background:gold;border-radius:20px;padding:0 8px;">🌞25</div>
+        </div>
+        <div class="plant-icon" id="icon-fire" style="display:none;">
+            <div class="icon-circle orange-icon"></div>
+            <span>🔥 Пень</span>
+            <div style="background:gold;border-radius:20px;padding:0 8px;">🌞60</div>
+        </div>
+        <div class="plant-icon" id="icon-ice" style="display:none;">
+            <div class="icon-circle blue-icon"></div>
+            <span>❄️ Морозный</span>
+            <div style="background:gold;border-radius:20px;padding:0 8px;">🌞80</div>
+        </div>
+        <div class="plant-icon" id="icon-fast" style="display:none;">
+            <div class="icon-circle darkgreen-icon"></div>
+            <span>⚡ Скорострел</span>
+            <div style="background:gold;border-radius:20px;padding:0 8px;">🌞100</div>
+        </div>
+        <div class="coins" id="coinDisplay">🪙 0</div>
+    </div>
+    <canvas id="gameCanvas" width="950" height="550"></canvas>
+    <div class="info-panel">
+        <div>🧟 Убито: <span id="killCount">0</span> / <span id="totalToKill">50</span></div>
+        <div>⭐ <span id="sunPoints">150</span></div>
+        <div>🌊 <span id="waveStatus">Уровень 1</span></div>
+        <button id="menuBtnOpen">🏠 Меню</button>
+    </div>
+    <div class="selection-hint" id="hintMsg">💡 Нажми иконку → выбери клетку</div>
+</div>
+
+<script>
+    // ---------- ПЕРЕВОД ----------
+    const translations = {
+        ru: {
+            menu: "ГЛАВНОЕ МЕНЮ", play: "🎮 ИГРАТЬ", settings: "⚙️ НАСТРОЙКИ", shop: "🛒 МАГАЗИН",
+            lang: "Язык", upgrade1: "🌻 +25% дохода", upgrade2: "💥 +25% урона",
+            buy: "Купить (100🪙)", owned: "Куплено", coins: "Монет", back: "Назад",
+            peaName: "🌱 Горохострел", sunName: "🌻 Подсолнух", fireName: "🔥 Огненный пень", iceName: "❄️ Морозный", fastName: "⚡ Скорострел",
+            level: "Уровень", revive: "💀 ВОСКРЕСНУТЬ (100🪙)", menuBtn: "🏠 МЕНЮ",
+            nextLevel: "➡️ СЛЕДУЮЩИЙ УРОВЕНЬ", winTitle: "ПОБЕДА!", loseTitle: "ПОРАЖЕНИЕ", levelsCompleted: "Пройдено уровней:",
+            buyFire: "Купить ПЕНЬ (200🪙)", buyIce: "Купить МОРОЗНЫЙ (250🪙)", buyFast: "Купить СКОРОСТРЕЛ (300🪙)", prepare: "ПОДГОТОВКА"
+        },
+        en: {
+            menu: "MAIN MENU", play: "🎮 PLAY", settings: "⚙️ SETTINGS", shop: "🛒 SHOP",
+            lang: "Language", upgrade1: "🌻 +25% income", upgrade2: "💥 +25% damage",
+            buy: "Buy (100🪙)", owned: "Owned", coins: "Coins", back: "Back",
+            peaName: "🌱 Pea Shooter", sunName: "🌻 Sunflower", fireName: "🔥 Fire Stump", iceName: "❄️ Frost Pea", fastName: "⚡ Fast Shooter",
+            level: "Level", revive: "💀 REVIVE (100🪙)", menuBtn: "MENU",
+            nextLevel: "➡️ NEXT LEVEL", winTitle: "VICTORY!", loseTitle: "DEFEAT", levelsCompleted: "Levels completed:",
+            buyFire: "Buy STUMP (200🪙)", buyIce: "Buy FROST (250🪙)", buyFast: "Buy FAST (300🪙)", prepare: "PREPARATION"
+        }
+    };
+    let lang = "ru";
+    function t(key) { return translations[lang][key] || key; }
+
+    // ---------- ИГРОВЫЕ ПАРАМЕТРЫ ----------
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const CW = 950, CH = 550;
+    const CELL_COLS = 8, CELL_ROWS = 5;
+    const cellW = CW/CELL_COLS, cellH = CH/CELL_ROWS;
+    
+    let sunPoints = 150;
+    let coins = 80;
+    let upgrades = { sunflowerBoost: false, peaDamageBoost: false };
+    let shopItems = { fireStump: false, icePea: false, fastPea: false };
+    let currentLevel = 1;
+    let completedLevels = 0;
+    let requiredKills = 50;
+    let currentKills = 0;
+    let roundActive = false;
+    let gameOverFlag = false;
+    let winFlag = false;
+    let brainEntity = null;
+    let preparationTime = 0;
+    let preparationSeconds = 10;
+    
+    let plants = [];
+    let zombies = [];
+    let peas = [];
+    let frame = 0;
+    let spawnTimer = 0;
+    let spawnDelay = 1200;
+    let zombiesPerWave = 5;
+    let waveActive = false;
+    
+    let selectedPlantType = null;
+    let mouseX = 0, mouseY = 0;
+    let mouseInside = false;
+    let ghostCell = { valid: false, col: -1, row: -1, occupied: false };
+    
+    const PRICE_PEA = 50;
+    const PRICE_SUN = 25;
+    const PRICE_FIRE = 60;
+    const PRICE_ICE = 80;
+    const PRICE_FAST = 100;
+    
+    // ---------- КЛАССЫ С ПРОСТОЙ ГРАФИКОЙ (КРУГИ И КВАДРАТЫ) ----------
+    class PeaShooter {
+        constructor(x,y) {
+            this.x=x; this.y=y; this.radius=22; this.type='peashooter';
+            this.cooldown=0; this.shootDelay=180;
+            this.maxHp=10; this.hp=10;
+            this.damageBase = 1 + (upgrades.peaDamageBoost ? 0.25 : 0);
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        update(){ if(this.cooldown>0) this.cooldown--; }
+        shoot(peasArr, zombiesArr){
+            let hasZombieAhead = zombiesArr.some(z => z.y + z.h/2 > this.y-40 && z.y - z.h/2 < this.y+40 && z.x > this.x);
+            if(this.cooldown===0 && hasZombieAhead){
+                let dmg = this.damageBase;
+                peasArr.push(new Pea(this.x+18, this.y-2, dmg, false, false));
+                this.cooldown=this.shootDelay;
+                return true;
+            }
+            return false;
+        }
+        draw(){
+            ctx.save();
+            ctx.shadowBlur=6;
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+            ctx.fillStyle='#6fbf4c'; ctx.fill();
+            ctx.fillStyle='#2c6e1a'; ctx.stroke();
+            ctx.fillStyle='#ffffff'; ctx.font="bold 20px monospace";
+            ctx.fillText("💚",this.x-12,this.y+8);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-18,this.y-22,36,5);
+            ctx.fillStyle='#6aff3a'; ctx.fillRect(this.x-18,this.y-22,36*(this.hp/this.maxHp),5);
+            ctx.restore();
+        }
+    }
+    
+    class FastPeaShooter {
+        constructor(x,y) {
+            this.x=x; this.y=y; this.radius=22; this.type='fastpea';
+            this.cooldown=0; this.shootDelay=180;
+            this.maxHp=10; this.hp=10;
+            this.damageBase = 1 + (upgrades.peaDamageBoost ? 0.25 : 0);
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        update(){ if(this.cooldown>0) this.cooldown--; }
+        shoot(peasArr, zombiesArr){
+            let hasZombieAhead = zombiesArr.some(z => z.y + z.h/2 > this.y-40 && z.y - z.h/2 < this.y+40 && z.x > this.x);
+            if(this.cooldown===0 && hasZombieAhead){
+                let dmg = this.damageBase;
+                peasArr.push(new Pea(this.x+18, this.y-4, dmg, false, false));
+                peasArr.push(new Pea(this.x+18, this.y+2, dmg, false, false));
+                this.cooldown=this.shootDelay;
+                return true;
+            }
+            return false;
+        }
+        draw(){
+            ctx.save();
+            ctx.shadowBlur=6;
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+            ctx.fillStyle='#4a8a2a'; ctx.fill();
+            ctx.fillStyle='#1a4a0a'; ctx.stroke();
+            ctx.fillStyle='#ffffff'; ctx.font="bold 20px monospace";
+            ctx.fillText("⚡",this.x-12,this.y+8);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-18,this.y-22,36,5);
+            ctx.fillStyle='#8aff5a'; ctx.fillRect(this.x-18,this.y-22,36*(this.hp/this.maxHp),5);
+            ctx.restore();
+        }
+    }
+    
+    class IcePeaShooter {
+        constructor(x,y) {
+            this.x=x; this.y=y; this.radius=22; this.type='icepea';
+            this.cooldown=0; this.shootDelay=180;
+            this.maxHp=10; this.hp=10;
+            this.damageBase = (0.75 + (upgrades.peaDamageBoost ? 0.25 : 0));
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        update(){ if(this.cooldown>0) this.cooldown--; }
+        shoot(peasArr, zombiesArr){
+            let hasZombieAhead = zombiesArr.some(z => z.y + z.h/2 > this.y-40 && z.y - z.h/2 < this.y+40 && z.x > this.x);
+            if(this.cooldown===0 && hasZombieAhead){
+                peasArr.push(new Pea(this.x+18, this.y-2, this.damageBase, false, true));
+                this.cooldown=this.shootDelay;
+                return true;
+            }
+            return false;
+        }
+        draw(){
+            ctx.save();
+            ctx.shadowBlur=6;
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+            ctx.fillStyle='#6ac8ff'; ctx.fill();
+            ctx.fillStyle='#2a6e9e'; ctx.stroke();
+            ctx.fillStyle='#ffffff'; ctx.font="bold 20px monospace";
+            ctx.fillText("❄️",this.x-12,this.y+8);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-18,this.y-22,36,5);
+            ctx.fillStyle='#88ddff'; ctx.fillRect(this.x-18,this.y-22,36*(this.hp/this.maxHp),5);
+            ctx.restore();
+        }
+    }
+    
+    class Sunflower {
+        constructor(x,y){
+            this.x=x; this.y=y; this.radius=22; this.type='sunflower';
+            this.produceTimer=0; this.produceInterval=600;
+            this.maxHp=8; this.hp=8;
+            this.income=15;
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        update(){ if(this.produceTimer>0) this.produceTimer--; }
+        produceSun(){
+            if(this.produceTimer===0){
+                this.produceTimer=this.produceInterval;
+                let bonus = upgrades.sunflowerBoost ? 0.25 : 0;
+                return Math.floor(15 * (1+bonus));
+            }
+            return 0;
+        }
+        draw(){
+            ctx.save();
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+            ctx.fillStyle='#e6b422'; ctx.fill();
+            ctx.fillStyle='#d48d2b'; ctx.font="24px monospace";
+            ctx.fillText("🌻",this.x-14,this.y+9);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-18,this.y-22,36,5);
+            ctx.fillStyle='#ffd966'; ctx.fillRect(this.x-18,this.y-22,36*(this.hp/this.maxHp),5);
+            ctx.restore();
+        }
+    }
+    
+    class FireStump {
+        constructor(x,y){
+            this.x=x; this.y=y; this.radius=22; this.type='firestump';
+            this.maxHp=12; this.hp=12;
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        update(){}
+        draw(){
+            ctx.save();
+            ctx.shadowBlur=8;
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+            const grad = ctx.createRadialGradient(this.x-5,this.y-5,5,this.x,this.y,this.radius);
+            grad.addColorStop(0,'#ffa559');
+            grad.addColorStop(1,'#d45a1a');
+            ctx.fillStyle=grad;
+            ctx.fill();
+            ctx.fillStyle='#ff6600'; ctx.font="22px monospace";
+            ctx.fillText("🔥",this.x-12,this.y+9);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-18,this.y-22,36,5);
+            ctx.fillStyle='#ffaa66'; ctx.fillRect(this.x-18,this.y-22,36*(this.hp/this.maxHp),5);
+            ctx.restore();
+        }
+        enhancePea(pea){
+            if(!pea.isFire){
+                pea.isFire = true;
+                pea.damage *= 1.2;
+            }
+            return pea;
+        }
+    }
+    
+    class Zombie {
+        constructor(y){
+            this.w=38; this.h=42; this.x=CW+20; this.y=y-20;
+            this.hp=4; this.speed=0.36;
+            this.attackCd=0; this.damage=2;
+            this.frozen = 0;
+            this.slowFactor = 1;
+            this.burning = 0;
+            this.burnDamage = 0;
+        }
+        update(plantsArr){
+            let moveSpeed = this.speed * this.slowFactor;
+            this.x -= moveSpeed;
+            if(this.frozen>0){
+                this.frozen--;
+                if(this.frozen<=0) this.slowFactor=1;
+            }
+            if(this.burning > 0){
+                this.burning--;
+                if(this.burning % 60 === 0 && this.burning > 0){
+                    this.hp -= this.burnDamage;
+                }
+            }
+            for(let i=0;i<plantsArr.length;i++){
+                const p=plantsArr[i];
+                if(Math.abs((this.x+this.w/2)-p.x)<(this.w/2+p.radius) && Math.abs((this.y+this.h/2)-p.y)<(this.h/2+p.radius)){
+                    if(this.attackCd<=0){
+                        let dead=p.takeDamage(this.damage);
+                        if(dead) plantsArr.splice(i,1);
+                        this.attackCd=30;
+                        break;
+                    }
+                }
+            }
+            if(this.attackCd>0) this.attackCd--;
+        }
+        draw(){
+            let color = this.frozen>0 ? '#88bbff' : '#c7251a';
+            ctx.fillStyle=color; ctx.fillRect(this.x,this.y,this.w,this.h);
+            if(this.burning>0){
+                ctx.fillStyle='#ff8844aa';
+                ctx.fillRect(this.x,this.y,this.w,this.h);
+            }
+            ctx.fillStyle='#f5f0cf'; ctx.fillRect(this.x+8,this.y+12,6,6); ctx.fillRect(this.x+24,this.y+12,6,6);
+            ctx.fillStyle='#000'; ctx.fillRect(this.x+9,this.y+14,3,3); ctx.fillRect(this.x+25,this.y+14,3,3);
+            ctx.fillStyle='#eb3b2a'; ctx.fillRect(this.x,this.y-9,this.w,5);
+            let hpPercent = this.hp / 4;
+            ctx.fillStyle='#68d42e'; ctx.fillRect(this.x,this.y-9,this.w * Math.max(0,hpPercent),5);
+        }
+        takeDamage(amt, isFire=false, isIce=false){
+            this.hp-=amt;
+            if(isFire && this.hp>0){
+                this.burning = 180;
+                this.burnDamage = amt;
+            }
+            if(isIce && this.hp>0){
+                this.frozen = 180;
+                this.slowFactor = 0.25;
+            }
+            return this.hp<=0;
+        }
+    }
+    
+    class Brain {
+        constructor(x,y){
+            this.x=x; this.y=y; this.w=48; this.h=48;
+            this.maxHp=8; this.hp=8;
+        }
+        takeDamage(amt){ this.hp-=amt; return this.hp<=0; }
+        draw(){
+            ctx.fillStyle='#ff69b4'; ctx.fillRect(this.x-this.w/2, this.y-this.h/2, this.w, this.h);
+            ctx.fillStyle='#ffc0cb'; 
+            for(let i=0;i<3;i++){
+                ctx.beginPath(); ctx.moveTo(this.x-15+i*12, this.y-8); ctx.quadraticCurveTo(this.x-5+i*10, this.y+2, this.x-15+i*12, this.y+12); ctx.stroke();
+            }
+            ctx.fillStyle='#c71585'; ctx.font="bold 24px monospace"; ctx.fillText("🧠", this.x-12, this.y+9);
+            ctx.fillStyle='#c42e1a'; ctx.fillRect(this.x-24, this.y-28, 48, 6);
+            ctx.fillStyle='#ffb6c1'; ctx.fillRect(this.x-24, this.y-28, 48*(this.hp/this.maxHp), 6);
+        }
+    }
+    
+    class Pea {
+        constructor(x,y,dmg, isFire=false, isIce=false){
+            this.x=x; this.y=y; this.r=8; this.speed=5.8;
+            this.damage=dmg;
+            this.isFire=isFire;
+            this.isIce=isIce;
+        }
+        update(){ this.x+=this.speed; }
+        draw(){
+            ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+            if(this.isFire) ctx.fillStyle='#ff8844';
+            else if(this.isIce) ctx.fillStyle='#88ccff';
+            else ctx.fillStyle='#c4ff7a';
+            ctx.fill();
+            if(this.isFire){ ctx.fillStyle='#ffaa33'; ctx.beginPath(); ctx.arc(this.x-2,this.y-2,3,0,Math.PI*2); ctx.fill(); }
+            if(this.isIce){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(this.x-2,this.y-2,3,0,Math.PI*2); ctx.fill(); }
+        }
+    }
+    
+    // ---------- ХЕЛПЕРЫ ----------
+    function getCell(px,py){
+        let col=Math.floor(px/cellW), row=Math.floor(py/cellH);
+        if(col>=0 && col<CELL_COLS && row>=0 && row<CELL_ROWS) return {col,row,valid:true, cx:col*cellW+cellW/2, cy:row*cellH+cellH/2};
+        return {valid:false};
+    }
+    function isOccupied(col,row){
+        let cx=col*cellW+cellW/2, cy=row*cellH+cellH/2;
+        return plants.some(p=>Math.abs(p.x-cx)<cellW/2.5 && Math.abs(p.y-cy)<cellH/2.5);
+    }
+    function addPlantToCell(col,row,type){
+        if(isOccupied(col,row)) return false;
+        let cost = type==='peashooter'? PRICE_PEA : (type==='sunflower'? PRICE_SUN : (type==='firestump'? PRICE_FIRE : (type==='icepea'? PRICE_ICE : PRICE_FAST)));
+        if(sunPoints<cost) return false;
+        let cx=col*cellW+cellW/2, cy=row*cellH+cellH/2;
+        if(type==='peashooter') plants.push(new PeaShooter(cx,cy));
+        else if(type==='sunflower') plants.push(new Sunflower(cx,cy));
+        else if(type==='firestump') plants.push(new FireStump(cx,cy));
+        else if(type==='icepea') plants.push(new IcePeaShooter(cx,cy));
+        else if(type==='fastpea') plants.push(new FastPeaShooter(cx,cy));
+        sunPoints-=cost;
+        updateUI();
+        return true;
+    }
+    
+    function applyFireBuffToPea(pea, x, y){
+        for(let p of plants){
+            if(p.type === 'firestump' && !pea.isFire){
+                let dist = Math.hypot(p.x - x, p.y - y);
+                if(dist < p.radius + 15){
+                    p.enhancePea(pea);
+                    break;
+                }
+            }
+        }
+        return pea;
+    }
+    
+    // ---------- ЛОГИКА УРОВНЯ ----------
+    function startLevel(){
+        roundActive=true;
+        gameOverFlag=false;
+        winFlag=false;
+        currentKills=0;
+        zombies=[];
+        peas=[];
+        spawnTimer=0;
+        frame=0;
+        waveActive=false;
+        preparationTime = preparationSeconds * 60;
+        
+        if(currentLevel % 10 === 0){
+            let centerX=CW/2, centerY=CH/2;
+            brainEntity = new Brain(centerX, centerY);
+        } else {
+            brainEntity = null;
+        }
+        updateUI();
+        document.getElementById('waveStatus').innerHTML = `${t('level')} ${currentLevel}`;
+    }
+    
+    function updateSpawning(){
+        if(!roundActive || gameOverFlag || winFlag) return;
+        if(preparationTime > 0){
+            preparationTime--;
+            return;
+        }
+        if(!waveActive){
+            waveActive = true;
+            spawnTimer = 0;
+        }
+        if(currentKills >= requiredKills && zombies.length===0){
+            winFlag=true; 
+            roundActive=false; 
+            coins+=20; 
+            if(currentLevel > completedLevels) completedLevels = currentLevel;
+            // ПОЛНОЕ ОБНУЛЕНИЕ ПОЛЯ ПРИ ПОБЕДЕ
+            plants = [];        // удаляем все растения
+            sunPoints = 150;    // сбрасываем солнышки до 150
+            updateUI(); 
+            showResultMenu();
+            return;
+        }
+        if(spawnTimer <= 0 && currentKills + zombies.length < requiredKills){
+            let toSpawn = Math.min(zombiesPerWave, requiredKills - (currentKills + zombies.length));
+            for(let i=0;i<toSpawn;i++){
+                let row=Math.floor(Math.random()*CELL_ROWS);
+                let yPos=row*cellH+cellH/2-10;
+                zombies.push(new Zombie(yPos));
+            }
+            spawnTimer = spawnDelay;
+        }
+        if(spawnTimer>0) spawnTimer--;
+    }
+    
+    function updateGame(){
+        if(!roundActive || gameOverFlag) return;
+        updateSpawning();
+        
+        for(let p of plants){
+            p.update();
+            if(p.type==='peashooter') p.shoot(peas, zombies);
+            else if(p.type==='fastpea') p.shoot(peas, zombies);
+            else if(p.type==='icepea') p.shoot(peas, zombies);
+            else if(p.type==='sunflower'){
+                let inc = p.produceSun();
+                if(inc>0) sunPoints+=inc;
+            }
+        }
+        
+        for(let i=0;i<peas.length;i++){
+            peas[i].update();
+            if(!peas[i].isFire && !peas[i].isIce){
+                peas[i] = applyFireBuffToPea(peas[i], peas[i].x, peas[i].y);
+            }
+            if(peas[i].x>CW+50){ peas.splice(i,1); i--; continue; }
+            let hit=false;
+            if(brainEntity && !hit){
+                let b=brainEntity;
+                if(peas[i].x+6>b.x-b.w/2 && peas[i].x-6<b.x+b.w/2 && peas[i].y+6>b.y-b.h/2 && peas[i].y-6<b.y+b.h/2){
+                    let dead=b.takeDamage(peas[i].damage);
+                    if(dead) brainEntity=null;
+                    hit=true;
+                }
+            }
+            if(!hit){
+                for(let j=0;j<zombies.length;j++){
+                    let z=zombies[j];
+                    if(peas[i].x+6>z.x && peas[i].x-6<z.x+z.w && peas[i].y+6>z.y && peas[i].y-6<z.y+z.h){
+                        let dead=z.takeDamage(peas[i].damage, peas[i].isFire, peas[i].isIce);
+                        if(dead){ zombies.splice(j,1); currentKills++; updateUI(); }
+                        hit=true;
+                        break;
+                    }
+                }
+            }
+            if(hit){ peas.splice(i,1); i--; }
+        }
+        
+        for(let i=0;i<zombies.length;i++){
+            let z=zombies[i];
+            if(brainEntity && Math.abs((z.x+z.w/2)-brainEntity.x)<(z.w/2+brainEntity.w/2) && Math.abs((z.y+z.h/2)-brainEntity.y)<(z.h/2+brainEntity.h/2)){
+                if(z.attackCd<=0){
+                    let dead=brainEntity.takeDamage(z.damage);
+                    if(dead) brainEntity=null;
+                    z.attackCd=30;
+                }
+            } else {
+                z.update(plants);
+            }
+            if(z.x<25){ gameOverFlag=true; roundActive=false; showResultMenu(); }
+        }
+        if(brainEntity && brainEntity.hp<=0) brainEntity=null;
+        updateUI();
+    }
+    
+    // ---------- МЕНЮ, МАГАЗИН ----------
+    function showResultMenu(){
+        let menuDiv = document.createElement('div');
+        menuDiv.className = 'menu-overlay';
+        let isWin = winFlag && !gameOverFlag;
+        let title = isWin ? t('winTitle') : t('loseTitle');
+        let html = `<div class="menu-panel"><h2>${title}</h2>`;
+        if(isWin){
+            html += `<button class="menu-btn" id="nextLevelBtn">${t('nextLevel')}</button>
+                     <button class="menu-btn" id="menuFromWinBtn">${t('menuBtn')}</button>`;
+        } else {
+            let canRevive = coins >= 100;
+            html += `<button class="menu-btn" id="reviveBtn" ${!canRevive ? 'disabled style="opacity:0.5;"' : ''}>${t('revive')}</button>
+                     <button class="menu-btn" id="menuFromLoseBtn">${t('menuBtn')}</button>`;
+        }
+        html += `</div>`;
+        menuDiv.innerHTML = html;
+        document.body.appendChild(menuDiv);
+        
+        const closeMenu = () => menuDiv.remove();
+        
+        if(isWin){
+            document.getElementById('nextLevelBtn')?.addEventListener('click',()=>{ 
+                currentLevel++; 
+                requiredKills=50; 
+                startLevel(); 
+                closeMenu();
+            });
+            document.getElementById('menuFromWinBtn')?.addEventListener('click',()=>{ 
+                closeMenu();
+                showMainMenu(); 
+            });
+        } else {
+            document.getElementById('reviveBtn')?.addEventListener('click',()=>{ 
+                if(coins>=100){ 
+                    coins-=100; 
+                    reviveGame(); 
+                    closeMenu();
+                } else alert("Не хватает монет!"); 
+            });
+            document.getElementById('menuFromLoseBtn')?.addEventListener('click',()=>{ 
+                closeMenu();
+                showMainMenu(); 
+            });
+        }
+    }
+    
+    function reviveGame(){
+        gameOverFlag=false; winFlag=false; roundActive=true;
+        for(let p of plants){ if(p.hp) p.hp=p.maxHp; }
+        if(brainEntity) brainEntity.hp=brainEntity.maxHp;
+        preparationTime = 180;
+        waveActive = false;
+        updateUI();
+    }
+    
+    function showMainMenu(){ renderMainMenu(); }
+    function renderMainMenu(){
+        let existing = document.querySelector('.menu-overlay');
+        if(existing) existing.remove();
+        let menuDiv = document.createElement('div');
+        menuDiv.className = 'menu-overlay';
+        let html = `<div class="menu-panel"><h2>${t('menu')}</h2>
+                    <div class="level-counter">🌟 ${t('levelsCompleted')} ${completedLevels} 🌟</div>
+                    <button class="menu-btn" id="menuPlayBtn">${t('play')}</button>
+                    <button class="menu-btn" id="menuSettingsBtn">${t('settings')}</button>
+                    <button class="menu-btn" id="menuShopBtn">${t('shop')}</button>
+                    </div>`;
+        menuDiv.innerHTML = html;
+        document.body.appendChild(menuDiv);
+        document.getElementById('menuPlayBtn')?.addEventListener('click',()=>{ menuDiv.remove(); startLevel(); });
+        document.getElementById('menuSettingsBtn')?.addEventListener('click',()=>{ menuDiv.remove(); showSettings(); });
+        document.getElementById('menuShopBtn')?.addEventListener('click',()=>{ menuDiv.remove(); showShop(); });
+    }
+    
+    function showSettings(){
+        let div = document.createElement('div');
+        div.className = 'menu-overlay';
+        div.innerHTML = `<div class="menu-panel"><div class="setting-row"><span>🌐 ${t('lang')}</span><div id="langToggleSet" class="toggle-switch ${lang==='en'?'active':''}"></div></div>
+                         <button class="menu-btn close-btn" id="backMenuBtn">${t('back')}</button></div>`;
+        document.body.appendChild(div);
+        document.getElementById('langToggleSet')?.addEventListener('click',()=>{ lang = lang==='ru'?'en':'ru'; updateUITexts(); div.remove(); showSettings(); });
+        document.getElementById('backMenuBtn')?.addEventListener('click',()=>{ div.remove(); showMainMenu(); });
+    }
+    
+    function showShop(){
+        let div = document.createElement('div');
+        div.className = 'menu-overlay';
+        let html = `<div class="menu-panel"><h2>${t('shop')}</h2>
+                    <div style="text-align:center;"><span class="shop-coins">🪙 ${coins} ${t('coins')}</span></div>
+                    <div class="shop-item"><div>🌻 ${t('upgrade1')}</div>${!upgrades.sunflowerBoost?`<button id="buySunUp">${t('buy')}</button>`:`✅`}</div>
+                    <div class="shop-item"><div>💥 ${t('upgrade2')}</div>${!upgrades.peaDamageBoost?`<button id="buyPeaUp">${t('buy')}</button>`:`✅`}</div>
+                    <div class="shop-item"><div>🔥 ${t('buyFire')}</div>${!shopItems.fireStump?`<button id="buyFire">Купить (200🪙)</button>`:`✅ Куплен`}</div>
+                    <div class="shop-item"><div>❄️ ${t('buyIce')}</div>${!shopItems.icePea?`<button id="buyIce">Купить (250🪙)</button>`:`✅ Куплен`}</div>
+                    <div class="shop-item"><div>⚡ ${t('buyFast')}</div>${!shopItems.fastPea?`<button id="buyFast">Купить (300🪙)</button>`:`✅ Куплен`}</div>
+                    <button class="menu-btn close-btn" id="backShopBtn">${t('back')}</button></div>`;
+        div.innerHTML = html;
+        document.body.appendChild(div);
+        
+        if(!upgrades.sunflowerBoost) document.getElementById('buySunUp')?.addEventListener('click',()=>{ if(coins>=100){ upgrades.sunflowerBoost=true; coins-=100; updateUI(); div.remove(); showShop(); } else alert("Не хватает монет!"); });
+        if(!upgrades.peaDamageBoost) document.getElementById('buyPeaUp')?.addEventListener('click',()=>{ if(coins>=100){ upgrades.peaDamageBoost=true; coins-=100; updateUI(); div.remove(); showShop(); } else alert("Не хватает монет!"); });
+        if(!shopItems.fireStump) document.getElementById('buyFire')?.addEventListener('click',()=>{ if(coins>=200){ shopItems.fireStump=true; coins-=200; updateUI(); updateShopItems(); div.remove(); showShop(); } else alert("Не хватает монет!"); });
+        if(!shopItems.icePea) document.getElementById('buyIce')?.addEventListener('click',()=>{ if(coins>=250){ shopItems.icePea=true; coins-=250; updateUI(); updateShopItems(); div.remove(); showShop(); } else alert("Не хватает монет!"); });
+        if(!shopItems.fastPea) document.getElementById('buyFast')?.addEventListener('click',()=>{ if(coins>=300){ shopItems.fastPea=true; coins-=300; updateUI(); updateShopItems(); div.remove(); showShop(); } else alert("Не хватает монет!"); });
+        document.getElementById('backShopBtn')?.addEventListener('click',()=>{ div.remove(); showMainMenu(); });
+    }
+    
+    function updateShopItems(){
+        let fireIcon = document.getElementById('icon-fire');
+        let iceIcon = document.getElementById('icon-ice');
+        let fastIcon = document.getElementById('icon-fast');
+        if(shopItems.fireStump) fireIcon.style.display = 'flex';
+        else fireIcon.style.display = 'none';
+        if(shopItems.icePea) iceIcon.style.display = 'flex';
+        else iceIcon.style.display = 'none';
+        if(shopItems.fastPea) fastIcon.style.display = 'flex';
+        else fastIcon.style.display = 'none';
+    }
+    
+    function updateUITexts(){
+        document.getElementById('peaName').innerHTML = t('peaName');
+        document.getElementById('sunName').innerHTML = t('sunName');
+        document.getElementById('hintMsg').innerHTML = t('hint');
+        if(document.getElementById('fireName')) document.getElementById('fireName').innerHTML = t('fireName');
+        if(document.getElementById('iceName')) document.getElementById('iceName').innerHTML = t('iceName');
+        if(document.getElementById('fastName')) document.getElementById('fastName').innerHTML = t('fastName');
+    }
+    
+    function updateUI(){
+        document.getElementById('sunPoints').innerText = Math.floor(sunPoints);
+        document.getElementById('killCount').innerText = currentKills;
+        document.getElementById('totalToKill').innerText = requiredKills;
+        document.getElementById('coinDisplay').innerHTML = `🪙 ${coins}`;
+    }
+    
+    // ---------- РИСОВАНИЕ ----------
+    function drawPreparationTimer(){
+        if(preparationTime > 0 && roundActive && !gameOverFlag && !winFlag){
+            let seconds = Math.ceil(preparationTime / 60);
+            ctx.font = 'bold 72px monospace';
+            ctx.fillStyle = '#ffdd88';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff9900';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${seconds}`, CW/2, CH/2);
+            ctx.font = 'bold 28px monospace';
+            ctx.fillStyle = '#ffffffcc';
+            ctx.fillText(t('prepare'), CW/2, CH/2 - 70);
+            ctx.textAlign = 'left';
+            ctx.shadowBlur = 0;
+        }
+    }
+    
+    function drawGridAndGhost(){
+        ctx.save();
+        ctx.globalAlpha=0.3;
+        ctx.strokeStyle='#ffffbb';
+        for(let i=1;i<CELL_COLS;i++){ ctx.beginPath(); ctx.moveTo(i*cellW,0); ctx.lineTo(i*cellW,CH); ctx.stroke(); }
+        for(let i=1;i<CELL_ROWS;i++){ ctx.beginPath(); ctx.moveTo(0,i*cellH); ctx.lineTo(CW,i*cellH); ctx.stroke(); }
+        ctx.globalAlpha=1;
+        if(selectedPlantType && ghostCell.valid && roundActive && !gameOverFlag && !winFlag){
+            let occ=ghostCell.occupied;
+            let cost = selectedPlantType==='peashooter'?PRICE_PEA : (selectedPlantType==='sunflower'?PRICE_SUN : (selectedPlantType==='firestump'?PRICE_FIRE : (selectedPlantType==='icepea'?PRICE_ICE : PRICE_FAST)));
+            let enough = sunPoints>=cost;
+            ctx.fillStyle=occ?'rgba(180,60,40,0.6)':(enough?'rgba(70,160,50,0.6)':'rgba(200,70,30,0.6)');
+            ctx.fillRect(ghostCell.col*cellW, ghostCell.row*cellH, cellW, cellH);
+            ctx.strokeStyle=enough?'#ffff80':'#ff8060';
+            ctx.strokeRect(ghostCell.col*cellW+2, ghostCell.row*cellH+2, cellW-4, cellH-4);
+            let drawX=mouseX+20, drawY=mouseY-20;
+            if(drawX+40>CW) drawX=mouseX-45;
+            ctx.beginPath(); ctx.arc(drawX,drawY,18,0,Math.PI*2);
+            if(selectedPlantType==='peashooter'){ ctx.fillStyle='#6fbf4c'; ctx.fill(); ctx.fillText("💚",drawX-12,drawY+7);}
+            else if(selectedPlantType==='sunflower'){ ctx.fillStyle='#e6ac00'; ctx.fill(); ctx.fillText("🌻",drawX-14,drawY+9);}
+            else if(selectedPlantType==='firestump'){ ctx.fillStyle='#ff8c42'; ctx.fill(); ctx.fillText("🔥",drawX-12,drawY+9);}
+            else if(selectedPlantType==='icepea'){ ctx.fillStyle='#6ac8ff'; ctx.fill(); ctx.fillText("❄️",drawX-12,drawY+9);}
+            else if(selectedPlantType==='fastpea'){ ctx.fillStyle='#4a8a2a'; ctx.fill(); ctx.fillText("⚡",drawX-12,drawY+9);}
+        }
+        ctx.restore();
+    }
+    
+    function draw(){
+        ctx.clearRect(0,0,CW,CH);
+        ctx.fillStyle='#78b446'; ctx.fillRect(0,0,CW,CH);
+        for(let p of plants) p.draw();
+        for(let pea of peas) pea.draw();
+        for(let z of zombies) z.draw();
+        if(brainEntity) brainEntity.draw();
+        drawGridAndGhost();
+        drawPreparationTimer();
+        if(gameOverFlag && !winFlag && !roundActive){
+            ctx.font='bold 36px monospace'; ctx.fillStyle='#c92f1f'; ctx.fillText(t('loseTitle'), CW/2-120, CH/2);
+        } else if(winFlag && !roundActive){
+            ctx.font='bold 36px monospace'; ctx.fillStyle='#ffdd88'; ctx.fillText(t('winTitle'), CW/2-100, CH/2);
+        }
+    }
+    
+    // ---------- СОБЫТИЯ ----------
+    function bindEvents(){
+        document.getElementById('icon-pea')?.addEventListener('click',()=>{ if(roundActive && !gameOverFlag && !winFlag) selectedPlantType='peashooter'; else alert("Начни уровень через меню!"); });
+        document.getElementById('icon-sun')?.addEventListener('click',()=>{ if(roundActive && !gameOverFlag && !winFlag) selectedPlantType='sunflower'; else alert("Начни уровень!"); });
+        document.getElementById('icon-fire')?.addEventListener('click',()=>{ if(shopItems.fireStump && roundActive && !gameOverFlag && !winFlag) selectedPlantType='firestump'; else alert("Купи пень в магазине!"); });
+        document.getElementById('icon-ice')?.addEventListener('click',()=>{ if(shopItems.icePea && roundActive && !gameOverFlag && !winFlag) selectedPlantType='icepea'; else alert("Купи морозный горох в магазине!"); });
+        document.getElementById('icon-fast')?.addEventListener('click',()=>{ if(shopItems.fastPea && roundActive && !gameOverFlag && !winFlag) selectedPlantType='fastpea'; else alert("Купи скорострел в магазине!"); });
+        document.getElementById('menuBtnOpen')?.addEventListener('click',()=>{ showMainMenu(); });
+        canvas.addEventListener('mousemove',(e)=>{
+            let rect=canvas.getBoundingClientRect();
+            let sx=canvas.width/rect.width, sy=canvas.height/rect.height;
+            let mx=(e.clientX-rect.left)*sx, my=(e.clientY-rect.top)*sy;
+            mouseX=Math.min(CW-5,Math.max(5,mx)); mouseY=Math.min(CH-5,Math.max(5,my));
+            let cell=getCell(mouseX,mouseY);
+            if(cell.valid) ghostCell={valid:true, col:cell.col, row:cell.row, occupied:isOccupied(cell.col,cell.row)};
+            else ghostCell.valid=false;
+        });
+        canvas.addEventListener('click',(e)=>{
+            if(!roundActive || gameOverFlag || winFlag) return;
+            if(selectedPlantType && ghostCell.valid && !ghostCell.occupied){
+                addPlantToCell(ghostCell.col,ghostCell.row,selectedPlantType);
+                selectedPlantType=null;
+            }
+        });
+    }
+    
+    function gameLoop(){
+        updateGame();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+    
+    function init(){
+        bindEvents();
+        updateUITexts();
+        updateShopItems();
+        showMainMenu();
+        gameLoop();
+    }
+    init();
+</script>
+</body>
+</html>

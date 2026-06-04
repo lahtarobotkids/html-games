@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>El Clásico – Реал Мадрид vs Барселона</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a1f0a;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            flex-direction: column;
+        }
+        .match-container {
+            background: linear-gradient(135deg, #0d2e1a, #1b5e20);
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            border: 2px solid gold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .scoreboard {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.4);
+            padding: 8px;
+            border-radius: 10px;
+        }
+        .team { display: flex; align-items: center; gap: 10px; }
+        .time-box { font-size: 28px; color: gold; }
+        canvas { border: 2px solid white; border-radius: 5px; }
+        .controls { display: flex; gap: 15px; margin-top: 10px; }
+        button {
+            background: gold; border: none; font-size: 18px; padding: 8px 20px;
+            border-radius: 20px; font-weight: bold; cursor: pointer; transition: 0.2s;
+            box-shadow: 0 4px 0 #b8960f;
+        }
+        button:active { transform: translateY(2px); box-shadow: 0 2px 0 #b8960f; }
+        button:disabled { background: #888; box-shadow: 0 4px 0 #555; cursor: not-allowed; }
+        .reset-btn { background: #e74c3c; box-shadow: 0 4px 0 #c0392b; color: white; }
+        .log-panel {
+            background: rgba(0,0,0,0.6); border-radius: 10px; padding: 10px;
+            margin-top: 10px; width: 100%; max-height: 120px; overflow-y: auto;
+            font-size: 13px; border: 1px solid #ccc; color: #eee;
+        }
+        .log-panel p { margin: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.2); }
+        #eventMarkerContainer {
+            position: absolute; top: 0; left: 0;
+            width: 800px; height: 450px;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .event-marker {
+            position: absolute;
+            color: yellow;
+            font-weight: bold;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px black;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+<div class="match-container" id="matchContainer">
+    <div class="scoreboard">
+        <div class="team"><span>⚪👑 Реал Мадрид</span><span id="realScore" style="font-size:30px;">0</span></div>
+        <div class="time-box">⏱ <span id="minute">0</span>'</div>
+        <div class="team"><span>Барселона 🔴🔵</span><span id="barcaScore" style="font-size:30px;">0</span></div>
+    </div>
+    <div id="fieldContainer" style="position: relative;">
+        <canvas id="pitch" width="800" height="450"></canvas>
+        <div id="eventMarkerContainer"></div>
+    </div>
+    <div class="controls">
+        <button id="randomEventBtn">⚡ Спец. событие</button>
+        <button id="resetBtn" class="reset-btn">🔄 Новая игра</button>
+    </div>
+    <div class="log-panel" id="log"></div>
+</div>
+
+<script>
+    const canvas = document.getElementById('pitch');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    let realScore = 0, barcaScore = 0, minute = 0;
+    let matchEnded = false;
+
+    const realScoreEl = document.getElementById('realScore');
+    const barcaScoreEl = document.getElementById('barcaScore');
+    const minuteEl = document.getElementById('minute');
+    const logEl = document.getElementById('log');
+    const randomEventBtn = document.getElementById('randomEventBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const eventMarkerContainer = document.getElementById('eventMarkerContainer');
+
+    class Player {
+        constructor(team, role, baseX, baseY) {
+            this.team = team;
+            this.role = role;
+            this.baseX = baseX;
+            this.baseY = baseY;
+            this.x = baseX;
+            this.y = baseY;
+            this.vx = 0;
+            this.vy = 0;
+            this.radius = role === 'GK' ? 12 : 9;
+            this.hasBall = false;
+            this.tackleCooldown = 0;
+        }
+    }
+
+    const realPositions = [
+        { role: 'GK', x: 30, y: H/2 },
+        { role: 'DEF', x: 120, y: H/2 - 80 }, { role: 'DEF', x: 120, y: H/2 + 80 },
+        { role: 'DEF', x: 160, y: H/2 - 40 }, { role: 'DEF', x: 160, y: H/2 + 40 },
+        { role: 'MID', x: 280, y: H/2 - 60 }, { role: 'MID', x: 280, y: H/2 + 60 },
+        { role: 'MID', x: 330, y: H/2 },
+        { role: 'FWD', x: 430, y: H/2 - 50 }, { role: 'FWD', x: 430, y: H/2 + 50 },
+        { role: 'FWD', x: 480, y: H/2 }
+    ];
+    const barcaPositions = realPositions.map(p => ({ role: p.role, x: W - p.x, y: p.y }));
+
+    let realPlayers = [], barcaPlayers = [];
+    let ball = { x: W/2, y: H/2, vx: 0, vy: 0 };
+    let ballOwner = null;
+    let possessionTeam = null;
+
+    const realNames = ['Куртуа','Карвахаль','Алаба','Милитао','Менди','Вальверде','Кроос','Беллингем','Родриго','Мбаппе','Винисиус'];
+    const barcaNames = ['Тер Штеген','Кунде','Араухо','Кристенсен','Бальде','Френки де Йонг','Педри','Гави','Ямаль','Левандовски','Рафинья'];
+    function rndName(team) { return team==='real' ? realNames[Math.floor(Math.random()*realNames.length)] : barcaNames[Math.floor(Math.random()*barcaNames.length)]; }
+
+    function initTeams() {
+        realPlayers = realPositions.map(p => new Player('real', p.role, p.x, p.y));
+        barcaPlayers = barcaPositions.map(p => new Player('barca', p.role, p.x, p.y));
+        giveBallToRandom(Math.random()<0.5 ? realPlayers : barcaPlayers);
+    }
+
+    function giveBallToRandom(teamArr) {
+        const eligible = teamArr.filter(p => p.role !== 'GK');
+        if (eligible.length === 0) return;
+        const p = eligible[Math.floor(Math.random() * eligible.length)];
+        if (ballOwner) ballOwner.hasBall = false;
+        p.hasBall = true;
+        ballOwner = p;
+        possessionTeam = p.team;
+        ball.x = p.x; ball.y = p.y; ball.vx = 0; ball.vy = 0;
+    }
+
+    function addLog(msg) {
+        const p = document.createElement('p');
+        p.textContent = msg;
+        logEl.appendChild(p);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function showEventText(x, y, text, duration = 2000) {
+        const marker = document.createElement('div');
+        marker.className = 'event-marker';
+        marker.textContent = text;
+        marker.style.left = Math.min(W - 80, Math.max(0, x - 30)) + 'px';
+        marker.style.top = Math.min(H - 30, Math.max(0, y - 25)) + 'px';
+        eventMarkerContainer.appendChild(marker);
+        setTimeout(() => {
+            marker.style.opacity = '0';
+            setTimeout(() => marker.remove(), 300);
+        }, duration);
+    }
+
+    // Вратарь выбивает мяч
+    function goalkeeperKick(gk) {
+        if (!gk || !gk.hasBall) return;
+        gk.hasBall = false;
+        const targetX = gk.team === 'real' ? 300 + Math.random() * 350 : 300 + Math.random() * 350;
+        const targetY = 60 + Math.random() * (H - 120);
+        const angle = Math.atan2(targetY - gk.y, targetX - gk.x);
+        ball.x = gk.x;
+        ball.y = gk.y;
+        ball.vx = Math.cos(angle) * 7;
+        ball.vy = Math.sin(angle) * 7;
+        ballOwner = null;
+        possessionTeam = null;
+        addLog(`🧤 ${minute}' Вратарь выбивает мяч в поле.`);
+        showEventText(gk.x, gk.y - 20, 'ВЫНОС');
+    }
+
+    // ========== ОСНОВНАЯ ЛОГИКА ==========
+    function updateGame() {
+        if (matchEnded) return;
+
+        const allPlayers = [...realPlayers, ...barcaPlayers];
+        allPlayers.forEach(p => { if (p.tackleCooldown > 0) p.tackleCooldown--; });
+
+        // ---- МЯЧ СВОБОДЕН ----
+        if (!ballOwner) {
+            // Движение к мячу
+            const fieldPlayers = allPlayers.filter(p => p.role !== 'GK');
+            fieldPlayers.sort((a,b) => Math.hypot(a.x-ball.x, a.y-ball.y) - Math.hypot(b.x-ball.x, b.y-ball.y));
+            for (let i = 0; i < fieldPlayers.length; i++) {
+                const p = fieldPlayers[i];
+                const dx = ball.x - p.x, dy = ball.y - p.y;
+                const dist = Math.sqrt(dx*dx+dy*dy);
+                let speed = 2.6;
+                if (i >= 4) speed = 1.7;
+                if (dist > 2) {
+                    p.vx = (dx/dist) * speed + (Math.random()-0.5)*0.3;
+                    p.vy = (dy/dist) * speed + (Math.random()-0.5)*0.3;
+                } else { p.vx *= 0.9; p.vy *= 0.9; }
+            }
+            // Вратари
+            allPlayers.filter(p => p.role === 'GK').forEach(p => {
+                const gkX = p.team==='real'?30:W-30, gkY = H/2;
+                if (Math.hypot(ball.x-p.x, ball.y-p.y) < 140 && ((p.team==='real' && ball.x<150) || (p.team==='barca' && ball.x>W-150))) {
+                    const dx = ball.x - p.x, dy = ball.y - p.y;
+                    const dist = Math.sqrt(dx*dx+dy*dy);
+                    if (dist > 3) { p.vx = (dx/dist)*2.2; p.vy = (dy/dist)*2.2; }
+                    else { p.vx=0; p.vy=0; }
+                } else {
+                    p.vx = (gkX - p.x)*0.04;
+                    p.vy = (gkY - p.y)*0.04;
+                }
+            });
+
+            // Физика мяча
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            ball.vx *= 0.98;
+            ball.vy *= 0.98;
+            if (Math.abs(ball.vx) < 0.1) ball.vx = 0;
+            if (Math.abs(ball.vy) < 0.1) ball.vy = 0;
+
+            // Голы, ауты, угловые
+            const goalYMin = H/2 - 60, goalYMax = H/2 + 60;
+            if (ball.x < 8 && ball.y > goalYMin && ball.y < goalYMax) { goalScored('barca'); return; }
+            if (ball.x > W - 8 && ball.y > goalYMin && ball.y < goalYMax) { goalScored('real'); return; }
+            if (ball.y < 5 || ball.y > H - 5) { sideOut(); return; }
+            if (ball.x < 5) { goalKickOrCorner('real'); return; }
+            if (ball.x > W - 5) { goalKickOrCorner('barca'); return; }
+
+            // Вратарь ловит
+            for (let gk of allPlayers.filter(p => p.role === 'GK')) {
+                if (Math.hypot(ball.x - gk.x, ball.y - gk.y) < 25) {
+                    if (ballOwner) ballOwner.hasBall = false;
+                    gk.hasBall = true;
+                    ballOwner = gk;
+                    possessionTeam = gk.team;
+                    ball.vx = 0; ball.vy = 0;
+                    ball.x = gk.x; ball.y = gk.y;
+                    addLog(`🧤 ${minute}' Вратарь ${rndName(gk.team)} забирает мяч!`);
+                    showEventText(gk.x, gk.y - 20, 'СЭЙВ');
+                    // Вынос через 20 кадров, чтобы не мгновенно (реалистичнее)
+                    setTimeout(() => goalkeeperKick(gk), 400);
+                    return; // прерываем цикл, так как мяч уже у вратаря
+                }
+            }
+
+            // Перехват полевыми
+            for (let p of allPlayers) {
+                if (p.role === 'GK') continue;
+                if (Math.hypot(ball.x - p.x, ball.y - p.y) < p.radius + 5) {
+                    if (ballOwner) ballOwner.hasBall = false;
+                    p.hasBall = true;
+                    ballOwner = p;
+                    possessionTeam = p.team;
+                    ball.vx = 0; ball.vy = 0;
+                    ball.x = p.x; ball.y = p.y;
+                    addLog(`⚽ ${minute}' Мяч у ${rndName(p.team)} (${p.team==='real'?'Реал':'Барселона'})`);
+                    showEventText(p.x, p.y - 20, 'МЯЧ', 1500);
+                    break;
+                }
+            }
+        }
+        // ---- МЯЧ У ИГРОКА ----
+        else {
+            const owner = ballOwner; // сохраняем ссылку
+
+            // Движение всех игроков
+            for (let p of allPlayers) {
+                let targetX = p.baseX, targetY = p.baseY;
+                const attDir = p.team === 'real' ? 1 : -1;
+
+                if (p === owner) {
+                    if (p.role === 'GK') {
+                        targetX = p.x; targetY = p.y; // вратарь не бежит
+                    } else {
+                        targetX = p.team === 'real' ? W - 70 : 70;
+                        targetY = H/2 + (Math.random() - 0.5) * 130;
+                    }
+                } else if (p.role === 'GK') {
+                    const gkX = p.team==='real'?30:W-30, gkY = H/2;
+                    if (owner) {
+                        const dx = owner.x-p.x, dy = owner.y-p.y;
+                        const dist = Math.sqrt(dx*dx+dy*dy);
+                        if (dist < 140 && ((p.team==='real' && owner.x<150) || (p.team==='barca' && owner.x>W-150))) {
+                            targetX = gkX + (owner.x-gkX)*0.5;
+                            targetY = gkY + (owner.y-gkY)*0.5;
+                        } else { targetX = gkX; targetY = gkY; }
+                    } else { targetX = gkX; targetY = gkY; }
+                } else {
+                    if (possessionTeam === p.team) {
+                        targetX = p.baseX + attDir * 80;
+                        targetY = p.baseY + (p.baseY > H/2 ? -30 : 30);
+                    } else {
+                        targetX = p.baseX - attDir * 70;
+                        targetY = p.baseY;
+                    }
+                    if (owner) {
+                        targetX += (owner.x - p.baseX) * 0.05;
+                        targetY += (owner.y - p.baseY) * 0.05;
+                    }
+                }
+
+                targetX = Math.max(p.radius, Math.min(W - p.radius, targetX));
+                targetY = Math.max(p.radius, Math.min(H - p.radius, targetY));
+
+                const dx = targetX - p.x, dy = targetY - p.y;
+                const dist = Math.sqrt(dx*dx+dy*dy);
+                const speed = (p === owner) ? (p.role==='GK' ? 0 : 2.2) : (p.role==='GK' ? 1.5 : 1.8);
+                if (dist > 2) {
+                    p.vx = (dx / dist) * speed + (Math.random() - 0.5) * 0.2;
+                    p.vy = (dy / dist) * speed + (Math.random() - 0.5) * 0.2;
+                } else {
+                    p.vx *= 0.9; p.vy *= 0.9;
+                }
+
+                p.x += p.vx;
+                p.y += p.vy;
+                p.x = Math.max(p.radius, Math.min(W - p.radius, p.x));
+                p.y = Math.max(p.radius, Math.min(H - p.radius, p.y));
+
+                if (p === owner) {
+                    ball.x = p.x;
+                    ball.y = p.y;
+                }
+            }
+
+            // Отбор мяча соперниками
+            if (owner && owner.role !== 'GK') {
+                const opponents = owner.team === 'real' ? barcaPlayers : realPlayers;
+                for (let opp of opponents) {
+                    if (opp.tackleCooldown > 0) continue;
+                    if (Math.hypot(opp.x - owner.x, opp.y - owner.y) < 20 && Math.random() < 0.035) {
+                        opp.tackleCooldown = 25;
+                        owner.hasBall = false;
+                        if (Math.random() < 0.4) {
+                            giveBallToRandom(opponents);
+                            addLog(`⚡ ${minute}' Отбор! ${rndName(opp.team)} завладевает мячом.`);
+                            showEventText(opp.x, opp.y - 20, 'ОТБОР');
+                        } else {
+                            ballOwner = null; possessionTeam = null;
+                            ball.x = opp.x; ball.y = opp.y;
+                            ball.vx = (Math.random() - 0.5) * 6;
+                            ball.vy = (Math.random() - 0.5) * 6;
+                            addLog(`⚡ ${minute}' Отбор, мяч отскакивает!`);
+                            showEventText(ball.x, ball.y - 20, 'ОТБОР');
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // ДЕЙСТВИЯ ВЛАДЕЛЬЦА (пас/удар)
+            if (owner && owner.role !== 'GK') {
+                if (Math.random() < 0.07) { // Пас
+                    const teamArr = owner.team === 'real' ? realPlayers : barcaPlayers;
+                    const target = teamArr[Math.floor(Math.random() * teamArr.length)];
+                    if (target !== owner && target.role !== 'GK') {
+                        owner.hasBall = false;
+                        const angle = Math.atan2(target.y - owner.y, target.x - owner.x);
+                        ball.x = owner.x; ball.y = owner.y;
+                        ball.vx = Math.cos(angle) * 7;
+                        ball.vy = Math.sin(angle) * 7;
+                        const passerTeam = owner.team;
+                        const passerX = owner.x, passerY = owner.y;
+                        ballOwner = null; possessionTeam = null;
+                        addLog(`🔄 ${minute}' Пас от ${rndName(passerTeam)}`);
+                        showEventText(passerX, passerY - 20, 'ПАС');
+                    }
+                } else if (Math.random() < 0.04) { // Удар
+                    const targetX = owner.team === 'real' ? W : 0;
+                    const targetY = H/2 + (Math.random() - 0.5) * 100;
+                    const angle = Math.atan2(targetY - owner.y, targetX - owner.x);
+                    owner.hasBall = false;
+                    ball.x = owner.x; ball.y = owner.y;
+                    ball.vx = Math.cos(angle) * 8;
+                    ball.vy = Math.sin(angle) * 8;
+                    const shooterTeam = owner.team;
+                    ballOwner = null; possessionTeam = null;
+                    addLog(`🔥 ${minute}' Удар от ${rndName(shooterTeam)}!`);
+                    showEventText(ball.x, ball.y - 20, 'УДАР');
+                }
+            }
+        }
+    }
+
+    function goalScored(scoringTeam) {
+        if (matchEnded) return;
+        if (scoringTeam === 'real') {
+            realScore++;
+            realScoreEl.textContent = realScore;
+            addLog(`⚽ ${minute}' ГОЛ! ${rndName('real')} забивает за Реал Мадрид!`);
+            showEventText(W - 50, H/2, 'ГОЛ!', 3000);
+        } else {
+            barcaScore++;
+            barcaScoreEl.textContent = barcaScore;
+            addLog(`⚽ ${minute}' ГОЛ! ${rndName('barca')} забивает за Барселону!`);
+            showEventText(50, H/2, 'ГОЛ!', 3000);
+        }
+        resetAfterGoal();
+    }
+
+    function resetAfterGoal() {
+        ball.x = W/2; ball.y = H/2; ball.vx = 0; ball.vy = 0;
+        if (ballOwner) ballOwner.hasBall = false;
+        ballOwner = null; possessionTeam = null;
+        setTimeout(() => {
+            if (!matchEnded) giveBallToRandom(Math.random() < 0.5 ? realPlayers : barcaPlayers);
+        }, 1000);
+    }
+
+    function sideOut() {
+        addLog(`📌 ${minute}' Аут! Мяч уходит за боковую.`);
+        ball.vx *= -0.5; ball.vy *= -0.5;
+        ball.y = ball.y < 5 ? 6 : H - 6;
+        ballOwner = null; possessionTeam = null;
+        showEventText(ball.x, ball.y - 20, 'АУТ');
+    }
+
+    function goalKickOrCorner(defendingTeam) {
+        if (defendingTeam === 'real') {
+            if (ball.x < 5) {
+                addLog(`🚩 ${minute}' Угловой для Барселоны.`);
+                ball.x = 20; ball.y = H/2;
+                showEventText(20, H/2 - 20, 'УГЛОВОЙ');
+            } else {
+                addLog(`🥅 ${minute}' Удар от ворот Реала.`);
+                ball.x = 40; ball.y = H/2;
+            }
+        } else {
+            if (ball.x > W - 5) {
+                addLog(`🚩 ${minute}' Угловой для Реала.`);
+                ball.x = W - 20; ball.y = H/2;
+                showEventText(W - 120, H/2 - 20, 'УГЛОВОЙ');
+            } else {
+                addLog(`🥅 ${minute}' Удар от ворот Барселоны.`);
+                ball.x = W - 40; ball.y = H/2;
+            }
+        }
+        ball.vx = 0; ball.vy = 0;
+        ballOwner = null; possessionTeam = null;
+    }
+
+    // ========== ОТРИСОВКА ==========
+    function drawPitch() {
+        ctx.fillStyle = '#0f5c0f';
+        ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, W, H);
+        ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+        ctx.beginPath(); ctx.arc(W/2, H/2, 70, 0, Math.PI*2); ctx.stroke();
+        ctx.strokeRect(0, H/2-100, 120, 200);
+        ctx.strokeRect(0, H/2-50, 60, 100);
+        ctx.strokeRect(W-120, H/2-100, 120, 200);
+        ctx.strokeRect(W-60, H/2-50, 60, 100);
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(-5, H/2-60, 15, 120);
+        ctx.fillRect(W-10, H/2-60, 15, 120);
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(90, H/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(W-90, H/2, 3, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawPlayersAndBall() {
+        for (let p of [...realPlayers, ...barcaPlayers]) {
+            if (p.role === 'GK') {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius+2, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+            }
+            ctx.fillStyle = p.team === 'real' ? 'white' : '#0044cc';
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+            if (p.hasBall) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius+3, 0, Math.PI*2);
+                ctx.strokeStyle = 'gold'; ctx.lineWidth = 2; ctx.stroke();
+            }
+        }
+        ctx.fillStyle = 'orange';
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, 5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'black'; ctx.stroke();
+    }
+
+    // ========== ВРЕМЯ ==========
+    let timeInterval;
+    function startTime() {
+        clearInterval(timeInterval);
+        timeInterval = setInterval(() => {
+            if (matchEnded) return;
+            minute++;
+            minuteEl.textContent = minute;
+            if (minute >= 90) endMatch();
+        }, 1800);
+    }
+
+    function endMatch() {
+        matchEnded = true;
+        randomEventBtn.disabled = true;
+        clearInterval(timeInterval);
+        let msg = realScore > barcaScore ? '🏆 Реал Мадрид побеждает! Hala Madrid!' :
+                  barcaScore > realScore ? '🏆 Барселона побеждает! Visca el Barça!' :
+                  '🤝 Ничья!';
+        addLog(`⏰ Финальный свисток! ${msg} Итог: ${realScore}:${barcaScore}`);
+    }
+
+    // ========== СПЕЦ. СОБЫТИЯ ==========
+    function specialEvent() {
+        if (matchEnded) return;
+        const r = Math.random();
+        if (r < 0.2) {
+            addLog(`🟨 ${minute}' Жёлтая карточка: ${rndName(Math.random()<0.5?'real':'barca')} за грубый фол.`);
+            showEventText(W/2, H/2 - 30, '🟨 ЖЁЛТАЯ');
+        } else if (r < 0.4) {
+            addLog(`🥊 ${minute}' Стычка! Игроки толкаются, судья вмешивается.`);
+            showEventText(W/2, H/2 - 30, '🥊 ДРАКА');
+        } else if (r < 0.6) {
+            addLog(`🤗 ${minute}' Красивый гол отпраздновали объятиями.`);
+            showEventText(W/2, H/2 - 30, '🤗 ОБЪЯТИЯ');
+        } else if (r < 0.8) {
+            addLog(`🤕 ${minute}' Травма: ${rndName('real')} на газоне, требуется помощь.`);
+            showEventText(W/2 - 60, H/2 - 30, '🤕 ТРАВМА');
+        } else {
+            addLog(`🔄 ${minute}' Замена: свежий игрок выходит на поле.`);
+            showEventText(W/2, H/2 - 30, '🔄 ЗАМЕНА');
+        }
+    }
+
+    function resetGame() {
+        realScore = 0; barcaScore = 0; minute = 0; matchEnded = false;
+        realScoreEl.textContent = '0'; barcaScoreEl.textContent = '0'; minuteEl.textContent = '0';
+        logEl.innerHTML = ''; addLog('⚽ Матч начинается! Эль Класико!');
+        ball.x = W/2; ball.y = H/2; ball.vx = 0; ball.vy = 0;
+        if (ballOwner) ballOwner.hasBall = false;
+        ballOwner = null; possessionTeam = null;
+        eventMarkerContainer.innerHTML = '';
+        initTeams();
+        randomEventBtn.disabled = false;
+        startTime();
+    }
+
+    randomEventBtn.addEventListener('click', specialEvent);
+    resetBtn.addEventListener('click', resetGame);
+
+    function gameLoop() {
+        updateGame();
+        drawPitch();
+        drawPlayersAndBall();
+        requestAnimationFrame(gameLoop);
+    }
+
+    initTeams();
+    startTime();
+    gameLoop();
+</script>
+</body>
+</html>

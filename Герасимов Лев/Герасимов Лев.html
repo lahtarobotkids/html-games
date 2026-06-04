@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash Royale 3D - Армия скелетов</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a0a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            user-select: none;
+        }
+        
+        #gameContainer {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px 25px;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            color: white;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+        }
+        
+        .elixir-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .elixir-bar {
+            width: 200px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #8b00ff;
+        }
+        
+        .elixir-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff00ff, #ff69b4);
+            transition: width 0.3s;
+            border-radius: 8px;
+        }
+        
+        .elixir-text {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .elixir-rate {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        
+        .timer {
+            font-size: 32px;
+            color: #ffd700;
+            font-weight: bold;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+        
+        .towers-status {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .tower-health {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .tower-icon {
+            font-size: 24px;
+        }
+        
+        .tower-hp-bar {
+            width: 60px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .tower-hp-fill {
+            height: 100%;
+            transition: width 0.3s;
+            border-radius: 4px;
+        }
+        
+        .tower-hp-fill.player {
+            background: linear-gradient(90deg, #4169E1, #0000FF);
+        }
+        
+        .tower-hp-fill.enemy {
+            background: linear-gradient(90deg, #ff0000, #cc0000);
+        }
+        
+        .tower-hp-text {
+            font-size: 10px;
+            color: #ccc;
+        }
+        
+        .tower-hp-text.enemy {
+            color: #ff6666;
+        }
+        
+        .score-display {
+            font-size: 24px;
+            color: white;
+            text-align: center;
+        }
+        
+        .cards-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: all;
+        }
+        
+        .card-3d {
+            width: 100px;
+            height: 140px;
+            background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
+            border: 3px solid #ffd700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            position: relative;
+            color: white;
+        }
+        
+        .card-3d:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.4);
+            border-color: #ff0;
+        }
+        
+        .card-3d.selected {
+            border-color: #ff00ff;
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
+            transform: translateY(-20px) scale(1.1);
+            animation: pulse 1s infinite;
+        }
+        
+        .card-3d.not-enough {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(50%);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 40px rgba(255, 0, 255, 0.6); }
+            50% { box-shadow: 0 0 60px rgba(255, 0, 255, 0.9); }
+        }
+        
+        .card-cost-badge {
+            position: absolute;
+            top: -15px;
+            left: -15px;
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, #ff00ff, #8b00ff);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: 2px solid #fff;
+        }
+        
+        .card-icon-3d {
+            font-size: 45px;
+            margin: 5px 0;
+        }
+        
+        .card-name-3d {
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 5px;
+        }
+        
+        .card-stats {
+            font-size: 10px;
+            color: #aaa;
+            text-align: center;
+        }
+        
+        .game-over-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            pointer-events: all;
+        }
+        
+        .victory-panel {
+            text-align: center;
+            color: white;
+            padding: 40px;
+            background: linear-gradient(135deg, #1a1a1a, #333);
+            border-radius: 20px;
+            border: 3px solid gold;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        .victory-title {
+            font-size: 52px;
+            margin: 20px 0;
+            animation: bounceIn 0.6s ease-out;
+        }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        
+        .restart-btn {
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            color: black;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+        
+        .restart-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.5);
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 180px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+        
+        .double-elixir-indicator {
+            color: #ff69b4;
+            font-weight: bold;
+            animation: glow 1s infinite;
+        }
+        
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 5px rgba(255, 105, 180, 0.5); }
+            50% { text-shadow: 0 0 20px rgba(255, 105, 180, 1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div class="ui-overlay">
+            <div class="hud-panel">
+                <div class="elixir-container">
+                    <span style="color: #ff69b4; font-size: 24px;">💎</span>
+                    <div>
+                        <div class="elixir-bar">
+                            <div class="elixir-fill" id="elixirFill" style="width: 50%"></div>
+                        </div>
+                        <div class="elixir-rate" id="elixirRate">⏱️ Нормальная скорость</div>
+                    </div>
+                    <span style="color: white; font-size: 18px;" id="elixirText">5.0/10</span>
+                </div>
+            </div>
+            
+            <div class="hud-panel">
+                <div class="towers-status">
+                    <div class="tower-health">
+                        <div class="tower-icon">🏰</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill player" id="playerTower1HP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text" id="playerTower1Text">500/500</div>
+                    </div>
+                    <div class="tower-health">
+                        <div class="tower-icon">🏯</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill player" id="playerTower2HP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text" id="playerTower2Text">700/700</div>
+                    </div>
+                    <div class="tower-health">
+                        <div class="tower-icon">👑</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill player" id="playerKingHP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text" id="playerKingText">1000/1000</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="hud-panel">
+                <div class="timer" id="timer">3:00</div>
+                <div class="score-display">
+                    🏆 <span id="score">0 - 0</span>
+                </div>
+            </div>
+            
+            <div class="hud-panel">
+                <div class="towers-status">
+                    <div class="tower-health">
+                        <div class="tower-icon">👑</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill enemy" id="enemyKingHP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text enemy" id="enemyKingText">1000/1000</div>
+                    </div>
+                    <div class="tower-health">
+                        <div class="tower-icon">🏯</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill enemy" id="enemyTower2HP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text enemy" id="enemyTower2Text">700/700</div>
+                    </div>
+                    <div class="tower-health">
+                        <div class="tower-icon">🏰</div>
+                        <div class="tower-hp-bar">
+                            <div class="tower-hp-fill enemy" id="enemyTower1HP" style="width: 100%"></div>
+                        </div>
+                        <div class="tower-hp-text enemy" id="enemyTower1Text">500/500</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="cards-container" id="cardsContainer"></div>
+        
+        <div class="instructions">
+            🖱️ Выбери карту снизу<br>
+            🎯 Кликни на поле для размещения<br>
+            ❤️ Зелёный HP - союзники<br>
+            💔 Красный HP - враги<br>
+            💀 Армия скелетов - спавнит 5!<br>
+            💎 Эликсир: 1 ед. за 5.6 сек<br>
+            ⚡ Double Elixir после 2:00<br>
+            🖱️ Правая кнопка - поворот камеры<br>
+            🖱️ Колёсико - приближение
+        </div>
+        
+        <div class="game-over-overlay" id="gameOverScreen">
+            <div class="victory-panel">
+                <div style="font-size: 80px;" id="crownIcon">👑</div>
+                <div class="victory-title" id="victoryText">ПОБЕДА!</div>
+                <div style="font-size: 28px; color: #ffd700;" id="victoryScore"></div>
+                <button class="restart-btn" onclick="restartGame()">⚔️ Играть снова</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Инициализация Three.js
+        const container = document.getElementById('gameContainer');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 30, 80);
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 100);
+        camera.position.set(20, 25, 20);
+        camera.lookAt(0, 0, 0);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+        
+        // Освещение
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 20, 10);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.camera.left = -20;
+        directionalLight.shadow.camera.right = 20;
+        directionalLight.shadow.camera.top = 20;
+        directionalLight.shadow.camera.bottom = -20;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        scene.add(directionalLight);
+        
+        // Земля
+        const groundGeometry = new THREE.PlaneGeometry(40, 20);
+        const groundMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x4CAF50,
+            side: THREE.DoubleSide
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Дорожки
+        function createPath(x, z) {
+            const pathGeometry = new THREE.PlaneGeometry(2, 20);
+            const pathMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xD2B48C,
+                side: THREE.DoubleSide
+            });
+            const path = new THREE.Mesh(pathGeometry, pathMaterial);
+            path.rotation.x = -Math.PI / 2;
+            path.position.set(x, 0.02, z);
+            path.receiveShadow = true;
+            scene.add(path);
+        }
+        
+        createPath(-5, 0);
+        createPath(5, 0);
+        
+        // Река
+        const riverGeometry = new THREE.PlaneGeometry(40, 2);
+        const riverMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x4169E1,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+        });
+        const river = new THREE.Mesh(riverGeometry, riverMaterial);
+        river.rotation.x = -Math.PI / 2;
+        river.position.y = 0.05;
+        river.position.z = 0;
+        scene.add(river);
+        
+        // Мосты
+        function createBridge(x) {
+            const bridgeGeometry = new THREE.BoxGeometry(2.5, 0.2, 2.5);
+            const bridgeMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+            const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+            bridge.position.set(x, 0.1, 0);
+            bridge.receiveShadow = true;
+            bridge.castShadow = true;
+            scene.add(bridge);
+            
+            const railGeometry = new THREE.BoxGeometry(2.5, 0.3, 0.1);
+            const railMaterial = new THREE.MeshPhongMaterial({ color: 0x654321 });
+            
+            [-1, 1].forEach(side => {
+                const rail = new THREE.Mesh(railGeometry, railMaterial);
+                rail.position.set(x, 0.4, side);
+                rail.castShadow = true;
+                scene.add(rail);
+            });
+        }
+        
+        createBridge(-5);
+        createBridge(5);
+        
+        // Декоративные деревья
+        function createTree(x, z) {
+            const group = new THREE.Group();
+            
+            const trunkGeometry = new THREE.CylinderGeometry(0.15, 0.2, 1.5, 8);
+            const trunkMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 0.75;
+            trunk.castShadow = true;
+            group.add(trunk);
+            
+            const leavesGeometry = new THREE.SphereGeometry(0.8, 8, 8);
+            const leavesMaterial = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+            const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+            leaves.position.y = 1.8;
+            leaves.castShadow = true;
+            group.add(leaves);
+            
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        
+        [-18, 18].forEach(x => {
+            [-8, -4, 0, 4, 8].forEach(z => {
+                if (Math.abs(z) > 2 || Math.abs(x) < 15) {
+                    createTree(x + Math.random() * 2, z + Math.random() * 2);
+                }
+            });
+        });
+        
+        // Класс для создания 3D моделей
+        class ModelFactory {
+            // ГОЛЕМ - каменный гигант
+            static createGolem() {
+                const group = new THREE.Group();
+                
+                const bodyGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.6);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x8B7355,
+                    roughness: 0.8
+                });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.position.y = 1.2;
+                body.castShadow = true;
+                group.add(body);
+                
+                for (let i = 0; i < 4; i++) {
+                    const crystalGeometry = new THREE.ConeGeometry(0.15, 0.5, 6);
+                    const crystalMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0x00FFFF,
+                        emissive: 0x00AAAA,
+                        emissiveIntensity: 0.5
+                    });
+                    const crystal = new THREE.Mesh(crystalGeometry, crystalMaterial);
+                    crystal.position.set(
+                        (Math.random() - 0.5) * 0.5,
+                        1.6 + Math.random() * 0.3,
+                        (Math.random() - 0.5) * 0.4
+                    );
+                    group.add(crystal);
+                }
+                
+                const headGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+                const headMaterial = new THREE.MeshPhongMaterial({ color: 0x8B7355 });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = 2.1;
+                head.castShadow = true;
+                group.add(head);
+                
+                const eyeGeometry = new THREE.SphereGeometry(0.08, 4, 4);
+                const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x00FFFF });
+                
+                const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+                leftEye.position.set(-0.12, 2.2, 0.26);
+                group.add(leftEye);
+                
+                const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+                rightEye.position.set(0.12, 2.2, 0.26);
+                group.add(rightEye);
+                
+                const fistGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+                const fistMaterial = new THREE.MeshPhongMaterial({ color: 0x8B7355 });
+                
+                const leftFist = new THREE.Mesh(fistGeometry, fistMaterial);
+                leftFist.position.set(-0.6, 1.2, 0);
+                group.add(leftFist);
+                
+                const rightFist = new THREE.Mesh(fistGeometry, fistMaterial);
+                rightFist.position.set(0.6, 1.2, 0);
+                group.add(rightFist);
+                
+                return group;
+            }
+            
+            // МЕГА РЫЦАРЬ
+            static createMegaKnight() {
+                const group = new THREE.Group();
+                
+                const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.6, 1.8, 8);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x2C2C2C,
+                    metalness: 0.8
+                });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.position.y = 0.9;
+                body.castShadow = true;
+                group.add(body);
+                
+                const shoulderGeometry = new THREE.SphereGeometry(0.35, 8, 8);
+                const shoulderMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFFD700,
+                    metalness: 0.9,
+                    emissive: 0xFFD700,
+                    emissiveIntensity: 0.2
+                });
+                
+                const leftShoulder = new THREE.Mesh(shoulderGeometry, shoulderMaterial);
+                leftShoulder.position.set(-0.55, 1.7, 0);
+                group.add(leftShoulder);
+                
+                const rightShoulder = new THREE.Mesh(shoulderGeometry, shoulderMaterial);
+                rightShoulder.position.set(0.55, 1.7, 0);
+                group.add(rightShoulder);
+                
+                const helmetGeometry = new THREE.SphereGeometry(0.4, 8, 8);
+                const helmetMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x1a1a1a,
+                    metalness: 0.9
+                });
+                const helmet = new THREE.Mesh(helmetGeometry, helmetMaterial);
+                helmet.position.y = 2.0;
+                helmet.castShadow = true;
+                group.add(helmet);
+                
+                const hornGeometry = new THREE.ConeGeometry(0.1, 0.4, 6);
+                const hornMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFFD700,
+                    metalness: 0.8
+                });
+                
+                const leftHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+                leftHorn.position.set(-0.15, 2.35, 0);
+                leftHorn.rotation.z = 0.3;
+                group.add(leftHorn);
+                
+                const rightHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+                rightHorn.position.set(0.15, 2.35, 0);
+                rightHorn.rotation.z = -0.3;
+                group.add(rightHorn);
+                
+                const fistGeometry = new THREE.SphereGeometry(0.25, 8, 8);
+                const fistMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
+                
+                const leftFist = new THREE.Mesh(fistGeometry, fistMaterial);
+                leftFist.position.set(-0.5, 1.2, 0);
+                group.add(leftFist);
+                
+                const rightFist = new THREE.Mesh(fistGeometry, fistMaterial);
+                rightFist.position.set(0.5, 1.2, 0);
+                group.add(rightFist);
+                
+                return group;
+            }
+            
+            // ПЛАМЕННЫЙ ДРАКОН
+            static createFlameDragon() {
+                const group = new THREE.Group();
+                
+                const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.4, 1.8, 8);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFF4500,
+                    emissive: 0xFF2200,
+                    emissiveIntensity: 0.3
+                });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.position.y = 1.5;
+                body.castShadow = true;
+                group.add(body);
+                
+                const headGeometry = new THREE.ConeGeometry(0.3, 0.7, 6);
+                const headMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFF6600,
+                    emissive: 0xFF4400,
+                    emissiveIntensity: 0.4
+                });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.set(0, 2.2, 0.5);
+                head.rotation.x = -Math.PI / 4;
+                group.add(head);
+                
+                for (let i = -1; i <= 1; i += 2) {
+                    const hornGeometry = new THREE.ConeGeometry(0.08, 0.3, 6);
+                    const hornMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xFF0000,
+                        emissive: 0xFF0000,
+                        emissiveIntensity: 0.6
+                    });
+                    const horn = new THREE.Mesh(hornGeometry, hornMaterial);
+                    horn.position.set(i * 0.15, 2.5, 0.4);
+                    horn.rotation.z = i * 0.3;
+                    group.add(horn);
+                }
+                
+                const wingGeometry = new THREE.PlaneGeometry(1.2, 0.6);
+                const wingMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFF6347,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.7,
+                    emissive: 0xFF2200,
+                    emissiveIntensity: 0.5
+                });
+                
+                const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                leftWing.position.set(-0.7, 1.8, 0);
+                leftWing.rotation.y = Math.PI / 4;
+                leftWing.rotation.z = Math.PI / 6;
+                group.add(leftWing);
+                
+                const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                rightWing.position.set(0.7, 1.8, 0);
+                rightWing.rotation.y = -Math.PI / 4;
+                rightWing.rotation.z = -Math.PI / 6;
+                group.add(rightWing);
+                
+                const tailGeometry = new THREE.ConeGeometry(0.1, 0.5, 6);
+                const tailMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xFF0000,
+                    emissive: 0xFF0000,
+                    emissiveIntensity: 0.7
+                });
+                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+                tail.position.set(0, 0.5, -0.4);
+                tail.rotation.x = Math.PI / 3;
+                group.add(tail);
+                
+                return group;
+            }
+            
+            // СКЕЛЕТ (один)
+            static createSkeleton() {
+                const group = new THREE.Group();
+                
+                // Череп
+                const skullGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+                const boneMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xF5F5DC,
+                    roughness: 0.7
+                });
+                const skull = new THREE.Mesh(skullGeometry, boneMaterial);
+                skull.position.y = 1.4;
+                skull.castShadow = true;
+                group.add(skull);
+                
+                // Глазницы (тёмные)
+                const eyeSocketGeometry = new THREE.SphereGeometry(0.05, 4, 4);
+                const eyeSocketMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                
+                const leftSocket = new THREE.Mesh(eyeSocketGeometry, eyeSocketMaterial);
+                leftSocket.position.set(-0.07, 1.45, 0.18);
+                group.add(leftSocket);
+                
+                const rightSocket = new THREE.Mesh(eyeSocketGeometry, eyeSocketMaterial);
+                rightSocket.position.set(0.07, 1.45, 0.18);
+                group.add(rightSocket);
+                
+                // Челюсть
+                const jawGeometry = new THREE.BoxGeometry(0.15, 0.05, 0.1);
+                const jaw = new THREE.Mesh(jawGeometry, boneMaterial);
+                jaw.position.set(0, 1.32, 0.12);
+                group.add(jaw);
+                
+                // Позвоночник
+                for (let i = 0; i < 4; i++) {
+                    const vertebraGeometry = new THREE.BoxGeometry(0.12, 0.08, 0.1);
+                    const vertebra = new THREE.Mesh(vertebraGeometry, boneMaterial);
+                    vertebra.position.y = 1.15 - (i * 0.2);
+                    group.add(vertebra);
+                }
+                
+                // Рёбра
+                for (let i = 0; i < 3; i++) {
+                    const ribGeometry = new THREE.TorusGeometry(0.15, 0.03, 4, 6, Math.PI);
+                    const ribMaterial = new THREE.MeshPhongMaterial({ color: 0xF5F5DC });
+                    const rib = new THREE.Mesh(ribGeometry, ribMaterial);
+                    rib.position.y = 0.9 - (i * 0.15);
+                    rib.rotation.y = Math.PI / 2;
+                    rib.rotation.x = Math.PI / 2;
+                    group.add(rib);
+                }
+                
+                // Руки (кости)
+                const armBoneGeometry = new THREE.CylinderGeometry(0.04, 0.05, 0.5, 6);
+                
+                const leftArm = new THREE.Mesh(armBoneGeometry, boneMaterial);
+                leftArm.position.set(-0.2, 1.0, 0);
+                leftArm.rotation.z = 0.3;
+                group.add(leftArm);
+                
+                const rightArm = new THREE.Mesh(armBoneGeometry, boneMaterial);
+                rightArm.position.set(0.2, 1.0, 0);
+                rightArm.rotation.z = -0.3;
+                group.add(rightArm);
+                
+                // Меч (маленький)
+                const bladeGeometry = new THREE.BoxGeometry(0.03, 0.4, 0.02);
+                const bladeMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xC0C0C0,
+                    metalness: 0.8
+                });
+                const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
+                blade.position.set(0.25, 1.1, 0);
+                group.add(blade);
+                
+                // Ноги
+                const legBoneGeometry = new THREE.CylinderGeometry(0.05, 0.06, 0.5, 6);
+                
+                const leftLeg = new THREE.Mesh(legBoneGeometry, boneMaterial);
+                leftLeg.position.set(-0.1, 0.4, 0);
+                group.add(leftLeg);
+                
+                const rightLeg = new THREE.Mesh(legBoneGeometry, boneMaterial);
+                rightLeg.position.set(0.1, 0.4, 0);
+                group.add(rightLeg);
+                
+                return group;
+            }
+            
+            static createTower(team = 'player', size = 'normal') {
+                const group = new THREE.Group();
+                const color = team === 'player' ? 0x4169E1 : 0xDC143C;
+                const darkColor = team === 'player' ? 0x0000FF : 0x8B0000;
+                
+                let baseScale = 1;
+                let crown = false;
+                
+                if (size === 'king') {
+                    baseScale = 1.4;
+                    crown = true;
+                }
+                
+                const baseGeometry = new THREE.CylinderGeometry(0.8 * baseScale, 1 * baseScale, 1, 8);
+                const material = new THREE.MeshPhongMaterial({ color: color });
+                const base = new THREE.Mesh(baseGeometry, material);
+                base.position.y = 0.5;
+                base.castShadow = true;
+                base.receiveShadow = true;
+                group.add(base);
+                
+                const towerGeometry = new THREE.CylinderGeometry(0.6 * baseScale, 0.7 * baseScale, 2.5 * baseScale, 8);
+                const tower = new THREE.Mesh(towerGeometry, material);
+                tower.position.y = 2 * baseScale;
+                tower.castShadow = true;
+                group.add(tower);
+                
+                const roofGeometry = new THREE.ConeGeometry(0.8 * baseScale, 0.8 * baseScale, 8);
+                const roofMaterial = new THREE.MeshPhongMaterial({ color: darkColor });
+                const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                roof.position.y = 3.5 * baseScale;
+                roof.castShadow = true;
+                group.add(roof);
+                
+                if (crown) {
+                    const crownBaseGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.3, 8);
+                    const crownMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xFFD700,
+                        emissive: 0xFFD700,
+                        emissiveIntensity: 0.3
+                    });
+                    const crownMesh = new THREE.Mesh(crownBaseGeometry, crownMaterial);
+                    crownMesh.position.y = 3.9 * baseScale;
+                    group.add(crownMesh);
+                    
+                    for (let i = 0; i < 5; i++) {
+                        const spikeGeometry = new THREE.ConeGeometry(0.08, 0.3, 4);
+                        const spike = new THREE.Mesh(spikeGeometry, crownMaterial);
+                        const angle = (i / 5) * Math.PI * 2;
+                        spike.position.set(
+                            Math.cos(angle) * 0.35,
+                            4.1 * baseScale,
+                            Math.sin(angle) * 0.35
+                        );
+                        group.add(spike);
+                    }
+                }
+                
+                return group;
+            }
+        }
+        
+        // Игровые объекты
+        let gameObjects = [];
+        let selectedCard = null;
+        
+        // Ресурсы
+        let playerElixir = 5.0;
+        let enemyElixir = 5.0;
+        const maxElixir = 10.0;
+        
+        const NORMAL_ELIXIR_RATE = 0.18;
+        const DOUBLE_ELIXIR_RATE = 0.36;
+        const SUDDEN_DEATH_RATE = 0.54;
+        
+        let currentElixirRate = NORMAL_ELIXIR_RATE;
+        
+        // Счёт
+        let playerScore = 0;
+        let enemyScore = 0;
+        
+        // Время
+        let gameTime = 180;
+        let gameRunning = true;
+        let suddenDeath = false;
+        let doubleElixir = false;
+        
+        // Башни
+        let playerTowers3D = [];
+        let enemyTowers3D = [];
+        
+        // НОВЫЕ КАРТЫ (с армией скелетов)
+        const cards = [
+            { 
+                name: 'Голем', 
+                icon: '🪨', 
+                cost: 8, 
+                hp: 500, 
+                damage: 20, 
+                speed: 0.02, 
+                range: 2, 
+                type: 'melee', 
+                color: 0x8B7355, 
+                model: 'golem',
+                isSquad: false
+            },
+            { 
+                name: 'Мега Рыцарь', 
+                icon: '🦾', 
+                cost: 7, 
+                hp: 400, 
+                damage: 35, 
+                speed: 0.04, 
+                range: 2, 
+                type: 'melee', 
+                color: 0x2C2C2C, 
+                model: 'megaknight',
+                isSquad: false
+            },
+            { 
+                name: 'Плам. Дракон', 
+                icon: '🔥', 
+                cost: 5, 
+                hp: 150, 
+                damage: 45, 
+                speed: 0.05, 
+                range: 5, 
+                type: 'flying', 
+                color: 0xFF4500, 
+                model: 'flamedragon',
+                isSquad: false
+            },
+            { 
+                name: 'Армия скелетов', 
+                icon: '💀', 
+                cost: 3, 
+                hp: 30, 
+                damage: 15, 
+                speed: 0.06, 
+                range: 1.5, 
+                type: 'melee', 
+                color: 0xF5F5DC, 
+                model: 'skeleton',
+                isSquad: true,
+                squadSize: 5
+            }
+        ];
+        
+        // Класс игрового объекта
+        class GameObject {
+            constructor(mesh, card, team, x, z) {
+                this.mesh = mesh;
+                this.card = card;
+                this.team = team;
+                this.hp = card.hp;
+                this.maxHP = card.hp;
+                this.damage = card.damage;
+                this.speed = card.speed;
+                this.range = card.range;
+                this.target = null;
+                this.attackCooldown = 0;
+                this.flying = card.type === 'flying';
+                this.healthBar = null;
+                this.healthBarBg = null;
+                
+                this.mesh.position.set(x, this.flying ? 3 : 0, z);
+                this.mesh.castShadow = true;
+                this.mesh.receiveShadow = true;
+                scene.add(this.mesh);
+                
+                this.createHealthBar();
+            }
+            
+            update() {
+                if (this.hp <= 0) {
+                    scene.remove(this.mesh);
+                    if (this.healthBar) {
+                        this.mesh.remove(this.healthBar);
+                    }
+                    if (this.healthBarBg) {
+                        this.mesh.remove(this.healthBarBg);
+                    }
+                    return false;
+                }
+                
+                if (!this.target || this.target.hp <= 0) {
+                    this.findTarget();
+                }
+                
+                if (this.target) {
+                    const targetMesh = this.target.mesh || this.target;
+                    const dist = this.mesh.position.distanceTo(targetMesh.position);
+                    
+                    if (dist < this.range) {
+                        if (this.attackCooldown <= 0) {
+                            this.attackTarget();
+                            this.attackCooldown = 40;
+                        }
+                    } else {
+                        const dx = targetMesh.position.x - this.mesh.position.x;
+                        const dz = targetMesh.position.z - this.mesh.position.z;
+                        const distance = Math.sqrt(dx * dx + dz * dz);
+                        
+                        this.mesh.position.x += (dx / distance) * this.speed;
+                        this.mesh.position.z += (dz / distance) * this.speed;
+                        this.mesh.lookAt(targetMesh.position.x, this.mesh.position.y, targetMesh.position.z);
+                    }
+                } else {
+                    const targetX = this.team === 'player' ? 15 : -15;
+                    const dx = targetX - this.mesh.position.x;
+                    this.mesh.position.x += Math.sign(dx) * this.speed;
+                    this.mesh.lookAt(targetX, this.mesh.position.y, 0);
+                }
+                
+                if (this.attackCooldown > 0) this.attackCooldown--;
+                
+                if (this.healthBar) {
+                    const hpPercent = this.hp / this.maxHP;
+                    this.healthBar.scale.x = Math.max(0, hpPercent);
+                    
+                    if (this.team === 'player') {
+                        if (hpPercent > 0.5) {
+                            this.healthBar.material.color.setHex(0x00ff00);
+                        } else if (hpPercent > 0.25) {
+                            this.healthBar.material.color.setHex(0xffa500);
+                        } else {
+                            this.healthBar.material.color.setHex(0xff0000);
+                        }
+                    } else {
+                        if (hpPercent > 0.5) {
+                            this.healthBar.material.color.setHex(0xff4444);
+                        } else if (hpPercent > 0.25) {
+                            this.healthBar.material.color.setHex(0xff0000);
+                        } else {
+                            this.healthBar.material.color.setHex(0xcc0000);
+                        }
+                    }
+                }
+                
+                return true;
+            }
+            
+            findTarget() {
+                let minDist = Infinity;
+                let closest = null;
+                
+                const enemies = this.team === 'player' ? 
+                    gameObjects.filter(obj => obj.team === 'enemy') :
+                    gameObjects.filter(obj => obj.team === 'player');
+                
+                enemies.forEach(enemy => {
+                    const dist = this.mesh.position.distanceTo(enemy.mesh.position);
+                    if (dist < minDist && dist < 8) {
+                        minDist = dist;
+                        closest = enemy;
+                    }
+                });
+                
+                const enemyTowers = this.team === 'player' ? enemyTowers3D : playerTowers3D;
+                enemyTowers.forEach(tower => {
+                    const dist = this.mesh.position.distanceTo(tower.mesh.position);
+                    if (dist < minDist && dist < 10) {
+                        minDist = dist;
+                        closest = tower;
+                    }
+                });
+                
+                this.target = closest;
+            }
+            
+            attackTarget() {
+                if (this.target) {
+                    this.target.hp -= this.damage;
+                    this.createAttackEffect();
+                    
+                    if (this.target.mesh && this.target.team && this.target.hp <= 0) {
+                        if (this.target.team === 'player') {
+                            enemyScore++;
+                        } else {
+                            playerScore++;
+                        }
+                        updateScore();
+                        checkWinCondition();
+                    }
+                }
+            }
+            
+            createAttackEffect() {
+                if (this.target) {
+                    const targetMesh = this.target.mesh || this.target;
+                    const particleGeometry = new THREE.SphereGeometry(0.1, 4, 4);
+                    const particleMaterial = new THREE.MeshBasicMaterial({ 
+                        color: this.team === 'player' ? 0xffff00 : 0xff0000 
+                    });
+                    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                    particle.position.copy(targetMesh.position);
+                    particle.position.y += 1;
+                    scene.add(particle);
+                    
+                    setTimeout(() => scene.remove(particle), 200);
+                }
+            }
+            
+            createHealthBar() {
+                const barY = this.flying ? 4.1 : 1.9;
+                
+                const bgGeometry = new THREE.BoxGeometry(0.6, 0.08, 0.03);
+                const bgMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
+                this.healthBarBg = new THREE.Mesh(bgGeometry, bgMaterial);
+                this.healthBarBg.position.set(0, barY, 0);
+                this.mesh.add(this.healthBarBg);
+                
+                const barGeometry = new THREE.BoxGeometry(0.6, 0.06, 0.03);
+                const barColor = this.team === 'player' ? 0x00ff00 : 0xff4444;
+                const barMaterial = new THREE.MeshBasicMaterial({ color: barColor });
+                this.healthBar = new THREE.Mesh(barGeometry, barMaterial);
+                this.healthBar.position.set(0, barY, 0.01);
+                this.mesh.add(this.healthBar);
+            }
+        }
+        
+        // Создание башен
+        function createTowers() {
+            playerTowers3D = [
+                { 
+                    mesh: ModelFactory.createTower('player', 'normal'), 
+                    hp: 500, 
+                    maxHP: 500, 
+                    team: 'player',
+                    damage: 20,
+                    range: 6,
+                    attackCooldown: 0,
+                    id: 'playerTower1'
+                },
+                { 
+                    mesh: ModelFactory.createTower('player', 'normal'), 
+                    hp: 700, 
+                    maxHP: 700, 
+                    team: 'player',
+                    damage: 25,
+                    range: 7,
+                    attackCooldown: 0,
+                    id: 'playerTower2'
+                },
+                { 
+                    mesh: ModelFactory.createTower('player', 'king'), 
+                    hp: 1000, 
+                    maxHP: 1000, 
+                    team: 'player',
+                    damage: 35,
+                    range: 5,
+                    attackCooldown: 0,
+                    id: 'playerKing'
+                }
+            ];
+            
+            playerTowers3D[0].mesh.position.set(-10, 0, 5);
+            playerTowers3D[1].mesh.position.set(-12, 0, -5);
+            playerTowers3D[2].mesh.position.set(-17, 0, 0);
+            
+            playerTowers3D.forEach(tower => {
+                scene.add(tower.mesh);
+                tower.update = function() {
+                    if (this.attackCooldown > 0) {
+                        this.attackCooldown--;
+                        return;
+                    }
+                    
+                    const enemies = gameObjects.filter(obj => obj.team === 'enemy');
+                    let minDist = Infinity;
+                    let target = null;
+                    
+                    enemies.forEach(enemy => {
+                        const dist = this.mesh.position.distanceTo(enemy.mesh.position);
+                        if (dist < this.range && dist < minDist) {
+                            minDist = dist;
+                            target = enemy;
+                        }
+                    });
+                    
+                    if (target) {
+                        target.hp -= this.damage;
+                        this.attackCooldown = 80;
+                        
+                        const particleGeometry = new THREE.SphereGeometry(0.2, 4, 4);
+                        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                        particle.position.copy(target.mesh.position);
+                        particle.position.y += 1;
+                        scene.add(particle);
+                        setTimeout(() => scene.remove(particle), 300);
+                    }
+                };
+            });
+            
+            enemyTowers3D = [
+                { 
+                    mesh: ModelFactory.createTower('enemy', 'normal'), 
+                    hp: 500, 
+                    maxHP: 500, 
+                    team: 'enemy',
+                    damage: 20,
+                    range: 6,
+                    attackCooldown: 0,
+                    id: 'enemyTower1'
+                },
+                { 
+                    mesh: ModelFactory.createTower('enemy', 'normal'), 
+                    hp: 700, 
+                    maxHP: 700, 
+                    team: 'enemy',
+                    damage: 25,
+                    range: 7,
+                    attackCooldown: 0,
+                    id: 'enemyTower2'
+                },
+                { 
+                    mesh: ModelFactory.createTower('enemy', 'king'), 
+                    hp: 1000, 
+                    maxHP: 1000, 
+                    team: 'enemy',
+                    damage: 35,
+                    range: 5,
+                    attackCooldown: 0,
+                    id: 'enemyKing'
+                }
+            ];
+            
+            enemyTowers3D[0].mesh.position.set(10, 0, 5);
+            enemyTowers3D[1].mesh.position.set(12, 0, -5);
+            enemyTowers3D[2].mesh.position.set(17, 0, 0);
+            
+            enemyTowers3D.forEach(tower => {
+                scene.add(tower.mesh);
+                tower.update = function() {
+                    if (this.attackCooldown > 0) {
+                        this.attackCooldown--;
+                        return;
+                    }
+                    
+                    const enemies = gameObjects.filter(obj => obj.team === 'player');
+                    let minDist = Infinity;
+                    let target = null;
+                    
+                    enemies.forEach(enemy => {
+                        const dist = this.mesh.position.distanceTo(enemy.mesh.position);
+                        if (dist < this.range && dist < minDist) {
+                            minDist = dist;
+                            target = enemy;
+                        }
+                    });
+                    
+                    if (target) {
+                        target.hp -= this.damage;
+                        this.attackCooldown = 80;
+                        
+                        const particleGeometry = new THREE.SphereGeometry(0.2, 4, 4);
+                        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                        particle.position.copy(target.mesh.position);
+                        particle.position.y += 1;
+                        scene.add(particle);
+                        setTimeout(() => scene.remove(particle), 300);
+                    }
+                };
+            });
+        }
+        
+        // Размещение войска
+        function deployTroop(worldPosition, card) {
+            if (card.isSquad) {
+                // Спавним отряд скелетов
+                for (let i = 0; i < card.squadSize; i++) {
+                    const offsetX = (Math.random() - 0.5) * 2;
+                    const offsetZ = (Math.random() - 0.5) * 2;
+                    const model = ModelFactory.createSkeleton();
+                    const gameObj = new GameObject(
+                        model, 
+                        card, 
+                        'player', 
+                        worldPosition.x + offsetX, 
+                        worldPosition.z + offsetZ
+                    );
+                    gameObjects.push(gameObj);
+                }
+            } else {
+                let model;
+                
+                switch(card.model) {
+                    case 'golem':
+                        model = ModelFactory.createGolem();
+                        break;
+                    case 'megaknight':
+                        model = ModelFactory.createMegaKnight();
+                        break;
+                    case 'flamedragon':
+                        model = ModelFactory.createFlameDragon();
+                        break;
+                    default:
+                        model = ModelFactory.createGolem();
+                }
+                
+                const gameObj = new GameObject(model, card, 'player', worldPosition.x, worldPosition.z);
+                gameObjects.push(gameObj);
+            }
+        }
+        
+        // ИИ противника
+        function enemyAI() {
+            if (!gameRunning) return;
+            
+            if (Math.random() < 0.003 && enemyElixir >= 3) {
+                const availableCards = cards.filter(c => c.cost <= enemyElixir);
+                if (availableCards.length > 0) {
+                    const card = availableCards[Math.floor(Math.random() * availableCards.length)];
+                    const x = 8 + Math.random() * 5;
+                    const z = -3 + Math.random() * 6;
+                    
+                    if (card.isSquad) {
+                        // Спавним отряд скелетов для врага
+                        for (let i = 0; i < card.squadSize; i++) {
+                            const offsetX = (Math.random() - 0.5) * 2;
+                            const offsetZ = (Math.random() - 0.5) * 2;
+                            const model = ModelFactory.createSkeleton();
+                            const gameObj = new GameObject(
+                                model, 
+                                card, 
+                                'enemy', 
+                                x + offsetX, 
+                                z + offsetZ
+                            );
+                            gameObjects.push(gameObj);
+                        }
+                    } else {
+                        let model;
+                        switch(card.model) {
+                            case 'golem': model = ModelFactory.createGolem(); break;
+                            case 'megaknight': model = ModelFactory.createMegaKnight(); break;
+                            case 'flamedragon': model = ModelFactory.createFlameDragon(); break;
+                            default: model = ModelFactory.createGolem();
+                        }
+                        
+                        const gameObj = new GameObject(model, card, 'enemy', x, z);
+                        gameObjects.push(gameObj);
+                    }
+                    
+                    enemyElixir -= card.cost;
+                }
+            }
+        }
+        
+        // Обновление UI башен
+        function updateTowersUI() {
+            if (playerTowers3D[0]) {
+                const hpPercent = (playerTowers3D[0].hp / playerTowers3D[0].maxHP) * 100;
+                document.getElementById('playerTower1HP').style.width = hpPercent + '%';
+                document.getElementById('playerTower1Text').textContent = 
+                    Math.ceil(playerTowers3D[0].hp) + '/' + playerTowers3D[0].maxHP;
+            }
+            
+            if (playerTowers3D[1]) {
+                const hpPercent = (playerTowers3D[1].hp / playerTowers3D[1].maxHP) * 100;
+                document.getElementById('playerTower2HP').style.width = hpPercent + '%';
+                document.getElementById('playerTower2Text').textContent = 
+                    Math.ceil(playerTowers3D[1].hp) + '/' + playerTowers3D[1].maxHP;
+            }
+            
+            if (playerTowers3D[2]) {
+                const hpPercent = (playerTowers3D[2].hp / playerTowers3D[2].maxHP) * 100;
+                document.getElementById('playerKingHP').style.width = hpPercent + '%';
+                document.getElementById('playerKingText').textContent = 
+                    Math.ceil(playerTowers3D[2].hp) + '/' + playerTowers3D[2].maxHP;
+            }
+            
+            if (enemyTowers3D[0]) {
+                const hpPercent = (enemyTowers3D[0].hp / enemyTowers3D[0].maxHP) * 100;
+                document.getElementById('enemyTower1HP').style.width = hpPercent + '%';
+                document.getElementById('enemyTower1Text').textContent = 
+                    Math.ceil(enemyTowers3D[0].hp) + '/' + enemyTowers3D[0].maxHP;
+            }
+            
+            if (enemyTowers3D[1]) {
+                const hpPercent = (enemyTowers3D[1].hp / enemyTowers3D[1].maxHP) * 100;
+                document.getElementById('enemyTower2HP').style.width = hpPercent + '%';
+                document.getElementById('enemyTower2Text').textContent = 
+                    Math.ceil(enemyTowers3D[1].hp) + '/' + enemyTowers3D[1].maxHP;
+            }
+            
+            if (enemyTowers3D[2]) {
+                const hpPercent = (enemyTowers3D[2].hp / enemyTowers3D[2].maxHP) * 100;
+                document.getElementById('enemyKingHP').style.width = hpPercent + '%';
+                document.getElementById('enemyKingText').textContent = 
+                    Math.ceil(enemyTowers3D[2].hp) + '/' + enemyTowers3D[2].maxHP;
+            }
+        }
+        
+        // Создание UI карт
+        function createCardsUI() {
+            const container = document.getElementById('cardsContainer');
+            container.innerHTML = '';
+            
+            cards.forEach((card, index) => {
+                const cardElement = document.createElement('div');
+                cardElement.className = 'card-3d';
+                cardElement.innerHTML = `
+                    <div class="card-cost-badge">${card.cost}</div>
+                    <div class="card-icon-3d">${card.icon}</div>
+                    <div class="card-name-3d">${card.name}</div>
+                    <div class="card-stats">
+                        ${card.isSquad ? '👥 ×' + card.squadSize : ''} ❤️ ${card.hp} | ⚔️ ${card.damage}
+                    </div>
+                `;
+                
+                cardElement.addEventListener('click', () => {
+                    if (selectedCard === index) {
+                        selectedCard = null;
+                        cardElement.classList.remove('selected');
+                    } else if (playerElixir >= card.cost) {
+                        document.querySelectorAll('.card-3d').forEach(c => c.classList.remove('selected'));
+                        selectedCard = index;
+                        cardElement.classList.add('selected');
+                    }
+                });
+                
+                container.appendChild(cardElement);
+            });
+            
+            setInterval(updateCardsAvailability, 200);
+        }
+        
+        function updateCardsAvailability() {
+            const cardElements = document.querySelectorAll('.card-3d');
+            cardElements.forEach((element, index) => {
+                const card = cards[index];
+                if (playerElixir < card.cost && selectedCard !== index) {
+                    element.classList.add('not-enough');
+                } else {
+                    element.classList.remove('not-enough');
+                }
+            });
+        }
+        
+        // Обработка кликов
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        renderer.domElement.addEventListener('click', (event) => {
+            if (selectedCard === null || !gameRunning) return;
+            
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObject(ground);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                
+                if (point.x < 0 && point.z < 7 && point.z > -7) {
+                    const card = cards[selectedCard];
+                    
+                    if (playerElixir >= card.cost) {
+                        deployTroop(point, card);
+                        playerElixir -= card.cost;
+                        
+                        selectedCard = null;
+                        document.querySelectorAll('.card-3d').forEach(c => c.classList.remove('selected'));
+                    }
+                }
+            }
+        });
+        
+        // Управление камерой
+        let isRightDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                isRightDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            if (isRightDragging) {
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                
+                camera.position.x -= deltaX * 0.1;
+                camera.position.z -= deltaY * 0.1;
+                camera.lookAt(0, 0, 0);
+                
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        
+        renderer.domElement.addEventListener('mouseup', () => {
+            isRightDragging = false;
+        });
+        
+        renderer.domElement.addEventListener('wheel', (e) => {
+            camera.position.y += e.deltaY * 0.05;
+            camera.position.y = Math.max(10, Math.min(40, camera.position.y));
+        });
+        
+        // Обновление игры
+        function update() {
+            if (!gameRunning) return;
+            
+            if (gameTime <= 60 && !suddenDeath) {
+                currentElixirRate = DOUBLE_ELIXIR_RATE;
+                if (!doubleElixir) {
+                    doubleElixir = true;
+                    document.getElementById('elixirRate').innerHTML = '⚡ Double Elixir!';
+                    document.getElementById('elixirRate').classList.add('double-elixir-indicator');
+                }
+            } else if (gameTime <= 0 && suddenDeath) {
+                currentElixirRate = SUDDEN_DEATH_RATE;
+                document.getElementById('elixirRate').innerHTML = '💀 Triple Elixir!';
+            } else {
+                currentElixirRate = NORMAL_ELIXIR_RATE;
+                document.getElementById('elixirRate').innerHTML = '⏱️ Нормальная скорость (1 ед. / 5.6 сек)';
+            }
+            
+            playerElixir = Math.min(maxElixir, playerElixir + currentElixirRate / 60);
+            enemyElixir = Math.min(maxElixir, enemyElixir + currentElixirRate / 60);
+            
+            gameObjects = gameObjects.filter(obj => obj.update());
+            
+            playerTowers3D.forEach(tower => {
+                if (tower.update) tower.update();
+            });
+            enemyTowers3D.forEach(tower => {
+                if (tower.update) tower.update();
+            });
+            
+            playerTowers3D = playerTowers3D.filter(tower => {
+                if (tower.hp <= 0) {
+                    scene.remove(tower.mesh);
+                    return false;
+                }
+                return true;
+            });
+            
+            enemyTowers3D = enemyTowers3D.filter(tower => {
+                if (tower.hp <= 0) {
+                    scene.remove(tower.mesh);
+                    return false;
+                }
+                return true;
+            });
+            
+            if (gameTime > 0) {
+                gameTime--;
+                if (gameTime === 0) {
+                    suddenDeath = true;
+                }
+            }
+            
+            enemyAI();
+            updateHUD();
+            checkWinCondition();
+        }
+        
+        function updateHUD() {
+            document.getElementById('elixirFill').style.width = (playerElixir / maxElixir * 100) + '%';
+            document.getElementById('elixirText').textContent = playerElixir.toFixed(1) + '/' + maxElixir;
+            
+            const minutes = Math.floor(gameTime / 60);
+            const seconds = gameTime % 60;
+            document.getElementById('timer').textContent = 
+                minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            
+            if (suddenDeath) {
+                document.getElementById('timer').style.color = '#ff0000';
+            } else if (doubleElixir) {
+                document.getElementById('timer').style.color = '#ff69b4';
+            }
+            
+            updateTowersUI();
+            updateScore();
+        }
+        
+        function updateScore() {
+            document.getElementById('score').textContent = playerScore + ' - ' + enemyScore;
+        }
+        
+        function checkWinCondition() {
+            if (enemyTowers3D.length === 0) {
+                endGame('player');
+            } else if (playerTowers3D.length === 0) {
+                endGame('enemy');
+            }
+        }
+        
+        function endGame(winner) {
+            gameRunning = false;
+            const screen = document.getElementById('gameOverScreen');
+            const text = document.getElementById('victoryText');
+            const score = document.getElementById('victoryScore');
+            const crown = document.getElementById('crownIcon');
+            
+            if (winner === 'player') {
+                text.textContent = 'ПОБЕДА!';
+                text.style.color = '#4CAF50';
+                crown.textContent = '👑';
+            } else {
+                text.textContent = 'ПОРАЖЕНИЕ';
+                text.style.color = '#f44336';
+                crown.textContent = '💀';
+            }
+            
+            score.textContent = playerScore + ' - ' + enemyScore;
+            screen.style.display = 'flex';
+        }
+        
+        function restartGame() {
+            gameObjects.forEach(obj => scene.remove(obj.mesh));
+            gameObjects = [];
+            playerTowers3D.forEach(t => scene.remove(t.mesh));
+            enemyTowers3D.forEach(t => scene.remove(t.mesh));
+            
+            playerElixir = 5.0;
+            enemyElixir = 5.0;
+            playerScore = 0;
+            enemyScore = 0;
+            gameTime = 180;
+            gameRunning = true;
+            suddenDeath = false;
+            doubleElixir = false;
+            currentElixirRate = NORMAL_ELIXIR_RATE;
+            selectedCard = null;
+            
+            createTowers();
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.querySelectorAll('.card-3d').forEach(c => c.classList.remove('selected'));
+            document.getElementById('timer').style.color = '#ffd700';
+            document.getElementById('elixirRate').innerHTML = '⏱️ Нормальная скорость (1 ед. / 5.6 сек)';
+            document.getElementById('elixirRate').classList.remove('double-elixir-indicator');
+            updateHUD();
+        }
+        
+        // Анимация
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            update();
+            
+            river.position.x += 0.02;
+            if (river.position.x > 1) river.position.x = 0;
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Инициализация
+        createTowers();
+        createCardsUI();
+        updateHUD();
+        animate();
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

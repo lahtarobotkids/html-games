@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Fortnite – От третьего лица</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      background: #87CEEB;
+      cursor: crosshair;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 200px;
+      height: 200px;
+      border: 2px solid white;
+      background: rgba(0,0,0,0.5);
+      border-radius: 10px;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 20px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 8px;
+      pointer-events: none;
+      line-height: 1.6;
+    }
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 48px;
+      text-align: center;
+      display: none;
+      background: rgba(0,0,0,0.8);
+      padding: 30px;
+      border-radius: 15px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="ui">
+    ❤️ <span id="healthDisplay">100</span><br>
+    🪵 Wood: <span id="woodDisplay">0</span><br>
+    👾 Врагов: <span id="enemyCountDisplay">12</span>
+  </div>
+  <div id="game-over">
+    <div id="gameOverText"></div>
+    <button id="restartButton" style="font-size:24px; margin-top:20px; padding:10px 30px;">Играть снова</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 1200;
+    canvas.height = 800;
+
+    const minimapCanvas = document.getElementById('minimap');
+    const minimapCtx = minimapCanvas.getContext('2d');
+
+    const healthDisplay = document.getElementById('healthDisplay');
+    const woodDisplay = document.getElementById('woodDisplay');
+    const enemyCountDisplay = document.getElementById('enemyCountDisplay');
+    const gameOverDiv = document.getElementById('game-over');
+    const gameOverText = document.getElementById('gameOverText');
+    const restartButton = document.getElementById('restartButton');
+
+    const keys = {};
+    let mouseX = 0, mouseY = 0;
+    let mousePressed = false;
+    let rightMousePressed = false;
+
+    window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
+    window.addEventListener('keyup', e => { keys[e.key] = false; e.preventDefault(); });
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (e.button === 0) mousePressed = true;
+      if (e.button === 2) rightMousePressed = true;
+    });
+    canvas.addEventListener('mouseup', e => {
+      e.preventDefault();
+      if (e.button === 0) mousePressed = false;
+      if (e.button === 2) rightMousePressed = false;
+    });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    const MAP_WIDTH = 1200, MAP_HEIGHT = 800;
+
+    const ENEMY_TYPES = {
+      grunt: { color: '#e74c3c', width: 28, height: 46, speed: 1.8, health: 50, shootDelay: 50, damage: 15, attackRange: 400, label: 'G' },
+      sniper: { color: '#3498db', width: 26, height: 48, speed: 2.2, health: 30, shootDelay: 70, damage: 25, attackRange: 600, label: 'S' },
+      heavy: { color: '#2ecc71', width: 34, height: 54, speed: 1.2, health: 80, shootDelay: 40, damage: 20, attackRange: 350, label: 'H' }
+    };
+
+    class Player {
+      constructor(x, y) {
+        this.x = x; this.y = y;
+        this.width = 30; this.height = 50;
+        this.speed = 4;
+        this.health = 100; this.maxHealth = 100;
+        this.inventory = { wood: 0 };
+        this.shootCooldown = 0;
+        this.shootDelay = 18;
+      }
+      update() {
+        let dx = 0, dy = 0;
+        if (keys['ArrowLeft'] || keys['a']) dx -= 1;
+        if (keys['ArrowRight'] || keys['d']) dx += 1;
+        if (keys['ArrowUp'] || keys['w']) dy -= 1;
+        if (keys['ArrowDown'] || keys['s']) dy += 1;
+        if (dx !== 0 || dy !== 0) {
+          const len = Math.sqrt(dx*dx+dy*dy);
+          dx = (dx/len)*this.speed;
+          dy = (dy/len)*this.speed;
+        }
+        let newX = this.x + dx, newY = this.y + dy;
+        let canMoveX = true, canMoveY = true;
+        for (let wall of walls) {
+          if (rectCollide(newX, this.y, this.width, this.height, wall.x, wall.y, wall.width, wall.height)) canMoveX = false;
+          if (rectCollide(this.x, newY, this.width, this.height, wall.x, wall.y, wall.width, wall.height)) canMoveY = false;
+        }
+        if (canMoveX) this.x = newX;
+        if (canMoveY) this.y = newY;
+        this.x = Math.max(0, Math.min(MAP_WIDTH - this.width, this.x));
+        this.y = Math.max(0, Math.min(MAP_HEIGHT - this.height, this.y));
+        if (mousePressed && this.shootCooldown <= 0) {
+          this.shoot();
+          this.shootCooldown = this.shootDelay;
+        }
+        if (this.shootCooldown > 0) this.shootCooldown--;
+        if (keys['e'] || keys['E']) this.gatherResource();
+        if (rightMousePressed) { this.buildWall(); rightMousePressed = false; }
+        healthDisplay.textContent = Math.ceil(this.health);
+        woodDisplay.textContent = this.inventory.wood;
+      }
+      shoot() {
+        const cx = this.x + this.width/2, cy = this.y + this.height/2;
+        const worldMouseX = mouseX + camera.x - canvas.width/2;
+        const worldMouseY = mouseY + camera.y - canvas.height/2;
+        const angle = Math.atan2(worldMouseY - cy, worldMouseX - cx);
+        bullets.push(new Bullet(cx, cy, angle, 'player', null));
+      }
+      gatherResource() {
+        for (let i = resources.length-1; i >=0; i--) {
+          const res = resources[i];
+          if (res.type !== 'wood') continue;
+          if (distance(this.x+this.width/2, this.y+this.height/2, res.x+res.width/2, res.y+res.height/2) < 60) {
+            res.health--;
+            if (res.health <= 0) { this.inventory.wood += 20; resources.splice(i,1); }
+            break;
+          }
+        }
+      }
+      buildWall() {
+        if (this.inventory.wood < 10) return;
+        const gridSize = 50;
+        const worldMX = mouseX + camera.x - canvas.width/2;
+        const worldMY = mouseY + camera.y - canvas.height/2;
+        const gx = Math.floor(worldMX / gridSize) * gridSize;
+        const gy = Math.floor(worldMY / gridSize) * gridSize;
+        for (let wall of walls) { if (wall.x===gx && wall.y===gy) return; }
+        if (rectCollide(this.x, this.y, this.width, this.height, gx, gy, gridSize, gridSize)) return;
+        walls.push(new Wall(gx, gy));
+        this.inventory.wood -= 10;
+      }
+      draw(ctx, cam) {
+        const sx = this.x - cam.x + canvas.width/2;
+        const sy = this.y - cam.y + canvas.height/2;
+        ctx.fillStyle = '#2980b9';
+        ctx.fillRect(sx, sy, this.width, this.height);
+        const hpPercent = this.health / this.maxHealth;
+        ctx.fillStyle = 'red';
+        ctx.fillRect(sx, sy-10, this.width, 5);
+        ctx.fillStyle = 'lime';
+        ctx.fillRect(sx, sy-10, this.width*hpPercent, 5);
+      }
+    }
+
+    class Bullet {
+      constructor(x, y, angle, owner, ownerEnemy) {
+        this.x = x; this.y = y; this.radius = 4; this.speed = 8;
+        this.vx = Math.cos(angle)*this.speed; this.vy = Math.sin(angle)*this.speed;
+        this.owner = owner; this.ownerEnemy = ownerEnemy;
+        this.damage = owner==='player' ? 20 : (ownerEnemy ? ownerEnemy.damage : 15);
+      }
+      update() {
+        this.x += this.vx; this.y += this.vy;
+        return (this.x<0 || this.x>MAP_WIDTH || this.y<0 || this.y>MAP_HEIGHT);
+      }
+      draw(ctx, cam) {
+        const sx = this.x - cam.x + canvas.width/2;
+        const sy = this.y - cam.y + canvas.height/2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, this.radius, 0, Math.PI*2);
+        ctx.fillStyle = this.owner==='player' ? 'yellow' : '#ff6666';
+        ctx.fill();
+      }
+    }
+
+    class Tree {
+      constructor(x, y) { this.x = x; this.y = y; this.width = 30; this.height = 50; this.health = 3; this.type = 'wood'; }
+      draw(ctx, cam) {
+        const sx = this.x - cam.x + canvas.width/2;
+        const sy = this.y - cam.y + canvas.height/2;
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(sx+10, sy+20, 10, 30);
+        ctx.fillStyle = 'green';
+        ctx.beginPath();
+        ctx.arc(sx+15, sy+10, 18, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.font = '11px Arial';
+        ctx.fillText('HP:'+this.health, sx, sy-5);
+      }
+    }
+
+    class Wall {
+      constructor(x, y) { this.x = x; this.y = y; this.width = 50; this.height = 50; this.color = '#696969'; }
+      draw(ctx, cam) {
+        const sx = this.x - cam.x + canvas.width/2;
+        const sy = this.y - cam.y + canvas.height/2;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(sx, sy, this.width, this.height);
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(sx, sy, this.width, this.height);
+      }
+    }
+
+    class Enemy {
+      constructor(x, y, type) {
+        const cfg = ENEMY_TYPES[type];
+        this.type = type; this.x = x; this.y = y;
+        this.width = cfg.width; this.height = cfg.height;
+        this.speed = cfg.speed; this.health = cfg.health; this.maxHealth = cfg.health;
+        this.color = cfg.color; this.shootDelay = cfg.shootDelay;
+        this.damage = cfg.damage; this.attackRange = cfg.attackRange;
+        this.label = cfg.label;
+        this.shootCooldown = 0;
+        this.wanderAngle = Math.random()*Math.PI*2;
+        this.wanderTimer = 0;
+      }
+      update() {
+        const target = this.findTarget();
+        if (target) {
+          const tx = target.x + target.width/2, ty = target.y + target.height/2;
+          const dist = distance(this.x+this.width/2, this.y+this.height/2, tx, ty);
+          if (dist < this.attackRange && this.shootCooldown <= 0) {
+            this.shoot(tx, ty); this.shootCooldown = this.shootDelay;
+          } else if (dist > 30) {
+            const angle = Math.atan2(ty - (this.y+this.height/2), tx - (this.x+this.width/2));
+            this.move(Math.cos(angle)*this.speed, Math.sin(angle)*this.speed);
+          }
+        } else {
+          this.wanderTimer--;
+          if (this.wanderTimer <= 0) {
+            this.wanderAngle = Math.random()*Math.PI*2;
+            this.wanderTimer = 60 + Math.floor(Math.random()*60);
+          }
+          this.move(Math.cos(this.wanderAngle)*this.speed*0.5, Math.sin(this.wanderAngle)*this.speed*0.5);
+        }
+        if (this.shootCooldown > 0) this.shootCooldown--;
+        return this.health > 0;
+      }
+      findTarget() {
+        const candidates = [];
+        for (let enemy of enemies) { if (enemy !== this) candidates.push(enemy); }
+        if (player && player.health > 0) candidates.push(player);
+        let closest = null, minDist = 800;
+        for (let c of candidates) {
+          const d = distance(this.x+this.width/2, this.y+this.height/2, c.x+c.width/2, c.y+c.height/2);
+          if (d < minDist) { minDist = d; closest = c; }
+        }
+        return closest;
+      }
+      move(dx, dy) {
+        let newX = this.x + dx, newY = this.y + dy;
+        let canMoveX = true, canMoveY = true;
+        for (let wall of walls) {
+          if (rectCollide(newX, this.y, this.width, this.height, wall.x, wall.y, wall.width, wall.height)) canMoveX = false;
+          if (rectCollide(this.x, newY, this.width, this.height, wall.x, wall.y, wall.width, wall.height)) canMoveY = false;
+        }
+        if (canMoveX) this.x = newX;
+        if (canMoveY) this.y = newY;
+        this.x = Math.max(0, Math.min(MAP_WIDTH - this.width, this.x));
+        this.y = Math.max(0, Math.min(MAP_HEIGHT - this.height, this.y));
+      }
+      shoot(tx, ty) {
+        const cx = this.x+this.width/2, cy = this.y+this.height/2;
+        const angle = Math.atan2(ty-cy, tx-cx);
+        bullets.push(new Bullet(cx, cy, angle, 'enemy', this));
+      }
+      draw(ctx, cam) {
+        const sx = this.x - cam.x + canvas.width/2;
+        const sy = this.y - cam.y + canvas.height/2;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(sx, sy, this.width, this.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.label, sx+this.width/2, sy+this.height/2+5);
+        const hpPercent = this.health / this.maxHealth;
+        ctx.fillStyle = 'darkred';
+        ctx.fillRect(sx, sy-10, this.width, 5);
+        ctx.fillStyle = 'lime';
+        ctx.fillRect(sx, sy-10, this.width*hpPercent, 5);
+      }
+    }
+
+    function distance(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
+    function rectCollide(x1,y1,w1,h1,x2,y2,w2,h2) {
+      return x1 < x2+w2 && x1+w1 > x2 && y1 < y2+h2 && y1+h1 > y2;
+    }
+
+    const camera = { x: 0, y: 0 };
+    function updateCamera() {
+      camera.x = player.x + player.width/2;
+      camera.y = player.y + player.height/2;
+      camera.x = Math.max(canvas.width/2, Math.min(MAP_WIDTH - canvas.width/2, camera.x));
+      camera.y = Math.max(canvas.height/2, Math.min(MAP_HEIGHT - canvas.height/2, camera.y));
+    }
+
+    let safeZone = { x: MAP_WIDTH/2, y: MAP_HEIGHT/2, radius: 600 };
+    let zoneTimer = 0;
+    const zoneShrinkInterval = 500, zoneShrinkAmount = 2, zoneDamageRate = 0.35;
+
+    function updateZone() {
+      zoneTimer++;
+      if (zoneTimer >= zoneShrinkInterval) {
+        safeZone.radius -= zoneShrinkAmount;
+        if (safeZone.radius < 80) safeZone.radius = 80;
+        zoneTimer = 0;
+      }
+      if (distance(player.x+player.width/2, player.y+player.height/2, safeZone.x, safeZone.y) > safeZone.radius) {
+        player.health -= zoneDamageRate;
+        if (player.health <= 0) { player.health = 0; gameOver('Вас настигла буря...'); }
+      }
+    }
+
+    function drawZone(ctx, cam) {
+      ctx.save();
+      ctx.beginPath();
+      const sx = safeZone.x - cam.x + canvas.width/2;
+      const sy = safeZone.y - cam.y + canvas.height/2;
+      ctx.arc(sx, sy, safeZone.radius, 0, Math.PI*2, true);
+      ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fill();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(sx, sy, safeZone.radius, 0, Math.PI*2);
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    function drawMinimap() {
+      minimapCtx.clearRect(0, 0, 200, 200);
+      minimapCtx.fillStyle = 'rgba(0,0,0,0.7)';
+      minimapCtx.fillRect(0, 0, 200, 200);
+      const scaleX = 200 / MAP_WIDTH;
+      const scaleY = 200 / MAP_HEIGHT;
+      minimapCtx.beginPath();
+      minimapCtx.arc(safeZone.x*scaleX, safeZone.y*scaleY, safeZone.radius*scaleX, 0, Math.PI*2);
+      minimapCtx.strokeStyle = 'white';
+      minimapCtx.lineWidth = 2;
+      minimapCtx.stroke();
+      minimapCtx.fillStyle = '#696969';
+      for (let w of walls) minimapCtx.fillRect(w.x*scaleX, w.y*scaleY, w.width*scaleX, w.height*scaleY);
+      minimapCtx.fillStyle = 'green';
+      for (let r of resources) minimapCtx.fillRect(r.x*scaleX, r.y*scaleY, 3, 3);
+      for (let e of enemies) {
+        minimapCtx.fillStyle = e.color;
+        minimapCtx.fillRect(e.x*scaleX, e.y*scaleY, 4, 4);
+      }
+      minimapCtx.fillStyle = '#2980b9';
+      minimapCtx.fillRect(player.x*scaleX, player.y*scaleY, 5, 5);
+    }
+
+    let player, bullets, resources, walls, enemies, gameActive;
+
+    function initGame() {
+      player = new Player(MAP_WIDTH/2-15, MAP_HEIGHT/2-25);
+      bullets = [];
+      resources = [];
+      walls = [];
+      enemies = [];
+      for (let i=0; i<15; i++) {
+        resources.push(new Tree(50+Math.random()*(MAP_WIDTH-100), 50+Math.random()*(MAP_HEIGHT-100)));
+      }
+      walls.push(new Wall(300,500), new Wall(350,500), new Wall(800,300), new Wall(850,300));
+      const types = ['grunt','sniper','heavy'];
+      for (let i=0; i<12; i++) {
+        const type = types[Math.floor(Math.random()*types.length)];
+        let sx, sy;
+        do { sx = 80+Math.random()*(MAP_WIDTH-160); sy = 80+Math.random()*(MAP_HEIGHT-160); }
+        while (distance(sx, sy, player.x, player.y) < 200);
+        enemies.push(new Enemy(sx, sy, type));
+      }
+      safeZone = { x: MAP_WIDTH/2, y: MAP_HEIGHT/2, radius: 600 };
+      zoneTimer = 0;
+      gameActive = true;
+      gameOverDiv.style.display = 'none';
+      updateUI();
+    }
+
+    function gameOver(text) {
+      if (!gameActive) return;
+      gameActive = false;
+      gameOverText.textContent = text;
+      gameOverDiv.style.display = 'block';
+    }
+
+    function checkWin() { if (enemies.length === 0) gameOver('Победа! Все противники уничтожены.'); }
+
+    function updateUI() {
+      healthDisplay.textContent = Math.ceil(player.health);
+      woodDisplay.textContent = player.inventory.wood;
+      enemyCountDisplay.textContent = enemies.length;
+    }
+
+    restartButton.addEventListener('click', initGame);
+
+    function update() {
+      if (!gameActive) return;
+      player.update();
+      updateCamera();
+      for (let i=bullets.length-1; i>=0; i--) {
+        const b = bullets[i];
+        if (b.update()) { bullets.splice(i,1); continue; }
+        let hit = false;
+        if (b.owner === 'player') {
+          for (let j=enemies.length-1; j>=0; j--) {
+            if (rectCollide(b.x-b.radius, b.y-b.radius, b.radius*2, b.radius*2, enemies[j].x, enemies[j].y, enemies[j].width, enemies[j].height)) {
+              enemies[j].health -= b.damage; hit = true; break;
+            }
+          }
+        } else if (b.owner === 'enemy') {
+          if (rectCollide(b.x-b.radius, b.y-b.radius, b.radius*2, b.radius*2, player.x, player.y, player.width, player.height)) {
+            player.health -= b.damage; hit = true;
+            if (player.health <= 0) { player.health=0; gameOver('Вы погибли в перестрелке!'); }
+          }
+          if (!hit) {
+            for (let j=enemies.length-1; j>=0; j--) {
+              if (enemies[j] === b.ownerEnemy) continue;
+              if (rectCollide(b.x-b.radius, b.y-b.radius, b.radius*2, b.radius*2, enemies[j].x, enemies[j].y, enemies[j].width, enemies[j].height)) {
+                enemies[j].health -= b.damage; hit = true; break;
+              }
+            }
+          }
+        }
+        if (!hit) {
+          for (let wall of walls) {
+            if (rectCollide(b.x-b.radius, b.y-b.radius, b.radius*2, b.radius*2, wall.x, wall.y, wall.width, wall.height)) { hit = true; break; }
+          }
+        }
+        if (hit) bullets.splice(i,1);
+      }
+      for (let i=enemies.length-1; i>=0; i--) {
+        if (!enemies[i].update()) enemies.splice(i,1);
+      }
+      updateZone();
+      checkWin();
+      updateUI();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let r of resources) r.draw(ctx, camera);
+      for (let w of walls) w.draw(ctx, camera);
+      for (let e of enemies) e.draw(ctx, camera);
+      player.draw(ctx, camera);
+      for (let b of bullets) b.draw(ctx, camera);
+      drawZone(ctx, camera);
+      ctx.beginPath();
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 2;
+      ctx.moveTo(mouseX-12, mouseY); ctx.lineTo(mouseX+12, mouseY);
+      ctx.moveTo(mouseX, mouseY-12); ctx.lineTo(mouseX, mouseY+12);
+      ctx.stroke();
+      drawMinimap();
+    }
+
+    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+    initGame(); gameLoop();
+  </script>
+</body>
+</html>
