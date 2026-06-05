@@ -10,7 +10,14 @@
             overflow: hidden;
             font-family: 'Segoe UI', sans-serif;
             touch-action: none;
-            background: #000;
+            background:
+                radial-gradient(circle at 24px 24px, rgba(255,255,255,0.45) 0 2px, transparent 3px),
+                linear-gradient(135deg, #d9ecff 0%, #f7e5b5 48%, #bfe3c0 100%);
+            background-size: 48px 48px, cover;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
         }
         #ui {
             position: absolute;
@@ -122,6 +129,15 @@
             font-size: 14px;
             pointer-events: none;
         }
+        @media (pointer: coarse), (max-width: 700px) {
+            #ui {
+                bottom: max(14px, env(safe-area-inset-bottom));
+                padding: 0 14px;
+            }
+            .desktop-hint {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -154,12 +170,12 @@
 
     <script type="module">
         import * as THREE from 'three';
-        import * as CANNON from 'https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js';
+        import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
 
         // ---------- Инициализация Three.js ----------
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a2e);
-        scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+        scene.background = new THREE.Color(0xb9d7f2);
+        scene.fog = new THREE.Fog(0xb9d7f2, 18, 62);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 2, 5);
@@ -171,9 +187,9 @@
         document.body.appendChild(renderer.domElement);
 
         // Освещение
-        const ambientLight = new THREE.AmbientLight(0x404066);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
         dirLight.position.set(10, 20, 5);
         dirLight.castShadow = true;
         dirLight.receiveShadow = true;
@@ -219,9 +235,42 @@
         groundBody.addShape(new CANNON.Plane());
         groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(groundBody);
+        function createGroundTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#cddda8';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < canvas.height; y += 32) {
+                for (let x = 0; x < canvas.width; x += 32) {
+                    ctx.fillStyle = ((x + y) / 32) % 2 === 0 ? '#bdd095' : '#d9e7b7';
+                    ctx.fillRect(x, y, 32, 32);
+                }
+            }
+            ctx.strokeStyle = 'rgba(87, 117, 82, 0.28)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i <= canvas.width; i += 32) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(10, 10);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            return texture;
+        }
+
         const groundMesh = new THREE.Mesh(
             new THREE.PlaneGeometry(30, 30),
-            new THREE.MeshStandardMaterial({ color: 0x2d3a5c, roughness: 0.8 })
+            new THREE.MeshStandardMaterial({ map: createGroundTexture(), color: 0xffffff, roughness: 0.82 })
         );
         groundMesh.rotation.x = -Math.PI / 2;
         groundMesh.receiveShadow = true;
@@ -334,45 +383,39 @@
         const moveThumb = document.getElementById('moveThumb');
         let moveVector = new THREE.Vector2();
         let moveActive = false;
-        let moveTouchId = null;
+        let movePointerId = null;
 
-        moveStick.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (moveTouchId === null) {
-                const touch = e.changedTouches[0];
-                moveTouchId = touch.identifier;
-                moveActive = true;
-                updateMoveThumb(touch);
-            }
-        });
-        moveStick.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.identifier === moveTouchId) {
-                    updateMoveThumb(touch);
-                }
-            }
-        });
-        moveStick.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === moveTouchId) {
-                    moveActive = false;
-                    moveTouchId = null;
-                    moveThumb.style.top = '35px';
-                    moveThumb.style.left = '35px';
-                    moveVector.set(0, 0);
-                }
-            }
-        });
+        function resetMoveStick() {
+            moveActive = false;
+            movePointerId = null;
+            moveThumb.style.top = '35px';
+            moveThumb.style.left = '35px';
+            moveVector.set(0, 0);
+        }
 
-        function updateMoveThumb(touch) {
+        moveStick.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            movePointerId = e.pointerId;
+            moveActive = true;
+            moveStick.setPointerCapture(e.pointerId);
+            updateMoveThumb(e);
+        });
+        moveStick.addEventListener('pointermove', (e) => {
+            e.preventDefault();
+            if (e.pointerId === movePointerId) updateMoveThumb(e);
+        });
+        moveStick.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            if (e.pointerId === movePointerId) resetMoveStick();
+        });
+        moveStick.addEventListener('pointercancel', resetMoveStick);
+
+        function updateMoveThumb(pointer) {
             const rect = moveStick.getBoundingClientRect();
             const centerX = rect.left + rect.width/2;
             const centerY = rect.top + rect.height/2;
-            let dx = touch.clientX - centerX;
-            let dy = touch.clientY - centerY;
+            let dx = pointer.clientX - centerX;
+            let dy = pointer.clientY - centerY;
             const dist = Math.sqrt(dx*dx + dy*dy);
             const maxDist = 45;
             if (dist > maxDist) {
@@ -385,39 +428,33 @@
         }
 
         // Поворот камеры на мобильных (правая половина экрана)
-        let lookTouchId = null;
+        let lookPointerId = null;
         let lastLookX = 0, lastLookY = 0;
-        renderer.domElement.addEventListener('touchstart', (e) => {
-            if (e.target === moveStick || e.target === moveThumb) return;
-            if (lookTouchId === null) {
-                const touch = e.changedTouches[0];
-                lookTouchId = touch.identifier;
-                lastLookX = touch.clientX;
-                lastLookY = touch.clientY;
-            }
-        });
-        renderer.domElement.addEventListener('touchmove', (e) => {
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse') return;
             e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.identifier === lookTouchId) {
-                    const dx = touch.clientX - lastLookX;
-                    const dy = touch.clientY - lastLookY;
-                    yaw -= dx * 0.005;
-                    pitch -= dy * 0.005;
-                    pitch = Math.max(-PI_2, Math.min(PI_2, pitch));
-                    updateCameraRotation();
-                    lastLookX = touch.clientX;
-                    lastLookY = touch.clientY;
-                }
-            }
+            lookPointerId = e.pointerId;
+            lastLookX = e.clientX;
+            lastLookY = e.clientY;
+            renderer.domElement.setPointerCapture(e.pointerId);
         });
-        renderer.domElement.addEventListener('touchend', (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === lookTouchId) {
-                    lookTouchId = null;
-                }
-            }
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (e.pointerId !== lookPointerId) return;
+            e.preventDefault();
+            const dx = e.clientX - lastLookX;
+            const dy = e.clientY - lastLookY;
+            yaw -= dx * 0.005;
+            pitch -= dy * 0.005;
+            pitch = Math.max(-PI_2, Math.min(PI_2, pitch));
+            updateCameraRotation();
+            lastLookX = e.clientX;
+            lastLookY = e.clientY;
+        });
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if (e.pointerId === lookPointerId) lookPointerId = null;
+        });
+        renderer.domElement.addEventListener('pointercancel', () => {
+            lookPointerId = null;
         });
 
         // Кнопки действия
