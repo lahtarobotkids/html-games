@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>🚨 Достать соседа быстро</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    #start-btn {
+      padding: 30px 60px;
+      font-size: 28px;
+      font-weight: bold;
+      color: white;
+      background: linear-gradient(45deg, #ff0000, #ff6600);
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 0 40px rgba(255,0,0,0.8);
+      letter-spacing: 2px;
+      animation: pulse 1s infinite;
+      z-index: 10;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: red;
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      font-size: 15vw;
+      font-weight: 900;
+      color: yellow;
+      text-shadow: 0 0 30px black;
+      text-align: center;
+      flex-direction: column;
+    }
+    #overlay .sub {
+      font-size: 5vw;
+    }
+    #stop-hint {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      color: rgba(255,255,255,0.6);
+      font-size: 16px;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 16px;
+      border-radius: 8px;
+      z-index: 10000;
+    }
+  </style>
+</head>
+<body>
+  <button id="start-btn">🔊 ДОСТАТЬ СОСЕДА</button>
+  <div id="overlay">
+    <div>СОСЕД!!!</div>
+    <div class="sub">ВЫХОДИ СЮДА</div>
+  </div>
+  <div id="stop-hint">Нажми ESC для остановки</div>
+
+  <script>
+    (function() {
+      const startBtn = document.getElementById('start-btn');
+      const overlay = document.getElementById('overlay');
+      let audioContext = null;
+      let oscillator = null;
+      let gainNode = null;
+      let overlayInterval = null;
+      let titleInterval = null;
+      let vibrateInterval = null;
+      let notificationInterval = null;
+      let isRunning = false;
+
+      // Запрашиваем разрешение на уведомления заранее
+      if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+
+      function stopEverything() {
+        if (!isRunning) return;
+        // Останавливаем звук
+        if (oscillator) {
+          try { oscillator.stop(); } catch(e) {}
+          oscillator.disconnect();
+          oscillator = null;
+        }
+        if (audioContext && audioContext.state !== 'closed') {
+          audioContext.close().catch(()=>{});
+        }
+        audioContext = null;
+        gainNode = null;
+
+        // Очищаем интервалы
+        if (overlayInterval) clearInterval(overlayInterval);
+        if (titleInterval) clearInterval(titleInterval);
+        if (vibrateInterval) clearInterval(vibrateInterval);
+        if (notificationInterval) clearInterval(notificationInterval);
+        overlayInterval = titleInterval = vibrateInterval = notificationInterval = null;
+
+        // Останавливаем вибрацию
+        if (navigator.vibrate) navigator.vibrate(0);
+
+        // Скрываем оверлей
+        overlay.style.display = 'none';
+        document.body.style.background = '#111';
+        startBtn.style.display = 'block';
+        document.title = '🚨 Достать соседа быстро';
+        isRunning = false;
+      }
+
+      function startPrank() {
+        if (isRunning) return;
+        isRunning = true;
+
+        // Прячем кнопку, показываем оверлей
+        startBtn.style.display = 'none';
+        overlay.style.display = 'flex';
+
+        // === ЗВУК: сирена через Web Audio API ===
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          oscillator = audioContext.createOscillator();
+          gainNode = audioContext.createGain();
+          oscillator.type = 'sawtooth'; // резкий звук
+          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+          gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          oscillator.start();
+
+          // Меняем частоту каждые 200 мс – сирена
+          let freqToggle = true;
+          overlayInterval = setInterval(() => {
+            if (!oscillator || !audioContext) return;
+            const now = audioContext.currentTime;
+            const freq = freqToggle ? 1200 : 600;
+            oscillator.frequency.setValueAtTime(freq, now);
+            freqToggle = !freqToggle;
+          }, 200);
+
+        } catch(e) {
+          console.warn('Аудио не поддерживается или заблокировано', e);
+        }
+
+        // === МИГАНИЕ ОВЕРЛЕЯ И ФОНА ===
+        let colorToggle = true;
+        const colorInterval = setInterval(() => {
+          if (!isRunning) return;
+          const color = colorToggle ? 'red' : 'cyan';
+          overlay.style.background = color;
+          document.body.style.background = color;
+          colorToggle = !colorToggle;
+        }, 300);
+        // Сохраним чтобы потом очистить
+        const origOverlayInterval = overlayInterval;
+        overlayInterval = colorInterval; // заменяем на этот интервал для очистки
+
+        // === ДРЫГАНИЕ ЗАГОЛОВКА ===
+        const titles = ['🚨 СОСЕД!!!', 'ВЫХОДИ!', 'БЫСТРЕЕ!', 'ТУК-ТУК', 'НУ ЖЕ!'];
+        let titleIdx = 0;
+        titleInterval = setInterval(() => {
+          if (!isRunning) return;
+          document.title = titles[titleIdx % titles.length];
+          titleIdx++;
+        }, 400);
+
+        // === ВИБРАЦИЯ (если на телефоне) ===
+        if (navigator.vibrate) {
+          vibrateInterval = setInterval(() => {
+            if (!isRunning) return;
+            navigator.vibrate([500, 200, 500]);
+          }, 1500);
+          navigator.vibrate([500, 200, 500]); // сразу
+        }
+
+        // === НАЗОЙЛИВЫЕ УВЕДОМЛЕНИЯ ===
+        if ('Notification' in window && Notification.permission === 'granted') {
+          let notifCount = 0;
+          notificationInterval = setInterval(() => {
+            if (!isRunning) return;
+            new Notification('👋 Эй, сосед!', {
+              body: notifCount % 2 === 0 ? 'Выходи, есть разговор!' : 'Не прячься!',
+              icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ctext y=".9em" font-size="90"%3E🚪%3C/text%3E%3C/svg%3E',
+              requireInteraction: true,
+              tag: 'neighbor-prank'
+            });
+            notifCount++;
+          }, 3000);
+        }
+      }
+
+      // Запуск по кнопке
+      startBtn.addEventListener('click', startPrank);
+
+      // Остановка по ESC
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          stopEverything();
+        }
+      });
+
+      // На всякий случай — клик по оверлею тоже останавливает (чтобы сосед ткнул)
+      overlay.addEventListener('click', stopEverything);
+    })();
+  </script>
+</body>
+</html>

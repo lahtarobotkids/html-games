@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox 3D (мини)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            pointer-events: none;
+            user-select: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.8);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        .instruction {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <span>🪙 Монет: <span id="score">0</span></span>
+    </div>
+    <div id="crosshair"></div>
+    <div class="instruction">
+        🎮 WASD – ходить | Мышь – смотреть | Прыжок – ПРОБЕЛ | Собрать все монеты!
+    </div>
+
+    <!-- Подключаем Three.js через CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- Настройка сцены, камеры, рендерера ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // голубое небо
+        scene.fog = new THREE.Fog(0x87ceeb, 50, 150); // лёгкий туман
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 10, 20);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // включаем тени
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // --- Освещение ---
+        // Солнечный свет
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        sunLight.position.set(50, 80, 40);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.camera.near = 1;
+        sunLight.shadow.camera.far = 200;
+        sunLight.shadow.camera.left = -60;
+        sunLight.shadow.camera.right = 60;
+        sunLight.shadow.camera.top = 60;
+        sunLight.shadow.camera.bottom = -60;
+        scene.add(sunLight);
+        
+        // Рассеянный свет
+        const ambientLight = new THREE.AmbientLight(0x404066);
+        scene.add(ambientLight);
+
+        // --- Создание мира ---
+        // Пол
+        const groundGeometry = new THREE.PlaneGeometry(200, 200);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Трава (плоскость зелёного цвета)
+        const grassGeometry = new THREE.PlaneGeometry(200, 200);
+        const grassMaterial = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.9 });
+        const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+        grass.rotation.x = -Math.PI / 2;
+        grass.position.y = -0.49;
+        grass.receiveShadow = true;
+        scene.add(grass);
+
+        // Платформы и препятствия (как в обби)
+        function createBlock(x, y, z, w, h, d, color) {
+            const geometry = new THREE.BoxGeometry(w, h, d);
+            const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.set(x, y, z);
+            cube.castShadow = true;
+            cube.receiveShadow = true;
+            scene.add(cube);
+            return cube;
+        }
+
+        // Набор цветных кубиков и платформ
+        createBlock(0, 0.5, -10, 4, 1, 4, 0xff5722);  // оранжевый
+        createBlock(-8, 1, -5, 2, 2, 2, 0x2196f3);   // синий
+        createBlock(8, 0.75, -7, 3, 1.5, 3, 0xffeb3b); // жёлтый
+        createBlock(0, 0.5, 8, 5, 1, 5, 0x9c27b0);    // фиолетовый
+        createBlock(-6, 1, 5, 2, 2, 2, 0x4caf50);     // зелёный
+        createBlock(6, 1.5, 2, 2, 3, 2, 0xe91e63);    // розовый
+        createBlock(-12, 0.5, -12, 3, 1, 3, 0x00bcd4); // бирюзовый
+        createBlock(12, 0.5, 12, 3, 1, 3, 0xff9800);   // оранжевый
+
+        // --- Монетки (вращающиеся жёлтые цилиндры) ---
+        const coins = [];
+        const coinPositions = [
+            { x: 0, y: 2, z: -10 },
+            { x: -8, y: 2.5, z: -5 },
+            { x: 8, y: 2, z: -7 },
+            { x: 0, y: 2, z: 8 },
+            { x: -6, y: 2.5, z: 5 },
+            { x: 6, y: 3, z: 2 },
+            { x: -12, y: 2, z: -12 },
+            { x: 12, y: 2, z: 12 }
+        ];
+
+        coinPositions.forEach(pos => {
+            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 16);
+            const material = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 0.8 });
+            const coin = new THREE.Mesh(geometry, material);
+            coin.position.set(pos.x, pos.y, pos.z);
+            coin.rotation.x = Math.PI / 2; // горизонтально
+            coin.castShadow = true;
+            coin.receiveShadow = true;
+            scene.add(coin);
+            coins.push(coin);
+        });
+
+        // --- Персонаж (как в Роблокс – составной из кубиков) ---
+        const player = new THREE.Group();
+        player.position.set(0, 2, 15); // стартовая позиция
+
+        // Тело
+        const bodyGeo = new THREE.BoxGeometry(1.5, 2.5, 1);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3498db, roughness: 0.3 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.75;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        player.add(body);
+
+        // Голова
+        const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.3 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 2.1;
+        head.castShadow = true;
+        head.receiveShadow = true;
+        player.add(head);
+
+        // Левая нога
+        const legGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.4 });
+        const leftLeg = new THREE.Mesh(legGeo, legMat);
+        leftLeg.position.set(-0.5, -0.6, 0);
+        leftLeg.castShadow = true;
+        leftLeg.receiveShadow = true;
+        player.add(leftLeg);
+        
+        // Правая нога
+        const rightLeg = new THREE.Mesh(legGeo, legMat);
+        rightLeg.position.set(0.5, -0.6, 0);
+        rightLeg.castShadow = true;
+        rightLeg.receiveShadow = true;
+        player.add(rightLeg);
+
+        // Левая рука
+        const armGeo = new THREE.BoxGeometry(0.5, 1.8, 0.5);
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x3498db, roughness: 0.3 });
+        const leftArm = new THREE.Mesh(armGeo, armMat);
+        leftArm.position.set(-1.2, 0.9, 0);
+        leftArm.castShadow = true;
+        leftArm.receiveShadow = true;
+        player.add(leftArm);
+        
+        // Правая рука
+        const rightArm = new THREE.Mesh(armGeo, armMat);
+        rightArm.position.set(1.2, 0.9, 0);
+        rightArm.castShadow = true;
+        rightArm.receiveShadow = true;
+        player.add(rightArm);
+
+        scene.add(player);
+
+        // --- Управление (PointerLock) ---
+        const controls = new PointerLockControls(camera, renderer.domElement);
+        
+        // Блокировка курсора при клике
+        renderer.domElement.addEventListener('click', () => {
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', () => {
+            document.getElementById('crosshair').style.display = 'block';
+        });
+        controls.addEventListener('unlock', () => {
+            document.getElementById('crosshair').style.display = 'none';
+        });
+
+        // Клавиши движения
+        const keyState = {
+            KeyW: false,
+            KeyA: false,
+            KeyS: false,
+            KeyD: false,
+            Space: false
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code in keyState) {
+                keyState[e.code] = true;
+                e.preventDefault();
+            }
+            if (e.code === 'Space') {
+                keyState.Space = true;
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code in keyState) {
+                keyState[e.code] = false;
+                e.preventDefault();
+            }
+            if (e.code === 'Space') {
+                keyState.Space = false;
+                e.preventDefault();
+            }
+        });
+
+        // Физика (простая)
+        const playerSpeed = 0.15;
+        let verticalVelocity = 0;
+        const gravity = -0.015;
+        const jumpStrength = 0.35;
+        let canJump = true;
+
+        // Проверка столкновения с землёй и платформами (упрощённо – по высоте)
+        function getGroundHeight(x, z) {
+            // Проверяем все блоки, если игрок над ними
+            let groundY = 0; // уровень пола
+            const playerBottom = player.position.y - 1.2; // нижняя точка коллизии (примерно)
+            
+            // Список блоков-препятствий (цветные кубы), их положение и размер
+            const blocks = [
+                {x:0, y:0.5, z:-10, w:4, h:1, d:4},
+                {x:-8, y:1, z:-5, w:2, h:2, d:2},
+                {x:8, y:0.75, z:-7, w:3, h:1.5, d:3},
+                {x:0, y:0.5, z:8, w:5, h:1, d:5},
+                {x:-6, y:1, z:5, w:2, h:2, d:2},
+                {x:6, y:1.5, z:2, w:2, h:3, d:2},
+                {x:-12, y:0.5, z:-12, w:3, h:1, d:3},
+                {x:12, y:0.5, z:12, w:3, h:1, d:3}
+            ];
+            
+            let maxY = 0;
+            for (let block of blocks) {
+                const halfW = block.w/2;
+                const halfD = block.d/2;
+                if (x > block.x - halfW && x < block.x + halfW &&
+                    z > block.z - halfD && z < block.z + halfD) {
+                    const topSurface = block.y + block.h/2;
+                    if (topSurface > maxY && topSurface <= player.position.y + 1.5) { // не выше головы
+                        maxY = topSurface;
+                    }
+                }
+            }
+            return Math.max(0, maxY); // минимум уровень земли (y=0)
+        }
+
+        // Сбор монет
+        function collectCoins() {
+            const playerPos = player.position.clone();
+            for (let i = coins.length - 1; i >= 0; i--) {
+                const coin = coins[i];
+                const dist = playerPos.distanceTo(coin.position);
+                if (dist < 2.0) {
+                    scene.remove(coin);
+                    coins.splice(i, 1);
+                    // Обновить счёт
+                    const scoreEl = document.getElementById('score');
+                    scoreEl.textContent = parseInt(scoreEl.textContent) + 1;
+                }
+            }
+        }
+
+        // --- Анимация и игровой цикл ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked) {
+                // Движение вперёд/назад/вбок относительно направления камеры
+                const moveX = (keyState.KeyD ? 1 : 0) - (keyState.KeyA ? 1 : 0);
+                const moveZ = (keyState.KeyS ? 1 : 0) - (keyState.KeyW ? 1 : 0);
+                
+                if (moveX !== 0 || moveZ !== 0) {
+                    const direction = new THREE.Vector3(moveX, 0, moveZ).normalize();
+                    // Преобразуем в мировые координаты, учитывая поворот камеры
+                    const cameraDirection = new THREE.Vector3();
+                    camera.getWorldDirection(cameraDirection);
+                    const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+                    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+                    
+                    const moveDelta = new THREE.Vector3(0, 0, 0);
+                    moveDelta.add(forward.clone().multiplyScalar(-direction.z * playerSpeed));
+                    moveDelta.add(right.clone().multiplyScalar(direction.x * playerSpeed));
+                    
+                    player.position.add(moveDelta);
+                }
+
+                // Прыжок
+                if (keyState.Space && canJump) {
+                    verticalVelocity = jumpStrength;
+                    canJump = false;
+                    keyState.Space = false; // чтобы не залипал
+                }
+
+                // Гравитация
+                verticalVelocity += gravity;
+                player.position.y += verticalVelocity;
+
+                // Проверка земли
+                const groundY = getGroundHeight(player.position.x, player.position.z);
+                if (player.position.y <= groundY + 0.6) { // 0.6 – высота ног
+                    player.position.y = groundY + 0.6;
+                    verticalVelocity = 0;
+                    canJump = true;
+                }
+
+                // Сбор монет
+                collectCoins();
+
+                // Ограничение по краям мира
+                const limit = 95;
+                player.position.x = Math.max(-limit, Math.min(limit, player.position.x));
+                player.position.z = Math.max(-limit, Math.min(limit, player.position.z));
+            }
+
+            // Вращение монеток
+            coins.forEach(coin => {
+                coin.rotation.z += 0.03;
+            });
+
+            // Камера следует за персонажем (вид от первого лица уже делает PointerLockControls, 
+            // поэтому просто обновим положение камеры, если нужно. PointerLockControls управляет камерой от первого лица, 
+            // нам надо привязать камеру к позиции игрока.
+            // Так как это вид от первого лица, camera.position должно быть на уровне глаз.
+            if (controls.isLocked) {
+                camera.position.copy(player.position.clone().add(new THREE.Vector3(0, 2.3, 0)));
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        console.log('🎮 Roblox 3D мини-игра готова! Управляйте персонажем и собирайте монеты.');
+    </script>
+</body>
+</html>

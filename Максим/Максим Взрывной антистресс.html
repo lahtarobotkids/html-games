@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Взрывной антистресс</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background: #16213e;
+            border: 2px solid #e94560;
+            cursor: pointer;
+        }
+        .info {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+    <div class="info">🏠 Кликай по домикам, чтобы устроить взрыв! 🧨</div>
+    <canvas id="canvas" width="500" height="400"></canvas>
+</div>
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Массивы для хранения домов и частиц взрыва
+    let houses = [];
+    let particles = [];
+
+    // Конструктор дома
+    function createHouse(x, y) {
+        return {
+            x, y,
+            width: 60 + Math.random() * 30,
+            height: 50 + Math.random() * 30,
+            color: `hsl(${Math.random() * 30 + 10}, 70%, 50%)`, // оттенки красного/оранжевого
+        };
+    }
+
+    // Создаём несколько домов
+    function generateHouses() {
+        houses = [];
+        for (let i = 0; i < 8; i++) {
+            let x = 30 + Math.random() * (canvas.width - 120);
+            let y = 200 + Math.random() * 120;
+            houses.push(createHouse(x, y));
+        }
+    }
+
+    // Рисуем дом
+    function drawHouse(h) {
+        // Стены
+        ctx.fillStyle = h.color;
+        ctx.fillRect(h.x, h.y, h.width, h.height);
+        // Крыша
+        ctx.fillStyle = '#5c3a21';
+        ctx.beginPath();
+        ctx.moveTo(h.x - 10, h.y);
+        ctx.lineTo(h.x + h.width / 2, h.y - 30);
+        ctx.lineTo(h.x + h.width + 10, h.y);
+        ctx.fill();
+        // Окно
+        ctx.fillStyle = '#ffdd59';
+        ctx.fillRect(h.x + h.width/2 - 8, h.y + 10, 16, 16);
+        // Дверь
+        ctx.fillStyle = '#4a2c17';
+        ctx.fillRect(h.x + 10, h.y + h.height - 25, 15, 25);
+    }
+
+    // Частица взрыва
+    function createParticle(x, y) {
+        return {
+            x, y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8 - 2,
+            life: 1.0,         // затухание от 1 до 0
+            size: 2 + Math.random() * 6,
+            color: `hsl(${Math.random() * 40 + 20}, 100%, 60%)`,
+        };
+    }
+
+    // Взрываем дом
+    function explodeHouse(h) {
+        // Удаляем дом из массива
+        houses = houses.filter(house => house !== h);
+        // Создаём кучу частиц в центре дома
+        const cx = h.x + h.width/2;
+        const cy = h.y + h.height/2;
+        for (let i = 0; i < 30; i++) {
+            particles.push(createParticle(cx, cy));
+        }
+    }
+
+    // Обновление частиц
+    function updateParticles() {
+        for (let i = particles.length-1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.1;   // гравитация
+            p.life -= 0.02;
+            if (p.life <= 0) {
+                particles.splice(i,1);
+            }
+        }
+    }
+
+    // Отрисовка всего
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Трава
+        ctx.fillStyle = '#2d6a4f';
+        ctx.fillRect(0, canvas.height-30, canvas.width, 30);
+
+        // Рисуем дома
+        houses.forEach(h => drawHouse(h));
+
+        // Рисуем частицы
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+    }
+
+    // Игровой цикл
+    function loop() {
+        updateParticles();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // Обработчик клика
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Проверяем, попали ли в какой-то дом
+        for (let i = houses.length-1; i >= 0; i--) {
+            let h = houses[i];
+            if (mouseX >= h.x && mouseX <= h.x + h.width &&
+                mouseY >= h.y - 30 && mouseY <= h.y + h.height) {
+                explodeHouse(h);
+                break; // взрываем только один дом за клик
+            }
+        }
+        // Если домов не осталось — перегенерируем
+        if (houses.length === 0) {
+            generateHouses();
+        }
+    });
+
+    // Запуск
+    generateHouses();
+    loop();
+</script>
+</body>
+</html>

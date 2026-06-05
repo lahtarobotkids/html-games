@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Симулятор сумасшествия</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+            cursor: crosshair;
+            user-select: none;
+        }
+        #canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+        }
+        .overlay {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            pointer-events: none;
+        }
+        .title {
+            font-size: 8vw;
+            color: #f0f;
+            text-shadow: 0 0 30px red, 0 0 60px blue;
+            animation: glitch 0.2s infinite;
+        }
+        .subtitle {
+            font-size: 3vw;
+            color: #0ff;
+            animation: shake 0.5s infinite;
+            margin-top: -20px;
+        }
+        .button {
+            pointer-events: auto;
+            margin-top: 50px;
+            padding: 30px 60px;
+            font-size: 3vw;
+            background: #ff0;
+            color: #000;
+            border: 10px dotted #f0f;
+            cursor: pointer;
+            animation: pulse 0.2s infinite, spin 1s linear infinite;
+            box-shadow: 0 0 100px #fff;
+            text-transform: uppercase;
+            letter-spacing: 10px;
+            font-weight: bold;
+        }
+        .button:active {
+            animation: superglitch 0.05s infinite;
+        }
+        @keyframes glitch {
+            0% { transform: translate(0, 0); color: #f0f; }
+            25% { transform: translate(-5px, 2px); color: #0ff; }
+            50% { transform: translate(5px, -2px); color: #ff0; }
+            75% { transform: translate(-3px, -3px); color: #0f0; }
+            100% { transform: translate(0, 0); color: #f0f; }
+        }
+        @keyframes shake {
+            0% { transform: translate(0, 0); }
+            10% { transform: translate(-15px, 5px); }
+            20% { transform: translate(15px, -5px); }
+            30% { transform: translate(-10px, -10px); }
+            40% { transform: translate(10px, 10px); }
+            50% { transform: translate(-5px, 15px); }
+            60% { transform: translate(5px, -15px); }
+            70% { transform: translate(-20px, 0); }
+            80% { transform: translate(20px, 0); }
+            90% { transform: translate(0, -20px); }
+            100% { transform: translate(0, 0); }
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes superglitch {
+            0% { transform: skew(10deg, 5deg) scale(1.5); background: red; }
+            10% { transform: skew(-20deg, -10deg) scale(0.5); background: blue; }
+            20% { transform: skew(15deg, -3deg) scale(2); background: lime; }
+            30% { transform: skew(0deg, 20deg) scale(0.8); background: yellow; }
+            40% { transform: skew(-5deg, -15deg) scale(1.2); background: magenta; }
+            50% { transform: skew(25deg, 8deg) scale(0.3); background: cyan; }
+            60% { transform: skew(-30deg, 0deg) scale(1.8); background: orange; }
+            70% { transform: skew(5deg, -25deg) scale(0.6); background: purple; }
+            80% { transform: skew(-10deg, 10deg) scale(1.4); background: pink; }
+            90% { transform: skew(20deg, -5deg) scale(0.9); background: black; }
+            100% { transform: skew(0deg, 0deg) scale(1); background: red; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="overlay">
+        <div class="title">СХОЖУ С УМА!</div>
+        <div class="subtitle">кликай куда попало</div>
+        <button class="button" id="insanityButton">ПОЕХАЛИ!</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // Безумные частицы
+        let particles = [];
+        let glitchTexts = [];
+        let mouseX = 0, mouseY = 0;
+        let button = document.getElementById('insanityButton');
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Частица хаоса
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 15;
+                this.vy = (Math.random() - 0.5) * 15;
+                this.size = Math.random() * 20 + 5;
+                this.life = 1;
+                this.decay = 0.02 + Math.random() * 0.05;
+                this.color = `hsl(${Math.random() * 360}, 100%, 60%)`;
+                this.text = ['💥','🤯','🌀','😵','💀','🌈','⭐','🔥'][Math.floor(Math.random()*8)];
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                this.life -= this.decay;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.font = `${this.size}px Arial`;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Летающие надписи
+        function spawnGlitchText(x, y) {
+            const phrases = [
+                'СХОЖУ С УМА', 'ГЛЮК', '404', 'РЕАЛЬНОСТЬ СЛОМАНА',
+                'ПОМОГИТЕ', 'ВСЁ ТРЯСЁТСЯ', 'ЭТО НОРМАЛЬНО', 'ХА-ХА-ХА',
+                'БАГ', 'МАТРИЦА', 'КЛИК-КЛИК', 'СИНИЙ ЭКРАН', 'ОШИБКА'
+            ];
+            const text = phrases[Math.floor(Math.random() * phrases.length)];
+            glitchTexts.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10 - 5,
+                life: 1,
+                size: 20 + Math.random() * 60,
+                color: `hsl(${Math.random() * 360}, 100%, 60%)`,
+                text
+            });
+        }
+
+        // Создание частиц при клике
+        window.addEventListener('click', (e) => {
+            for (let i = 0; i < 15; i++) {
+                particles.push(new Particle(e.clientX, e.clientY));
+            }
+            spawnGlitchText(e.clientX, e.clientY);
+            // Звук? Можно добавить AudioContext, но оставим без звука.
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        // Обновление и отрисовка
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Случайный фон
+            const bgHue = Date.now() / 10 % 360;
+            ctx.fillStyle = `hsla(${bgHue}, 80%, 50%, 0.3)`;
+            ctx.fillRect(0, 0, width, height);
+
+            // Рисуем безумные линии от мыши
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.moveTo(mouseX, mouseY);
+                ctx.lineTo(
+                    mouseX + (Math.random() - 0.5) * 400,
+                    mouseY + (Math.random() - 0.5) * 400
+                );
+                ctx.strokeStyle = `hsl(${Math.random() * 360}, 100%, 70%)`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // Обновляем и рисуем частицы
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update();
+                p.draw(ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Обновляем и рисуем глючные надписи
+            for (let i = glitchTexts.length - 1; i >= 0; i--) {
+                let g = glitchTexts[i];
+                g.x += g.vx;
+                g.y += g.vy;
+                g.life -= 0.01;
+                ctx.globalAlpha = g.life;
+                ctx.fillStyle = g.color;
+                ctx.font = `bold ${g.size}px "Comic Sans MS"`;
+                ctx.fillText(g.text, g.x, g.y);
+                ctx.globalAlpha = 1;
+                if (g.life <= 0) glitchTexts.splice(i, 1);
+            }
+
+            // Эффект тряски, если нажата кнопка
+            if (button.dataset.active === 'true') {
+                canvas.style.transform = `translate(${(Math.random()-0.5)*30}px, ${(Math.random()-0.5)*30}px) rotate(${(Math.random()-0.5)*5}deg)`;
+                document.body.style.background = `hsl(${Date.now()/5 % 360}, 80%, 40%)`;
+            } else {
+                canvas.style.transform = 'none';
+                document.body.style.background = '#000';
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Кнопка «ПОЕХАЛИ!»
+        button.addEventListener('click', (e) => {
+            e.stopPropagation(); // чтобы не создавались частицы от клика на кнопку
+            if (button.dataset.active === 'true') {
+                button.dataset.active = 'false';
+                button.textContent = 'ПОЕХАЛИ!';
+            } else {
+                button.dataset.active = 'true';
+                button.textContent = 'ОСТАНОВИТЬ БЕЗУМИЕ';
+                // Добавим немного начальных глюков
+                for (let i = 0; i < 50; i++) {
+                    particles.push(new Particle(
+                        Math.random() * width,
+                        Math.random() * height
+                    ));
+                }
+                spawnGlitchText(width/2, height/2);
+            }
+        });
+
+        // Начальные частицы для атмосферы
+        for (let i = 0; i < 30; i++) {
+            particles.push(new Particle(Math.random() * width, Math.random() * height));
+        }
+
+        animate();
+    </script>
+</body>
+</html>

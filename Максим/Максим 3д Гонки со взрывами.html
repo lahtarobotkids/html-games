@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Гонки со взрывами</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 10;
+        }
+        #gameover {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff4444;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 3px 3px 6px #000;
+            display: none;
+            z-index: 10;
+        }
+        #restart {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px #000;
+            display: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">❤️ <span id="health">3</span> | 💥 <span id="score">0</span></div>
+    <div id="gameover">GAME OVER</div>
+    <div id="restart">Нажмите ПРОБЕЛ, чтобы начать заново</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        // ========== НАСТРОЙКИ ==========
+        const ROAD_WIDTH = 8;
+        const ROAD_LENGTH = 80;
+        const PLAYER_SPEED = 0.2;          // боковая скорость
+        const ENEMY_SPEED_MIN = 0.15;
+        const ENEMY_SPEED_MAX = 0.35;
+        const SPAWN_RATE = 0.015;          // вероятность появления врага за кадр
+        const MAX_ENEMIES = 8;
+
+        // ========== ТРИЖДЫ ОСНОВА ==========
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x000022, 20, 80);
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 200);
+        camera.position.set(0, 7, -8);
+        camera.lookAt(0, 1, 20);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setClearColor(0x0a0a2e);
+        document.body.appendChild(renderer.domElement);
+
+        // ========== ОСВЕЩЕНИЕ ==========
+        const ambientLight = new THREE.AmbientLight(0x404066);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(10, 20, 5);
+        dirLight.castShadow = true;
+        dirLight.receiveShadow = true;
+        dirLight.shadow.mapSize.width = 512;
+        dirLight.shadow.mapSize.height = 512;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 60;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        scene.add(dirLight);
+
+        // ========== ДОРОГА ==========
+        // Основное полотно
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.8 });
+        const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH);
+        const road = new THREE.Mesh(roadGeo, roadMat);
+        road.rotation.x = -Math.PI / 2;
+        road.position.z = 30;
+        road.receiveShadow = true;
+        scene.add(road);
+
+        // Боковые полосы
+        const sideMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+        function addSideLine(x) {
+            const line = new THREE.Mesh(new THREE.PlaneGeometry(0.3, ROAD_LENGTH), sideMat);
+            line.rotation.x = -Math.PI / 2;
+            line.position.set(x, 0.01, 30);
+            line.receiveShadow = true;
+            scene.add(line);
+            return line;
+        }
+        const leftLine = addSideLine(-ROAD_WIDTH/2 + 0.2);
+        const rightLine = addSideLine(ROAD_WIDTH/2 - 0.2);
+
+        // Разделительная полоса (прерывистая) – создадим динамические сегменты
+        const dashGroup = new THREE.Group();
+        const dashMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: new THREE.Color(0x222222) });
+        const dashLength = 1.5;
+        const dashGap = 2.5;
+        const dashes = [];
+        for (let i = 0; i < 30; i++) {
+            const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.2, dashLength), dashMat);
+            dash.rotation.x = -Math.PI / 2;
+            dash.position.set(0, 0.02, i * (dashLength + dashGap) - 5);
+            dash.receiveShadow = true;
+            dashGroup.add(dash);
+            dashes.push({ mesh: dash, offset: i * (dashLength + dashGap) - 5 });
+        }
+        scene.add(dashGroup);
+
+        // Обочина (трава/земля)
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a472a });
+        const groundGeo = new THREE.PlaneGeometry(30, ROAD_LENGTH);
+        const groundLeft = new THREE.Mesh(groundGeo, groundMat);
+        groundLeft.rotation.x = -Math.PI / 2;
+        groundLeft.position.set(-ROAD_WIDTH/2 - 15, -0.05, 30);
+        groundLeft.receiveShadow = true;
+        scene.add(groundLeft);
+        const groundRight = new THREE.Mesh(groundGeo, groundMat);
+        groundRight.rotation.x = -Math.PI / 2;
+        groundRight.position.set(ROAD_WIDTH/2 + 15, -0.05, 30);
+        groundRight.receiveShadow = true;
+        scene.add(groundRight);
+
+        // Столбы освещения по бокам
+        const poleGeo = new THREE.CylinderGeometry(0.2, 0.25, 3);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+        for (let i = 0; i < 8; i++) {
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.set(ROAD_WIDTH/2 + 1.5, 1.5, i * 10);
+            pole.castShadow = true;
+            pole.receiveShadow = true;
+            scene.add(pole);
+            const leftPole = pole.clone();
+            leftPole.position.x = -ROAD_WIDTH/2 - 1.5;
+            scene.add(leftPole);
+        }
+
+        // ========== МАШИНА ИГРОКА ==========
+        function createPlayerCar() {
+            const group = new THREE.Group();
+
+            // Кузов
+            const bodyGeo = new THREE.BoxGeometry(1.8, 0.6, 3.8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.3, metalness: 0.8 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.4;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            // Кабина
+            const cabinGeo = new THREE.BoxGeometry(1.4, 0.4, 1.8);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.2, metalness: 0.5 });
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.set(0, 0.75, -0.4);
+            cabin.castShadow = true;
+            cabin.receiveShadow = true;
+            group.add(cabin);
+
+            // Фары
+            const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: new THREE.Color(0xffffaa) });
+            const headlightGeo = new THREE.SphereGeometry(0.2, 8, 8);
+            const leftLight = new THREE.Mesh(headlightGeo, headlightMat);
+            leftLight.position.set(-0.7, 0.25, -1.8);
+            group.add(leftLight);
+            const rightLight = leftLight.clone();
+            rightLight.position.x = 0.7;
+            group.add(rightLight);
+
+            // Колёса
+            const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 16);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+            function addWheel(x, z) {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(x, 0.4, z);
+                wheel.castShadow = true;
+                wheel.receiveShadow = true;
+                group.add(wheel);
+            }
+            addWheel(-1.1, 1.2);
+            addWheel(1.1, 1.2);
+            addWheel(-1.1, -1.2);
+            addWheel(1.1, -1.2);
+
+            return group;
+        }
+
+        const player = createPlayerCar();
+        player.position.set(0, 0.2, 6);
+        player.castShadow = true;
+        player.receiveShadow = true;
+        scene.add(player);
+
+        // ========== ВРАГИ ==========
+        const enemies = [];
+        function createEnemy(x, z) {
+            const group = new THREE.Group();
+            const colors = [0xcc0000, 0x0088cc, 0x00aa00, 0xcc8800];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+
+            const bodyGeo = new THREE.BoxGeometry(1.8, 0.5, 3.5);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.35;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const cabinGeo = new THREE.BoxGeometry(1.3, 0.35, 1.6);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.y = 0.65;
+            cabin.castShadow = true;
+            cabin.receiveShadow = true;
+            group.add(cabin);
+
+            const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.35, 8);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            function addWheel(wx, wz) {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(wx, 0.35, wz);
+                wheel.castShadow = true;
+                wheel.receiveShadow = true;
+                group.add(wheel);
+            }
+            addWheel(-1.05, 1.1);
+            addWheel(1.05, 1.1);
+            addWheel(-1.05, -1.1);
+            addWheel(1.05, -1.1);
+
+            group.position.set(x, 0.2, z);
+            group.userData = {
+                speed: ENEMY_SPEED_MIN + Math.random() * (ENEMY_SPEED_MAX - ENEMY_SPEED_MIN)
+            };
+            scene.add(group);
+            enemies.push(group);
+            return group;
+        }
+
+        // ========== ВЗРЫВЫ (частицы) ==========
+        const explosions = [];
+        function createExplosion(pos) {
+            const particleCount = 40;
+            const group = new THREE.Group();
+            const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+            for (let i = 0; i < particleCount; i++) {
+                const mat = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color().setHSL(0.05 + Math.random() * 0.1, 1, 0.5 + Math.random() * 0.5),
+                    emissive: new THREE.Color().setHSL(0.1, 1, 0.3)
+                });
+                const particle = new THREE.Mesh(geo, mat);
+                particle.position.set(
+                    (Math.random() - 0.5) * 3,
+                    Math.random() * 2,
+                    (Math.random() - 0.5) * 3
+                );
+                particle.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.3,
+                        Math.random() * 0.15 + 0.1,
+                        (Math.random() - 0.5) * 0.3
+                    ),
+                    life: 60 + Math.floor(Math.random() * 40)
+                };
+                group.add(particle);
+            }
+            group.position.copy(pos);
+            scene.add(group);
+            explosions.push(group);
+        }
+
+        // ========== СОСТОЯНИЕ ИГРЫ ==========
+        let health = 3;
+        let score = 0;
+        let gameActive = true;
+        let invincibleTimer = 0;       // кадры неуязвимости после удара
+        const INVINCIBLE_DURATION = 80;
+
+        let moveLeft = false;
+        let moveRight = false;
+
+        function updateUI() {
+            document.getElementById('health').textContent = health;
+            document.getElementById('score').textContent = score;
+        }
+
+        // ========== СТОЛКНОВЕНИЯ ==========
+        function checkCollision() {
+            if (!gameActive || invincibleTimer > 0) return;
+            const playerBox = new THREE.Box3().setFromObject(player);
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const enemyBox = new THREE.Box3().setFromObject(enemy);
+                if (playerBox.intersectsBox(enemyBox)) {
+                    // Взрыв на позиции врага
+                    createExplosion(enemy.position.clone());
+                    // Удаляем врага
+                    scene.remove(enemy);
+                    enemies.splice(i, 1);
+
+                    // Урон игроку
+                    health--;
+                    updateUI();
+                    invincibleTimer = INVINCIBLE_DURATION;
+                    player.visible = false; // мигание реализуем через таймер
+
+                    if (health <= 0) {
+                        gameActive = false;
+                        document.getElementById('gameover').style.display = 'block';
+                        document.getElementById('restart').style.display = 'block';
+                        // Взрыв игрока
+                        createExplosion(player.position.clone());
+                        player.visible = false;
+                    }
+                    break; // только одно столкновение за кадр
+                }
+            }
+        }
+
+        // ========== СБРОС ИГРЫ ==========
+        function resetGame() {
+            // Удаляем всех врагов
+            enemies.forEach(e => scene.remove(e));
+            enemies.length = 0;
+            // Удаляем взрывы
+            explosions.forEach(g => scene.remove(g));
+            explosions.length = 0;
+
+            health = 3;
+            score = 0;
+            gameActive = true;
+            invincibleTimer = 0;
+            player.position.set(0, 0.2, 6);
+            player.visible = true;
+            document.getElementById('gameover').style.display = 'none';
+            document.getElementById('restart').style.display = 'none';
+            updateUI();
+        }
+
+        // ========== ОБНОВЛЕНИЕ ВЗРЫВОВ ==========
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const group = explosions[i];
+                let allDead = true;
+                group.children.forEach(particle => {
+                    const data = particle.userData;
+                    if (data.life > 0) {
+                        data.life--;
+                        particle.position.x += data.velocity.x;
+                        particle.position.y += data.velocity.y;
+                        particle.position.z += data.velocity.z;
+                        data.velocity.y -= 0.005; // гравитация
+                        particle.material.opacity = data.life / 60;
+                        particle.material.transparent = true;
+                        allDead = false;
+                    } else {
+                        particle.visible = false;
+                    }
+                });
+                if (allDead) {
+                    scene.remove(group);
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+
+        // ========== АНИМАЦИЯ ДОРОЖНОЙ РАЗМЕТКИ ==========
+        function updateDashes() {
+            dashes.forEach(d => {
+                d.mesh.position.z -= 0.5; // скорость движения полос
+                if (d.mesh.position.z < -10) {
+                    d.mesh.position.z += ROAD_LENGTH;
+                }
+            });
+        }
+
+        // ========== ГЛАВНЫЙ ЦИКЛ ==========
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameActive) {
+                // Движение игрока
+                if (moveLeft) player.position.x -= PLAYER_SPEED;
+                if (moveRight) player.position.x += PLAYER_SPEED;
+                player.position.x = Math.max(-ROAD_WIDTH/2 + 1.2, Math.min(ROAD_WIDTH/2 - 1.2, player.position.x));
+
+                // Неуязвимость: мигание
+                if (invincibleTimer > 0) {
+                    invincibleTimer--;
+                    player.visible = Math.floor(invincibleTimer / 6) % 2 === 0;
+                } else {
+                    player.visible = true;
+                }
+
+                // Движение врагов
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    enemy.position.z -= enemy.userData.speed;
+                    if (enemy.position.z < -5) {
+                        scene.remove(enemy);
+                        enemies.splice(i, 1);
+                        // Очки за пропущенного врага
+                        score += 5;
+                        updateUI();
+                    }
+                }
+
+                // Спавн врагов
+                if (enemies.length < MAX_ENEMIES && Math.random() < SPAWN_RATE) {
+                    const x = (Math.random() - 0.5) * (ROAD_WIDTH - 2.5);
+                    createEnemy(x, ROAD_LENGTH/2 + 10 + Math.random() * 15);
+                }
+
+                // Движение разметки
+                updateDashes();
+
+                // Проверка столкновений
+                checkCollision();
+
+                // Обновление взрывов
+                updateExplosions();
+            } else {
+                // Если игра окончена, всё равно обновляем взрывы (для эффекта)
+                updateExplosions();
+            }
+
+            // Камера всегда смотрит на точку перед игроком
+            camera.position.x += (player.position.x * 0.5 - camera.position.x) * 0.1;
+            camera.lookAt(player.position.x * 0.5, 1.5, player.position.z + 15);
+
+            renderer.render(scene, camera);
+        }
+
+        // ========== УПРАВЛЕНИЕ ==========
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                moveLeft = true;
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                moveRight = true;
+            } else if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault();
+                if (!gameActive) {
+                    resetGame();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                moveLeft = false;
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                moveRight = false;
+            }
+        });
+
+        // Ресайз окна
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Старт
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>

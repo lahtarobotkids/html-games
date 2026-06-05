@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Побег от злого соседа</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+            flex-direction: column;
+            color: #eee;
+        }
+        canvas {
+            border: 2px solid #0f3460;
+            background: #16213e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.7);
+        }
+        .info {
+            margin-top: 15px;
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        .score {
+            font-size: 24px;
+            background: #0f3460;
+            padding: 8px 20px;
+            border-radius: 20px;
+        }
+        button {
+            background: #e94560;
+            border: none;
+            color: white;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #c23152;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div class="info">
+        <span class="score">💰 Монеты: <span id="scoreDisplay">0</span></span>
+        <span class="score">⏱ Время: <span id="timeDisplay">0</span> сек</span>
+        <button id="restartButton">Новая игра</button>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreSpan = document.getElementById('scoreDisplay');
+            const timeSpan = document.getElementById('timeDisplay');
+
+            // Размеры поля
+            const WIDTH = canvas.width;
+            const HEIGHT = canvas.height;
+
+            // Состояние игры
+            let gameOver = false;
+            let score = 0;
+            let gameTime = 0; // секунды
+            let enemySpeedBase = 1.5; // начальная скорость соседа
+            const ENEMY_ACCEL = 0.005; // ускорение соседа за кадр (примерно)
+            const PLAYER_SPEED = 3.5;
+
+            // Игрок
+            let player = {
+                x: 100,
+                y: 250,
+                radius: 15,
+                speed: PLAYER_SPEED
+            };
+
+            // Злой сосед
+            let enemy = {
+                x: 700,
+                y: 250,
+                radius: 16,
+                speed: enemySpeedBase
+            };
+
+            // Монетки (предметы для сбора)
+            let coins = [];
+            const COIN_RADIUS = 8;
+            const MAX_COINS = 5;
+            const COIN_RESPAWN_TIME = 120; // кадров (2 сек при 60 fps)
+
+            // Препятствия (стены, мебель) – набор прямоугольников
+            const obstacles = [
+                {x: 150, y: 100, w: 80, h: 20},
+                {x: 300, y: 200, w: 20, h: 100},
+                {x: 500, y: 100, w: 100, h: 20},
+                {x: 600, y: 300, w: 20, h: 120},
+                {x: 200, y: 400, w: 150, h: 20},
+                {x: 400, y: 380, w: 20, h: 80},
+            ];
+
+            // Управление клавишами
+            const keys = {
+                ArrowUp: false,
+                ArrowDown: false,
+                ArrowLeft: false,
+                ArrowRight: false
+            };
+
+            // Функция генерации случайной монетки, не попадающей в стены, игрока и врага
+            function spawnCoin() {
+                const maxAttempts = 500;
+                for (let i = 0; i < maxAttempts; i++) {
+                    const cx = 30 + Math.random() * (WIDTH - 60);
+                    const cy = 30 + Math.random() * (HEIGHT - 60);
+                    // Проверка, что не внутри препятствия
+                    let insideObstacle = false;
+                    for (let obs of obstacles) {
+                        if (cx > obs.x - COIN_RADIUS && cx < obs.x + obs.w + COIN_RADIUS &&
+                            cy > obs.y - COIN_RADIUS && cy < obs.y + obs.h + COIN_RADIUS) {
+                            insideObstacle = true;
+                            break;
+                        }
+                    }
+                    if (insideObstacle) continue;
+                    // Не слишком близко к игроку или врагу
+                    const distToPlayer = Math.hypot(cx - player.x, cy - player.y);
+                    const distToEnemy = Math.hypot(cx - enemy.x, cy - enemy.y);
+                    if (distToPlayer < 40 || distToEnemy < 40) continue;
+                    return {x: cx, y: cy, active: true};
+                }
+                // Если не нашли место, вернём хоть что-то
+                return {x: 100, y: 100, active: true};
+            }
+
+            // Инициализация монет
+            function initCoins() {
+                coins = [];
+                for (let i = 0; i < MAX_COINS; i++) {
+                    coins.push(spawnCoin());
+                }
+            }
+
+            // Сброс игры
+            function resetGame() {
+                player.x = 100;
+                player.y = 250;
+                enemy.x = 700;
+                enemy.y = 250;
+                enemy.speed = enemySpeedBase;
+                gameOver = false;
+                score = 0;
+                gameTime = 0;
+                scoreSpan.textContent = score;
+                timeSpan.textContent = gameTime;
+                initCoins();
+                // Сбрасываем клавиши
+                for (let k in keys) keys[k] = false;
+            }
+
+            // Проверка столкновения круга с прямоугольником (препятствием)
+            function circleRectCollision(cx, cy, radius, rect) {
+                const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+                const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+                const dx = cx - closestX;
+                const dy = cy - closestY;
+                return (dx * dx + dy * dy) < radius * radius;
+            }
+
+            // Проверка столкновения двух кругов
+            function circlesCollide(x1, y1, r1, x2, y2, r2) {
+                const dx = x1 - x2;
+                const dy = y1 - y2;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                return dist < r1 + r2;
+            }
+
+            // Основной цикл обновления
+            function update() {
+                if (gameOver) return;
+
+                // Движение игрока с учётом препятствий
+                let dx = 0, dy = 0;
+                if (keys.ArrowUp) dy -= 1;
+                if (keys.ArrowDown) dy += 1;
+                if (keys.ArrowLeft) dx -= 1;
+                if (keys.ArrowRight) dx += 1;
+
+                if (dx !== 0 || dy !== 0) {
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    dx = (dx / len) * player.speed;
+                    dy = (dy / len) * player.speed;
+                }
+
+                let newPlayerX = player.x + dx;
+                let newPlayerY = player.y + dy;
+
+                // Проверка стен для игрока (раздельно по осям)
+                let canMoveX = true;
+                let canMoveY = true;
+                for (let obs of obstacles) {
+                    if (circleRectCollision(newPlayerX, player.y, player.radius, obs)) {
+                        canMoveX = false;
+                    }
+                    if (circleRectCollision(player.x, newPlayerY, player.radius, obs)) {
+                        canMoveY = false;
+                    }
+                }
+                // Границы канваса
+                if (newPlayerX - player.radius < 0 || newPlayerX + player.radius > WIDTH) canMoveX = false;
+                if (newPlayerY - player.radius < 0 || newPlayerY + player.radius > HEIGHT) canMoveY = false;
+
+                if (canMoveX) player.x = newPlayerX;
+                if (canMoveY) player.y = newPlayerY;
+
+                // Движение врага в сторону игрока
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                let enemyDx = Math.cos(angle) * enemy.speed;
+                let enemyDy = Math.sin(angle) * enemy.speed;
+
+                let newEnemyX = enemy.x + enemyDx;
+                let newEnemyY = enemy.y + enemyDy;
+
+                // Проверка стен для врага (тоже раздельно, но враг может застревать, это нормально)
+                let enemyCanMoveX = true;
+                let enemyCanMoveY = true;
+                for (let obs of obstacles) {
+                    if (circleRectCollision(newEnemyX, enemy.y, enemy.radius, obs)) {
+                        enemyCanMoveX = false;
+                    }
+                    if (circleRectCollision(enemy.x, newEnemyY, enemy.radius, obs)) {
+                        enemyCanMoveY = false;
+                    }
+                }
+                if (newEnemyX - enemy.radius < 0 || newEnemyX + enemy.radius > WIDTH) enemyCanMoveX = false;
+                if (newEnemyY - enemy.radius < 0 || newEnemyY + enemy.radius > HEIGHT) enemyCanMoveY = false;
+
+                if (enemyCanMoveX) enemy.x = newEnemyX;
+                if (enemyCanMoveY) enemy.y = newEnemyY;
+
+                // Увеличение скорости врага со временем
+                enemy.speed += ENEMY_ACCEL;
+
+                // Проверка столкновения игрока с врагом -> game over
+                if (circlesCollide(player.x, player.y, player.radius, enemy.x, enemy.y, enemy.radius)) {
+                    gameOver = true;
+                }
+
+                // Проверка сбора монет
+                for (let coin of coins) {
+                    if (coin.active && circlesCollide(player.x, player.y, player.radius, coin.x, coin.y, COIN_RADIUS)) {
+                        coin.active = false;
+                        score++;
+                        scoreSpan.textContent = score;
+                    }
+                }
+
+                // Удаление неактивных монет и добавление новых, если количество меньше максимума
+                coins = coins.filter(c => c.active);
+                while (coins.length < MAX_COINS) {
+                    coins.push(spawnCoin());
+                }
+
+                // Обновление времени (прошёл 1 кадр = 1/60 сек)
+                gameTime += 1/60;
+                timeSpan.textContent = Math.floor(gameTime);
+            }
+
+            // Отрисовка
+            function draw() {
+                ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+                // Препятствия
+                ctx.fillStyle = '#4e4e50';
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 5;
+                for (let obs of obstacles) {
+                    ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                }
+                ctx.shadowBlur = 0;
+
+                // Монетки
+                ctx.fillStyle = '#f5c542';
+                ctx.shadowColor = '#f5c542';
+                ctx.shadowBlur = 8;
+                for (let coin of coins) {
+                    if (coin.active) {
+                        ctx.beginPath();
+                        ctx.arc(coin.x, coin.y, COIN_RADIUS, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                ctx.shadowBlur = 0;
+
+                // Игрок (синий квадрат с глазами)
+                ctx.fillStyle = '#4dabf7';
+                ctx.shadowColor = '#4dabf7';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(player.x - player.radius, player.y - player.radius, player.radius*2, player.radius*2);
+                // Глаза
+                ctx.fillStyle = '#fff';
+                ctx.shadowBlur = 0;
+                const eyeOffsetX = 5;
+                const eyeOffsetY = 5;
+                const eyeSize = 5;
+                ctx.fillRect(player.x - eyeOffsetX - 2, player.y - eyeOffsetY - 2, eyeSize, eyeSize);
+                ctx.fillRect(player.x + eyeOffsetX - 2, player.y - eyeOffsetY - 2, eyeSize, eyeSize);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(player.x - eyeOffsetX - 1, player.y - eyeOffsetY - 1, 3, 3);
+                ctx.fillRect(player.x + eyeOffsetX - 1, player.y - eyeOffsetY - 1, 3, 3);
+
+                // Злой сосед (красный квадрат с злыми бровями)
+                ctx.fillStyle = '#e94560';
+                ctx.shadowColor = '#e94560';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(enemy.x - enemy.radius, enemy.y - enemy.radius, enemy.radius*2, enemy.radius*2);
+                ctx.fillStyle = '#fff';
+                ctx.shadowBlur = 0;
+                // Глаза врага
+                ctx.fillRect(enemy.x - 6, enemy.y - 8, 6, 6);
+                ctx.fillRect(enemy.x + 0, enemy.y - 8, 6, 6);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(enemy.x - 4, enemy.y - 6, 3, 3);
+                ctx.fillRect(enemy.x + 2, enemy.y - 6, 3, 3);
+                // Злые брови
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(enemy.x - 8, enemy.y - 12);
+                ctx.lineTo(enemy.x - 2, enemy.y - 10);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(enemy.x + 2, enemy.y - 10);
+                ctx.lineTo(enemy.x + 8, enemy.y - 12);
+                ctx.stroke();
+
+                // Сообщение при окончании игры
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 36px "Segoe UI"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Вас поймал злой сосед!', WIDTH/2, HEIGHT/2 - 30);
+                    ctx.font = '20px "Segoe UI"';
+                    ctx.fillText('Монет собрано: ' + score + ' | Время: ' + Math.floor(gameTime) + ' сек', WIDTH/2, HEIGHT/2 + 20);
+                    ctx.fillText('Нажмите "Пробел" или кнопку', WIDTH/2, HEIGHT/2 + 55);
+                }
+            }
+
+            // Игровой цикл
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Обработчики клавиш
+            function handleKeyDown(e) {
+                if (e.key in keys) {
+                    e.preventDefault();
+                    keys[e.key] = true;
+                }
+                if (e.key === ' ' || e.key === 'Space') {
+                    e.preventDefault();
+                    if (gameOver) resetGame();
+                }
+            }
+
+            function handleKeyUp(e) {
+                if (e.key in keys) {
+                    e.preventDefault();
+                    keys[e.key] = false;
+                }
+            }
+
+            // Кнопка рестарта
+            document.getElementById('restartButton').addEventListener('click', () => {
+                resetGame();
+            });
+
+            // Старт
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            resetGame();
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>

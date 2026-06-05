@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Песочница – мобильная</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        body {
+            background: #0b0b1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            touch-action: manipulation;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #111;
+        }
+        canvas {
+            display: block;
+            flex: 1;
+            background: #1a1a2e;
+            touch-action: none; /* отключаем жесты браузера */
+            width: 100%;
+            height: auto;
+        }
+        #bottom-panel {
+            background: rgba(20, 20, 40, 0.9);
+            backdrop-filter: blur(12px);
+            padding: 12px 8px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            align-items: center;
+            border-top: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.6);
+            z-index: 20;
+        }
+        .tool-group, .type-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            background: rgba(255,255,255,0.08);
+            border-radius: 40px;
+            padding: 5px 8px;
+        }
+        button {
+            background: #2d3250;
+            border: none;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.15s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+            min-width: 50px;
+            touch-action: manipulation;
+        }
+        button:active {
+            transform: scale(0.94);
+            background: #3f4570;
+        }
+        button.active {
+            background: #e94560;
+            box-shadow: 0 0 15px #e94560aa;
+            color: #fff;
+        }
+        .type-btn {
+            font-size: 22px;
+            padding: 10px 14px;
+        }
+        #mode-indicator {
+            color: #f9c74f;
+            font-weight: bold;
+            font-size: 16px;
+            background: #0f3460;
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin-left: 5px;
+            border: 1px solid #f9c74f55;
+            white-space: nowrap;
+        }
+        @media (max-width: 600px) {
+            button {
+                padding: 10px 12px;
+                font-size: 16px;
+            }
+            .type-btn {
+                font-size: 20px;
+                padding: 8px 10px;
+            }
+            #mode-indicator {
+                font-size: 14px;
+                padding: 6px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="world"></canvas>
+        <div id="bottom-panel">
+            <div class="tool-group">
+                <button id="tool-spawn" class="active">🖐️ Спавн</button>
+                <button id="tool-drag">✋ Тянуть</button>
+                <button id="tool-connect">🔗 Связь</button>
+                <button id="tool-remove">💥 Удалить</button>
+            </div>
+            <div class="type-group" id="spawn-type-group">
+                <button id="type-cube" class="type-btn active">📦</button>
+                <button id="type-ball" class="type-btn">⚪</button>
+                <button id="type-classic" class="type-btn">🧑</button>
+                <button id="type-robot" class="type-btn">🤖</button>
+                <button id="type-zombie" class="type-btn">🧟</button>
+                <button id="type-stickman" class="type-btn">🏃</button>
+            </div>
+            <span id="mode-indicator">Спавн: Куб</span>
+            <button id="btn-reset" style="background:#4a2c3b;">🔄 Сброс</button>
+        </div>
+    </div>
+    <script>
+        (function() {
+            // ---------- Инициализация Matter.js ----------
+            const Engine = Matter.Engine;
+            const Render = Matter.Render;
+            const World = Matter.World;
+            const Bodies = Matter.Bodies;
+            const Body = Matter.Body;
+            const Constraint = Matter.Constraint;
+            const Composite = Matter.Composite;
+
+            const engine = Engine.create();
+            const world = engine.world;
+
+            const canvas = document.getElementById('world');
+            const container = document.getElementById('game-container');
+
+            // Установка размеров canvas по размеру контейнера
+            function resizeCanvas() {
+                const rect = container.getBoundingClientRect();
+                const width = rect.width;
+                const height = rect.height - document.getElementById('bottom-panel').offsetHeight;
+                canvas.width = width;
+                canvas.height = height;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            const render = Render.create({
+                canvas: canvas,
+                engine: engine,
+                options: {
+                    width: canvas.width,
+                    height: canvas.height,
+                    wireframes: false,
+                    background: '#1a1a2e',
+                    pixelRatio: window.devicePixelRatio || 1
+                }
+            });
+
+            // ---------- Стены ----------
+            let walls = [];
+            function createWalls() {
+                const w = canvas.width;
+                const h = canvas.height;
+                const options = { 
+                    isStatic: true, 
+                    friction: 0.5,
+                    render: { fillStyle: '#2d3a5c', strokeStyle: '#4a5b82', lineWidth: 2 }
+                };
+                const thickness = 40;
+                const ground = Bodies.rectangle(w / 2, h + thickness / 2 - 10, w + 40, thickness, options);
+                const ceiling = Bodies.rectangle(w / 2, -thickness / 2 + 10, w + 40, thickness, options);
+                const leftWall = Bodies.rectangle(-thickness / 2 + 10, h / 2, thickness, h + 40, options);
+                const rightWall = Bodies.rectangle(w + thickness / 2 - 10, h / 2, thickness, h + 40, options);
+                return [ground, ceiling, leftWall, rightWall];
+            }
+
+            function updateWalls() {
+                walls.forEach(w => World.remove(world, w));
+                walls = createWalls();
+                World.add(world, walls);
+            }
+            walls = createWalls();
+            World.add(world, walls);
+
+            // ---------- Состояние ----------
+            const state = {
+                tool: 'spawn',    // 'spawn', 'drag', 'connect', 'remove'
+                spawnType: 'cube', // 'cube','ball','classic','robot','zombie','stickman'
+                connectFirstBody: null,
+                dragBody: null,
+                dragConstraint: null,
+                pointerPos: { x: 0, y: 0 }
+            };
+
+            // ---------- UI элементы ----------
+            const toolSpawn = document.getElementById('tool-spawn');
+            const toolDrag = document.getElementById('tool-drag');
+            const toolConnect = document.getElementById('tool-connect');
+            const toolRemove = document.getElementById('tool-remove');
+            const typeCube = document.getElementById('type-cube');
+            const typeBall = document.getElementById('type-ball');
+            const typeClassic = document.getElementById('type-classic');
+            const typeRobot = document.getElementById('type-robot');
+            const typeZombie = document.getElementById('type-zombie');
+            const typeStickman = document.getElementById('type-stickman');
+            const modeIndicator = document.getElementById('mode-indicator');
+            const resetBtn = document.getElementById('btn-reset');
+
+            function setTool(tool) {
+                state.tool = tool;
+                if (state.connectFirstBody) clearConnectFirst();
+                if (state.dragConstraint) releaseDrag();
+                updateUI();
+            }
+
+            function setSpawnType(type) {
+                state.spawnType = type;
+                updateUI();
+            }
+
+            function updateUI() {
+                [toolSpawn, toolDrag, toolConnect, toolRemove].forEach(b => b.classList.remove('active'));
+                if (state.tool === 'spawn') toolSpawn.classList.add('active');
+                if (state.tool === 'drag') toolDrag.classList.add('active');
+                if (state.tool === 'connect') toolConnect.classList.add('active');
+                if (state.tool === 'remove') toolRemove.classList.add('active');
+
+                [typeCube, typeBall, typeClassic, typeRobot, typeZombie, typeStickman].forEach(b => b.classList.remove('active'));
+                if (state.spawnType === 'cube') typeCube.classList.add('active');
+                if (state.spawnType === 'ball') typeBall.classList.add('active');
+                if (state.spawnType === 'classic') typeClassic.classList.add('active');
+                if (state.spawnType === 'robot') typeRobot.classList.add('active');
+                if (state.spawnType === 'zombie') typeZombie.classList.add('active');
+                if (state.spawnType === 'stickman') typeStickman.classList.add('active');
+
+                let modeText = '';
+                if (state.tool === 'spawn') {
+                    const names = { cube:'Куб', ball:'Шар', classic:'Классик', robot:'Робот', zombie:'Зомби', stickman:'Стикмен' };
+                    modeText = `Спавн: ${names[state.spawnType]}`;
+                } else if (state.tool === 'drag') modeText = 'Тянуть объекты';
+                else if (state.tool === 'connect') modeText = state.connectFirstBody ? 'Связь: выберите второй' : 'Связь: выберите первый';
+                else if (state.tool === 'remove') modeText = 'Удаление объектов';
+                modeIndicator.textContent = modeText;
+            }
+
+            toolSpawn.addEventListener('click', () => setTool('spawn'));
+            toolDrag.addEventListener('click', () => setTool('drag'));
+            toolConnect.addEventListener('click', () => setTool('connect'));
+            toolRemove.addEventListener('click', () => setTool('remove'));
+            typeCube.addEventListener('click', () => setSpawnType('cube'));
+            typeBall.addEventListener('click', () => setSpawnType('ball'));
+            typeClassic.addEventListener('click', () => setSpawnType('classic'));
+            typeRobot.addEventListener('click', () => setSpawnType('robot'));
+            typeZombie.addEventListener('click', () => setSpawnType('zombie'));
+            typeStickman.addEventListener('click', () => setSpawnType('stickman'));
+
+            resetBtn.addEventListener('click', () => {
+                // Удаляем все динамические объекты и ограничения, кроме стен
+                const bodies = Composite.allBodies(world).filter(b => !b.isStatic);
+                const constraints = Composite.allConstraints(world);
+                bodies.forEach(b => World.remove(world, b));
+                constraints.forEach(c => World.remove(world, c));
+                clearConnectFirst();
+                releaseDrag();
+            });
+
+            // ---------- Создание объектов ----------
+            function createCube(x, y) {
+                const size = 40 + Math.random() * 35;
+                const colors = ['#e94560','#f9c74f','#90be6d','#577590','#f9844a'];
+                const body = Bodies.rectangle(x, y, size, size, {
+                    friction: 0.8, restitution: 0.3,
+                    render: { fillStyle: colors[Math.floor(Math.random()*colors.length)], strokeStyle: '#fff', lineWidth: 2 }
+                });
+                return body;
+            }
+
+            function createBall(x, y) {
+                const r = 25 + Math.random() * 25;
+                const colors = ['#f94144','#f8961e','#f9c74f','#90be6d','#9b5de5'];
+                const body = Bodies.circle(x, y, r, {
+                    friction: 0.7, restitution: 0.5,
+                    render: { fillStyle: colors[Math.floor(Math.random()*colors.length)], strokeStyle: '#fff', lineWidth: 2 }
+                });
+                return body;
+            }
+
+            function createRagdoll(x, y, type) {
+                const group = Body.nextGroup(true);
+                let head, torso, leftArm, rightArm, leftLeg, rightLeg;
+                const baseY = y;
+
+                const typesConfig = {
+                    classic: {
+                        head: () => Bodies.circle(x, baseY-50, 18, { collisionFilter:{group}, render:{fillStyle:'#f4a261', strokeStyle:'#fff', lineWidth:2}}),
+                        torso: () => Bodies.rectangle(x, baseY-15, 30, 50, { collisionFilter:{group}, render:{fillStyle:'#264653', strokeStyle:'#fff', lineWidth:2}}),
+                        leftArm: () => Bodies.rectangle(x-30, baseY-20, 20, 50, { collisionFilter:{group}, render:{fillStyle:'#2a9d8f'}}),
+                        rightArm: () => Bodies.rectangle(x+30, baseY-20, 20, 50, { collisionFilter:{group}, render:{fillStyle:'#2a9d8f'}}),
+                        leftLeg: () => Bodies.rectangle(x-15, baseY+35, 22, 55, { collisionFilter:{group}, render:{fillStyle:'#2a9d8f'}}),
+                        rightLeg: () => Bodies.rectangle(x+15, baseY+35, 22, 55, { collisionFilter:{group}, render:{fillStyle:'#2a9d8f'}})
+                    },
+                    robot: {
+                        head: () => Bodies.rectangle(x, baseY-55, 24, 24, { collisionFilter:{group}, render:{fillStyle:'#a0a0a0', strokeStyle:'#fff'}}),
+                        torso: () => Bodies.rectangle(x, baseY-15, 28, 45, { collisionFilter:{group}, render:{fillStyle:'#5a5a5a'}}),
+                        leftArm: () => Bodies.rectangle(x-28, baseY-20, 16, 45, { collisionFilter:{group}, render:{fillStyle:'#808080'}}),
+                        rightArm: () => Bodies.rectangle(x+28, baseY-20, 16, 45, { collisionFilter:{group}, render:{fillStyle:'#808080'}}),
+                        leftLeg: () => Bodies.rectangle(x-14, baseY+30, 18, 50, { collisionFilter:{group}, render:{fillStyle:'#707070'}}),
+                        rightLeg: () => Bodies.rectangle(x+14, baseY+30, 18, 50, { collisionFilter:{group}, render:{fillStyle:'#707070'}})
+                    },
+                    zombie: {
+                        head: () => Bodies.circle(x, baseY-48, 16, { collisionFilter:{group}, render:{fillStyle:'#6b8c42', strokeStyle:'#fff'}}),
+                        torso: () => Bodies.rectangle(x, baseY-12, 26, 45, { collisionFilter:{group}, render:{fillStyle:'#4a5d23'}}),
+                        leftArm: () => Bodies.rectangle(x-26, baseY-18, 16, 48, { collisionFilter:{group}, render:{fillStyle:'#5a6b32'}}),
+                        rightArm: () => Bodies.rectangle(x+26, baseY-18, 16, 48, { collisionFilter:{group}, render:{fillStyle:'#5a6b32'}}),
+                        leftLeg: () => Bodies.rectangle(x-14, baseY+30, 18, 50, { collisionFilter:{group}, render:{fillStyle:'#4d5a2a'}}),
+                        rightLeg: () => Bodies.rectangle(x+14, baseY+30, 18, 50, { collisionFilter:{group}, render:{fillStyle:'#4d5a2a'}})
+                    },
+                    stickman: {
+                        head: () => Bodies.circle(x, baseY-50, 14, { collisionFilter:{group}, render:{fillStyle:'#222', strokeStyle:'#fff'}}),
+                        torso: () => Bodies.rectangle(x, baseY-15, 10, 50, { collisionFilter:{group}, render:{fillStyle:'#111'}}),
+                        leftArm: () => Bodies.rectangle(x-22, baseY-20, 8, 45, { collisionFilter:{group}, render:{fillStyle:'#1a1a1a'}}),
+                        rightArm: () => Bodies.rectangle(x+22, baseY-20, 8, 45, { collisionFilter:{group}, render:{fillStyle:'#1a1a1a'}}),
+                        leftLeg: () => Bodies.rectangle(x-10, baseY+35, 8, 55, { collisionFilter:{group}, render:{fillStyle:'#1a1a1a'}}),
+                        rightLeg: () => Bodies.rectangle(x+10, baseY+35, 8, 55, { collisionFilter:{group}, render:{fillStyle:'#1a1a1a'}})
+                    }
+                };
+
+                const cfg = typesConfig[type] || typesConfig.classic;
+                head = cfg.head();
+                torso = cfg.torso();
+                leftArm = cfg.leftArm();
+                rightArm = cfg.rightArm();
+                leftLeg = cfg.leftLeg();
+                rightLeg = cfg.rightLeg();
+
+                const parts = [head, torso, leftArm, rightArm, leftLeg, rightLeg];
+                World.add(world, parts);
+
+                const constraints = [
+                    Constraint.create({ bodyA: head, pointA: {x:0, y:18}, bodyB: torso, pointB: {x:0, y:-25}, stiffness:0.8 }),
+                    Constraint.create({ bodyA: torso, pointA: {x:-15, y:-15}, bodyB: leftArm, pointB: {x:10, y:-20}, stiffness:0.7 }),
+                    Constraint.create({ bodyA: torso, pointA: {x:15, y:-15}, bodyB: rightArm, pointB: {x:-10, y:-20}, stiffness:0.7 }),
+                    Constraint.create({ bodyA: torso, pointA: {x:-10, y:25}, bodyB: leftLeg, pointB: {x:0, y:-25}, stiffness:0.7 }),
+                    Constraint.create({ bodyA: torso, pointA: {x:10, y:25}, bodyB: rightLeg, pointB: {x:0, y:-25}, stiffness:0.7 })
+                ];
+                World.add(world, constraints);
+                return { parts, constraints };
+            }
+
+            // ---------- Указатель (Pointer) ----------
+            function getCanvasCoords(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            }
+
+            function handlePointerDown(e) {
+                e.preventDefault();
+                const pos = getCanvasCoords(e);
+                state.pointerPos = pos;
+                const bodies = Matter.Query.point(Composite.allBodies(world), pos);
+                const dynamicBodies = bodies.filter(b => !b.isStatic);
+
+                if (state.tool === 'spawn') {
+                    if (state.spawnType === 'cube') World.add(world, createCube(pos.x, pos.y));
+                    else if (state.spawnType === 'ball') World.add(world, createBall(pos.x, pos.y));
+                    else createRagdoll(pos.x, pos.y, state.spawnType);
+                }
+                else if (state.tool === 'drag') {
+                    if (dynamicBodies.length > 0) {
+                        state.dragBody = dynamicBodies[0];
+                        state.dragConstraint = Constraint.create({
+                            pointA: pos,
+                            bodyB: state.dragBody,
+                            stiffness: 0.8,
+                            damping: 0.1,
+                            length: 0,
+                            render: { visible: true, lineWidth: 2, strokeStyle: '#00ffcc' }
+                        });
+                        World.add(world, state.dragConstraint);
+                    }
+                }
+                else if (state.tool === 'connect') {
+                    if (dynamicBodies.length > 0) {
+                        const body = dynamicBodies[0];
+                        if (!state.connectFirstBody) {
+                            state.connectFirstBody = body;
+                            body.render.strokeStyle = '#ffdd00';
+                            body.render.lineWidth = 4;
+                            updateUI();
+                        } else if (state.connectFirstBody !== body) {
+                            const constraint = Constraint.create({
+                                bodyA: state.connectFirstBody,
+                                bodyB: body,
+                                stiffness: 0.05,
+                                damping: 0.1,
+                                length: 60,
+                                render: { visible: true, lineWidth: 3, strokeStyle: '#f9c74f', type: 'spring' }
+                            });
+                            World.add(world, constraint);
+                            clearConnectFirst();
+                            updateUI();
+                        }
+                    }
+                }
+                else if (state.tool === 'remove') {
+                    if (dynamicBodies.length > 0) {
+                        const body = dynamicBodies[0];
+                        const constraints = Composite.allConstraints(world).filter(c => c.bodyA === body || c.bodyB === body);
+                        constraints.forEach(c => World.remove(world, c));
+                        World.remove(world, body);
+                    }
+                }
+            }
+
+            function handlePointerMove(e) {
+                e.preventDefault();
+                const pos = getCanvasCoords(e);
+                state.pointerPos = pos;
+                if (state.dragConstraint) {
+                    state.dragConstraint.pointA = pos;
+                }
+            }
+
+            function handlePointerUp(e) {
+                e.preventDefault();
+                if (state.dragConstraint) {
+                    releaseDrag();
+                }
+            }
+
+            function releaseDrag() {
+                if (state.dragConstraint) {
+                    World.remove(world, state.dragConstraint);
+                    state.dragConstraint = null;
+                    state.dragBody = null;
+                }
+            }
+
+            function clearConnectFirst() {
+                if (state.connectFirstBody) {
+                    state.connectFirstBody.render.strokeStyle = '#fff';
+                    state.connectFirstBody.render.lineWidth = 2;
+                    state.connectFirstBody = null;
+                }
+            }
+
+            // Назначаем события pointer
+            canvas.addEventListener('pointerdown', handlePointerDown);
+            canvas.addEventListener('pointermove', handlePointerMove);
+            canvas.addEventListener('pointerup', handlePointerUp);
+            canvas.addEventListener('pointerleave', handlePointerUp);
+            canvas.addEventListener('pointercancel', handlePointerUp);
+            // Запрещаем контекстное меню
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Запуск движка
+            Engine.run(engine);
+            Render.run(render);
+
+            // Начальные объекты
+            function spawnDemo() {
+                setTimeout(() => {
+                    if (canvas.width > 100) {
+                        const w = canvas.width, h = canvas.height;
+                        World.add(world, createCube(w*0.3, h*0.7));
+                        World.add(world, createBall(w*0.7, h*0.5));
+                        createRagdoll(w*0.5, h*0.4, 'classic');
+                        createRagdoll(w*0.2, h*0.6, 'robot');
+                    }
+                }, 100);
+            }
+            spawnDemo();
+
+            // Обновление размера canvas при изменении окна
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                render.options.width = canvas.width;
+                render.options.height = canvas.height;
+                render.canvas.width = canvas.width;
+                render.canvas.height = canvas.height;
+                updateWalls();
+            });
+
+            updateUI();
+        })();
+    </script>
+</body>
+</html>

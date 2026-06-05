@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Змейка (медленная)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            text-align: center;
+        }
+        canvas {
+            background-color: #111;
+            border: 2px solid #555;
+            display: block;
+            margin: 0 auto;
+        }
+        .score {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .game-over {
+            color: #f55;
+            font-size: 20px;
+            margin-top: 10px;
+            height: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Счёт: <span id="scoreDisplay">0</span></div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="game-over" id="gameOverMessage"></div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreSpan = document.getElementById('scoreDisplay');
+            const gameOverDiv = document.getElementById('gameOverMessage');
+
+            const gridSize = 20;
+            const tileCount = canvas.width / gridSize;
+
+            let snake = [{ x: 10, y: 10 }];
+            let direction = { x: 0, y: 0 };
+            let nextDirection = { x: 0, y: 0 };
+            let food = {};
+            let score = 0;
+            let gameRunning = false;
+            let gameOver = false;
+            let gameLoopInterval = null;
+
+            function generateFood() {
+                const occupied = new Set(snake.map(seg => `${seg.x},${seg.y}`));
+                let newFood;
+                do {
+                    newFood = {
+                        x: Math.floor(Math.random() * tileCount),
+                        y: Math.floor(Math.random() * tileCount)
+                    };
+                } while (occupied.has(`${newFood.x},${newFood.y}`));
+                return newFood;
+            }
+
+            function startGame() {
+                snake = [{ x: 10, y: 10 }];
+                direction = { x: 0, y: 0 };
+                nextDirection = { x: 0, y: 0 };
+                score = 0;
+                gameOver = false;
+                gameRunning = true;
+                gameOverDiv.textContent = '';
+                scoreSpan.textContent = score;
+                food = generateFood();
+                if (gameLoopInterval) clearInterval(gameLoopInterval);
+                gameLoopInterval = setInterval(update, 450); // очень медленно
+                draw();
+            }
+
+            function endGame() {
+                gameRunning = false;
+                gameOver = true;
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
+                gameOverDiv.textContent = 'Игра окончена! Нажмите ПРОБЕЛ, чтобы начать заново.';
+            }
+
+            function update() {
+                if (!gameRunning) return;
+                direction = nextDirection;
+                if (direction.x === 0 && direction.y === 0) return;
+
+                const head = snake[0];
+                const newHead = {
+                    x: head.x + direction.x,
+                    y: head.y + direction.y
+                };
+
+                if (newHead.x < 0 || newHead.x >= tileCount || newHead.y < 0 || newHead.y >= tileCount) {
+                    endGame();
+                    return;
+                }
+
+                const selfCollision = snake.some(segment => segment.x === newHead.x && segment.y === newHead.y);
+                if (selfCollision) {
+                    endGame();
+                    return;
+                }
+
+                snake.unshift(newHead);
+
+                if (newHead.x === food.x && newHead.y === food.y) {
+                    score++;
+                    scoreSpan.textContent = score;
+                    food = generateFood();
+                } else {
+                    snake.pop();
+                }
+
+                draw();
+            }
+
+            function draw() {
+                ctx.fillStyle = '#111';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#0f0';
+                for (let i = 0; i < snake.length; i++) {
+                    const seg = snake[i];
+                    ctx.fillRect(seg.x * gridSize, seg.y * gridSize, gridSize - 2, gridSize - 2);
+                    ctx.fillStyle = '#0a0';
+                }
+                ctx.fillStyle = '#0f0';
+
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
+            }
+
+            function keyDownHandler(e) {
+                const key = e.key;
+                if (key.startsWith('Arrow')) {
+                    e.preventDefault();
+                }
+                // Исправлено: поддержка пробела во всех браузерах
+                if (key === ' ' || key === 'Space') {
+                    e.preventDefault();
+                    if (gameOver) {
+                        startGame();
+                    }
+                    return;
+                }
+                if (!gameRunning) return;
+
+                switch (key) {
+                    case 'ArrowUp':
+                        if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
+                        break;
+                    case 'ArrowDown':
+                        if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
+                        break;
+                    case 'ArrowLeft':
+                        if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
+                        break;
+                    case 'ArrowRight':
+                        if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
+                        break;
+                }
+            }
+
+            document.addEventListener('keydown', keyDownHandler);
+            startGame();
+        })();
+    </script>
+</body>
+</html>

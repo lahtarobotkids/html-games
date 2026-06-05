@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Битва с Сансом — Череп с улыбкой и зубами</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a2e;
+            font-family: 'Arial', sans-serif;
+        }
+        canvas {
+            border: 2px solid white;
+            background: black;
+            image-rendering: pixelated;
+        }
+        .game-over-message {
+            position: absolute;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="message" class="game-over-message"></div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const messageDiv = document.getElementById('message');
+
+            // Размеры canvas
+            const WIDTH = 800;
+            const HEIGHT = 600;
+            canvas.width = WIDTH;
+            canvas.height = HEIGHT;
+
+            // Границы комнаты (рамка)
+            const ROOM = {
+                x: 50,
+                y: 50,
+                width: WIDTH - 100,
+                height: HEIGHT - 100
+            };
+
+            // Состояния игры
+            const STATE = { PLAYING: 'playing', GAMEOVER: 'gameover', WIN: 'win' };
+            let gameState = STATE.PLAYING;
+
+            // Объект игрока (сердце)
+            const player = {
+                x: ROOM.x + 100,
+                y: ROOM.y + ROOM.height / 2,
+                radius: 18,
+                speed: 250,
+                hp: 100,
+                maxHp: 100,
+                shootCooldown: 0,
+                shootDelay: 0.3
+            };
+
+            // Объект врага (Санс)
+            const sans = {
+                x: ROOM.x + ROOM.width - 80,
+                y: ROOM.y + ROOM.height / 2,
+                radius: 28,       // радиус головы
+                hp: 5,
+                maxHp: 5,
+                moveSpeed: 80,
+                direction: 1,
+                shootTimer: 0,
+                shootInterval: 1.2
+            };
+
+            let bones = [];
+            let playerBullets = [];
+
+            // Управление клавишами
+            const keys = {
+                ArrowLeft: false,
+                ArrowRight: false,
+                ArrowUp: false,
+                ArrowDown: false,
+                Space: false
+            };
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+                    e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    keys[e.key] = true;
+                } else if (e.key === ' ') {
+                    e.preventDefault();
+                    keys.Space = true;
+                } else if (e.key === 'r' || e.key === 'R') {
+                    if (gameState !== STATE.PLAYING) {
+                        resetGame();
+                    }
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+                    e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    keys[e.key] = false;
+                } else if (e.key === ' ') {
+                    e.preventDefault();
+                    keys.Space = false;
+                }
+            });
+
+            function resetGame() {
+                player.hp = player.maxHp;
+                player.x = ROOM.x + 100;
+                player.y = ROOM.y + ROOM.height / 2;
+                player.shootCooldown = 0;
+                sans.hp = sans.maxHp;
+                sans.x = ROOM.x + ROOM.width - 80;
+                sans.y = ROOM.y + ROOM.height / 2;
+                sans.direction = 1;
+                sans.shootTimer = 0;
+                bones = [];
+                playerBullets = [];
+                gameState = STATE.PLAYING;
+                messageDiv.style.display = 'none';
+            }
+
+            function spawnBone() {
+                const fromX = sans.x;
+                const fromY = sans.y;
+                const toX = player.x;
+                const toY = player.y;
+                const angle = Math.atan2(toY - fromY, toX - fromX);
+                const speed = 220;
+                bones.push({
+                    x: fromX,
+                    y: fromY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 10,
+                    angle: angle
+                });
+            }
+
+            function spawnPlayerBullet() {
+                const speed = 400;
+                playerBullets.push({
+                    x: player.x + player.radius,
+                    y: player.y,
+                    vx: speed,
+                    vy: 0,
+                    radius: 5
+                });
+            }
+
+            function update(dt) {
+                if (gameState !== STATE.PLAYING) return;
+
+                let dx = 0, dy = 0;
+                if (keys.ArrowLeft) dx -= 1;
+                if (keys.ArrowRight) dx += 1;
+                if (keys.ArrowUp) dy -= 1;
+                if (keys.ArrowDown) dy += 1;
+
+                if (dx !== 0 && dy !== 0) {
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    dx /= len;
+                    dy /= len;
+                }
+
+                player.x += dx * player.speed * dt;
+                player.y += dy * player.speed * dt;
+                player.x = Math.max(ROOM.x + player.radius, Math.min(ROOM.x + ROOM.width - player.radius, player.x));
+                player.y = Math.max(ROOM.y + player.radius, Math.min(ROOM.y + ROOM.height - player.radius, player.y));
+
+                if (player.shootCooldown > 0) {
+                    player.shootCooldown -= dt;
+                }
+                if (keys.Space && player.shootCooldown <= 0) {
+                    spawnPlayerBullet();
+                    player.shootCooldown = player.shootDelay;
+                }
+
+                sans.y += sans.direction * sans.moveSpeed * dt;
+                if (sans.y - sans.radius < ROOM.y) {
+                    sans.y = ROOM.y + sans.radius;
+                    sans.direction = 1;
+                } else if (sans.y + sans.radius > ROOM.y + ROOM.height) {
+                    sans.y = ROOM.y + ROOM.height - sans.radius;
+                    sans.direction = -1;
+                }
+
+                sans.shootTimer += dt;
+                if (sans.shootTimer >= sans.shootInterval) {
+                    sans.shootTimer = 0;
+                    spawnBone();
+                }
+
+                for (let i = bones.length - 1; i >= 0; i--) {
+                    const bone = bones[i];
+                    bone.x += bone.vx * dt;
+                    bone.y += bone.vy * dt;
+
+                    if (bone.x < 0 || bone.x > WIDTH || bone.y < 0 || bone.y > HEIGHT) {
+                        bones.splice(i, 1);
+                        continue;
+                    }
+
+                    const dist = Math.hypot(bone.x - player.x, bone.y - player.y);
+                    if (dist < bone.radius + player.radius) {
+                        player.hp -= 15;
+                        bones.splice(i, 1);
+                        if (player.hp <= 0) {
+                            player.hp = 0;
+                            gameState = STATE.GAMEOVER;
+                            messageDiv.textContent = 'GAME OVER (нажми R для рестарта)';
+                            messageDiv.style.display = 'block';
+                            return;
+                        }
+                    }
+                }
+
+                for (let i = playerBullets.length - 1; i >= 0; i--) {
+                    const bullet = playerBullets[i];
+                    bullet.x += bullet.vx * dt;
+
+                    if (bullet.x > WIDTH || bullet.x < 0) {
+                        playerBullets.splice(i, 1);
+                        continue;
+                    }
+
+                    const dist = Math.hypot(bullet.x - sans.x, bullet.y - sans.y);
+                    if (dist < bullet.radius + sans.radius) {
+                        sans.hp -= 1;
+                        playerBullets.splice(i, 1);
+                        if (sans.hp <= 0) {
+                            sans.hp = 0;
+                            gameState = STATE.WIN;
+                            messageDiv.textContent = 'YOU WIN! (нажми R для рестарта)';
+                            messageDiv.style.display = 'block';
+                            return;
+                        }
+                    }
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(ROOM.x, ROOM.y, ROOM.width, ROOM.height);
+
+                drawSans(sans.x, sans.y, sans.radius);
+                drawHealthBar(sans.x, sans.y - sans.radius - 12, sans.hp, sans.maxHp, 40, 5, 'white');
+
+                for (const bone of bones) {
+                    drawBone(bone.x, bone.y, bone.radius, bone.angle);
+                }
+
+                for (const bullet of playerBullets) {
+                    ctx.beginPath();
+                    ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'yellow';
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                drawHeart(player.x, player.y, player.radius, 'red');
+                drawHealthBar(player.x, player.y - player.radius - 12, player.hp, player.maxHp, 50, 5, 'red');
+            }
+
+            function drawHeart(x, y, size, color) {
+                ctx.save();
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                const s = size * 1.2;
+                ctx.moveTo(x, y + s * 0.3);
+                ctx.bezierCurveTo(x, y, x - s, y, x - s, y + s * 0.3);
+                ctx.bezierCurveTo(x - s, y + s * 0.7, x, y + s * 1.1, x, y + s * 1.2);
+                ctx.bezierCurveTo(x, y + s * 1.1, x + s, y + s * 0.7, x + s, y + s * 0.3);
+                ctx.bezierCurveTo(x + s, y, x, y, x, y + s * 0.3);
+                ctx.fill();
+                ctx.closePath();
+                ctx.restore();
+            }
+
+            // Санс: череп с улыбкой и зубами, синяя куртка без капюшона
+            function drawSans(x, y, headRadius) {
+                ctx.save();
+
+                // --- Тело (синяя куртка) ---
+                const bodyWidth = headRadius * 1.5;
+                const bodyHeight = headRadius * 1.3;
+                const bodyTop = y + headRadius * 0.7; // куртка начинается ниже головы
+                const bodyX = x - bodyWidth / 2;
+                const bodyY = bodyTop;
+
+                // Тень тела
+                ctx.fillStyle = '#1a2b5e';
+                ctx.beginPath();
+                ctx.roundRect(bodyX, bodyY, bodyWidth, bodyHeight, 6);
+                ctx.fill();
+
+                // Основная куртка
+                ctx.fillStyle = '#2a3f9e';
+                ctx.beginPath();
+                ctx.roundRect(bodyX, bodyY, bodyWidth, bodyHeight, 6);
+                ctx.fill();
+
+                // Молния
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x, bodyY);
+                ctx.lineTo(x, bodyY + bodyHeight * 0.5);
+                ctx.stroke();
+
+                // --- Голова (череп) ---
+                ctx.beginPath();
+                ctx.arc(x, y, headRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.closePath();
+
+                // Глаза (чёрные точки)
+                const eyeOffsetX = headRadius * 0.35;
+                const eyeOffsetY = headRadius * 0.15;
+                const eyeRadius = headRadius * 0.15;
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(x - eyeOffsetX, y - eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + eyeOffsetX, y - eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Нос (две маленькие чёрные точки)
+                const noseY = y + headRadius * 0.1;
+                const noseOffsetX = headRadius * 0.12;
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(x - noseOffsetX, noseY, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + noseOffsetX, noseY, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // --- Улыбка с зубами ---
+                const mouthStartX = x - headRadius * 0.55;
+                const mouthStartY = y + headRadius * 0.15;
+                const mouthEndX = x + headRadius * 0.55;
+                const mouthEndY = y + headRadius * 0.15;
+                const controlX = x;
+                const controlY = y + headRadius * 0.65;
+
+                // Рисуем черную дугу (губы)
+                ctx.beginPath();
+                ctx.moveTo(mouthStartX, mouthStartY);
+                ctx.quadraticCurveTo(controlX, controlY, mouthEndX, mouthEndY);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Зубы: белые вертикальные прямоугольники под дугой
+                const teethCount = 7;
+                const toothWidth = headRadius * 0.15;
+                const toothHeight = headRadius * 0.25;
+                const teethBaseY = y + headRadius * 0.35; // уровень, где начинаются зубы
+
+                // Располагаем зубы равномерно между уголками рта
+                for (let i = 0; i < teethCount; i++) {
+                    const t = i / (teethCount - 1); // от 0 до 1
+                    const toothX = mouthStartX + t * (mouthEndX - mouthStartX);
+                    // Рисуем белый прямоугольник (зуб)
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(toothX - toothWidth / 2, teethBaseY, toothWidth, toothHeight);
+                    // Обводка зуба, чтобы он был виден
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(toothX - toothWidth / 2, teethBaseY, toothWidth, toothHeight);
+                }
+
+                // Ямочки в уголках рта
+                ctx.beginPath();
+                ctx.moveTo(mouthStartX - 2, mouthStartY - 2);
+                ctx.lineTo(mouthStartX + 2, mouthStartY + 2);
+                ctx.moveTo(mouthEndX - 2, mouthStartY - 2);
+                ctx.lineTo(mouthEndX + 2, mouthStartY + 2);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            function drawBone(x, y, radius, angle) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+
+                const length = radius * 2.5;
+                const endRadius = radius * 0.9;
+
+                ctx.beginPath();
+                ctx.rect(-length / 2, -radius / 2, length, radius);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.strokeStyle = 'gray';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.closePath();
+
+                ctx.beginPath();
+                ctx.arc(-length / 2, 0, endRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.closePath();
+
+                ctx.beginPath();
+                ctx.arc(length / 2, 0, endRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.closePath();
+
+                ctx.restore();
+            }
+
+            function drawHealthBar(cx, topY, hp, maxHp, width, height, color) {
+                const barX = cx - width / 2;
+                const barY = topY;
+
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(barX, barY, width, height);
+
+                const fillWidth = Math.max(0, (hp / maxHp) * width);
+                ctx.fillStyle = color;
+                ctx.fillRect(barX, barY, fillWidth, height);
+
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, width, height);
+            }
+
+            // Полифилл для roundRect
+            if (!ctx.roundRect) {
+                ctx.roundRect = function (x, y, w, h, r) {
+                    if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+                    ctx.beginPath();
+                    ctx.moveTo(x + r.tl, y);
+                    ctx.lineTo(x + w - r.tr, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+                    ctx.lineTo(x + w, y + h - r.br);
+                    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+                    ctx.lineTo(x + r.bl, y + h);
+                    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+                    ctx.lineTo(x, y + r.tl);
+                    ctx.quadraticCurveTo(x, y, x + r.tl, y);
+                    ctx.closePath();
+                };
+            }
+
+            let lastTimestamp = 0;
+            function gameLoop(timestamp) {
+                if (lastTimestamp === 0) lastTimestamp = timestamp;
+                const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+                lastTimestamp = timestamp;
+
+                update(dt);
+                draw();
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            messageDiv.style.display = 'none';
+            resetGame();
+            requestAnimationFrame(gameLoop);
+        })();
+    </script>
+</body>
+</html>

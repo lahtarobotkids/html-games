@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox 3D - Побег от соседа</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #info {
+            position: absolute; top: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.6);
+            padding: 10px 20px; border-radius: 15px; font-size: 20px; pointer-events: none;
+        }
+        #gameover {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; background: rgba(0,0,0,0.8); padding: 30px 50px;
+            border-radius: 20px; text-align: center; display: none; z-index: 100;
+        }
+        #gameover h2 { margin: 0 0 10px; }
+        #restartBtn {
+            background: #e94560; border: none; color: white;
+            padding: 12px 30px; border-radius: 30px; font-size: 18px; cursor: pointer; margin-top: 15px;
+        }
+        #instructions {
+            position: absolute; bottom: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.5); padding: 8px 15px;
+            border-radius: 10px; font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">💰 Монеты: <span id="scoreDisplay">0</span> | ⏱ <span id="timeDisplay">0</span> сек</div>
+    <div id="gameover">
+        <h2>Вас догнал злой сосед!</h2>
+        <p>Собрано монет: <span id="finalScore">0</span></p>
+        <p>Вы продержались: <span id="finalTime">0</span> сек</p>
+        <button id="restartBtn">Новая игра</button>
+    </div>
+    <div id="instructions">
+        🖱 Кликните по экрану, чтобы начать управление.<br>
+        WASD – ходить, Пробел – прыгать, Мышь – оглядываться.
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- Сцена, камера, рендерер ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 8, 15);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Управление мышью
+        const controls = new PointerLockControls(camera, document.body);
+        scene.add(controls.getObject());
+
+        renderer.domElement.addEventListener('click', () => {
+            if (!controls.isLocked) controls.lock();
+        });
+        controls.addEventListener('lock', () => document.getElementById('instructions').style.display = 'none');
+        controls.addEventListener('unlock', () => document.getElementById('instructions').style.display = 'block');
+
+        // Освещение
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
+        dirLight.position.set(30, 40, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 100;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
+        scene.add(dirLight);
+
+        // Земля
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.8 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Препятствия
+        const obstacles = [];
+        function addBlock(x, y, z, w, h, d, color) {
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(w, h, d),
+                new THREE.MeshStandardMaterial({ color, roughness: 0.4 })
+            );
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            obstacles.push({
+                minX: x - w/2, maxX: x + w/2,
+                minY: y - h/2, maxY: y + h/2,
+                minZ: z - d/2, maxZ: z + d/2
+            });
+        }
+        addBlock(0, 0.5, -10, 2, 1, 2, 0xff8c42);
+        addBlock(5, 1, -8, 1, 2, 1, 0x42a5f5);
+        addBlock(-5, 0.5, -12, 3, 1, 3, 0xab47bc);
+        addBlock(-8, 1.5, 5, 1, 3, 1, 0xff8c42);
+        addBlock(8, 0.5, 5, 2, 1, 2, 0x42a5f5);
+        addBlock(12, 1, -5, 1, 2, 1, 0xab47bc);
+        addBlock(-12, 0.5, 8, 2, 1, 2, 0xff8c42);
+        addBlock(3, 1, 10, 1, 2, 1, 0x42a5f5);
+        addBlock(-3, 0.5, -15, 3, 1, 3, 0xab47bc);
+        addBlock(0, 2, 0, 6, 4, 0.5, 0xff8c42);
+
+        // Игрок (группа)
+        const playerGroup = new THREE.Group();
+        playerGroup.position.set(0, 0, 10);
+        scene.add(playerGroup);
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.6), new THREE.MeshStandardMaterial({ color: 0x4dabf7 }));
+        body.position.y = 0.6;
+        body.castShadow = true; body.receiveShadow = true;
+        playerGroup.add(body);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xffd54f }));
+        head.position.y = 1.3;
+        head.castShadow = true; head.receiveShadow = true;
+        playerGroup.add(head);
+
+        const limbGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+        const limbMat = new THREE.MeshStandardMaterial({ color: 0x4dabf7 });
+        [
+            [-0.65, 0.4, 0], [0.65, 0.4, 0],
+            [-0.25, -0.4, 0], [0.25, -0.4, 0]
+        ].forEach(([x, y, z]) => {
+            const limb = new THREE.Mesh(limbGeo, limbMat);
+            limb.position.set(x, y, z);
+            limb.castShadow = true; limb.receiveShadow = true;
+            playerGroup.add(limb);
+        });
+
+        controls.getObject().position.set(0, 1.6, 0);
+        playerGroup.add(controls.getObject());
+
+        // Монеты
+        const coins = [];
+        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 0.8 });
+        function spawnCoin(x, y, z) {
+            const mesh = new THREE.Mesh(coinGeo, coinMat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            scene.add(mesh);
+            coins.push({ mesh, collected: false });
+        }
+        [
+            [2, 1, -8], [7, 1, -3], [-3, 1, 7], [-9, 1, 2], [10, 1, 8],
+            [-12, 1, -5], [5, 1, 12], [-6, 1, -13], [13, 1, -2], [1, 1, -18],
+            [-15, 1, 10], [9, 1, -14], [-10, 1, -10], [14, 1, 4], [-1, 1, 14]
+        ].forEach(([x, y, z]) => spawnCoin(x, y, z));
+
+        // Враг
+        const enemyGroup = new THREE.Group();
+        enemyGroup.position.set(-10, 0, -10);
+        scene.add(enemyGroup);
+        const eBody = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.7), new THREE.MeshStandardMaterial({ color: 0xe94560 }));
+        eBody.position.y = 0.65; eBody.castShadow = true; eBody.receiveShadow = true;
+        enemyGroup.add(eBody);
+        const eHead = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xffb3b3 }));
+        eHead.position.y = 1.45; eHead.castShadow = true; eHead.receiveShadow = true;
+        enemyGroup.add(eHead);
+        const eLimbGeo = new THREE.BoxGeometry(0.35, 0.9, 0.35);
+        const eLimbMat = new THREE.MeshStandardMaterial({ color: 0xe94560 });
+        [
+            [-0.7, 0.4, 0], [0.7, 0.4, 0],
+            [-0.3, -0.45, 0], [0.3, -0.45, 0]
+        ].forEach(([x, y, z]) => {
+            const limb = new THREE.Mesh(eLimbGeo, eLimbMat);
+            limb.position.set(x, y, z);
+            limb.castShadow = true; limb.receiveShadow = true;
+            enemyGroup.add(limb);
+        });
+
+        // Игровые переменные
+        let score = 0, gameTime = 0, gameOver = false;
+        let enemySpeed = 0.06;
+        const ENEMY_ACCEL = 0.0002;
+        const velocity = new THREE.Vector3();
+        let canJump = true;
+        const moveSpeed = 0.12, jumpPower = 0.25, gravity = -0.015;
+        const keyState = {};
+
+        window.addEventListener('keydown', (e) => {
+            keyState[e.code] = true;
+            if (e.code === 'Space') e.preventDefault();
+        });
+        window.addEventListener('keyup', (e) => { keyState[e.code] = false; });
+
+        // Коллизии
+        function checkCollision(pos, radius) {
+            for (let obs of obstacles) {
+                const cx = Math.max(obs.minX, Math.min(pos.x, obs.maxX));
+                const cy = Math.max(obs.minY, Math.min(pos.y, obs.maxY));
+                const cz = Math.max(obs.minZ, Math.min(pos.z, obs.maxZ));
+                const dx = pos.x - cx, dy = pos.y - cy, dz = pos.z - cz;
+                if (dx*dx + dy*dy + dz*dz < radius*radius) return true;
+            }
+            return false;
+        }
+
+        function restartGame() {
+            gameOver = false;
+            score = 0; gameTime = 0; enemySpeed = 0.06;
+            document.getElementById('scoreDisplay').textContent = '0';
+            document.getElementById('timeDisplay').textContent = '0';
+            document.getElementById('gameover').style.display = 'none';
+            playerGroup.position.set(0, 0, 10);
+            velocity.set(0, 0, 0);
+            canJump = true;
+            enemyGroup.position.set(-10, 0, -10);
+            coins.forEach(c => { c.collected = false; c.mesh.visible = true; });
+            if (!controls.isLocked) controls.lock();
+        }
+
+        document.getElementById('restartBtn').addEventListener('click', restartGame);
+
+        // Игровой цикл
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!gameOver && controls.isLocked) {
+                // Движение
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                forward.y = 0; forward.normalize();
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                right.y = 0; right.normalize();
+
+                const moveDir = new THREE.Vector3();
+                if (keyState['KeyW']) moveDir.add(forward);
+                if (keyState['KeyS']) moveDir.sub(forward);
+                if (keyState['KeyA']) moveDir.sub(right);
+                if (keyState['KeyD']) moveDir.add(right);
+                if (moveDir.length() > 0) moveDir.normalize().multiplyScalar(moveSpeed);
+
+                velocity.y += gravity;
+                if (keyState['Space'] && canJump) {
+                    velocity.y = jumpPower;
+                    canJump = false;
+                }
+
+                const oldPos = playerGroup.position.clone();
+                let newX = oldPos.x + moveDir.x;
+                let newZ = oldPos.z + moveDir.z;
+                let newY = oldPos.y + velocity.y;
+
+                if (!checkCollision(new THREE.Vector3(newX, oldPos.y, oldPos.z), 0.6))
+                    playerGroup.position.x = newX;
+                if (!checkCollision(new THREE.Vector3(playerGroup.position.x, oldPos.y, newZ), 0.6))
+                    playerGroup.position.z = newZ;
+
+                if (newY <= 0) {
+                    playerGroup.position.y = 0;
+                    velocity.y = 0;
+                    canJump = true;
+                } else if (!checkCollision(new THREE.Vector3(playerGroup.position.x, newY, playerGroup.position.z), 0.6)) {
+                    playerGroup.position.y = newY;
+                    canJump = false;
+                } else {
+                    velocity.y = 0;
+                }
+
+                gameTime += 1/60;
+                document.getElementById('timeDisplay').textContent = Math.floor(gameTime);
+
+                // Враг
+                const dir = new THREE.Vector3().subVectors(playerGroup.position, enemyGroup.position).normalize();
+                enemySpeed += ENEMY_ACCEL;
+                enemyGroup.position.add(dir.clone().multiplyScalar(enemySpeed));
+                enemyGroup.lookAt(playerGroup.position.x, enemyGroup.position.y, playerGroup.position.z);
+
+                // Монеты
+                coins.forEach(c => {
+                    if (!c.collected && playerGroup.position.distanceTo(c.mesh.position) < 1.2) {
+                        c.collected = true;
+                        c.mesh.visible = false;
+                        score++;
+                        document.getElementById('scoreDisplay').textContent = score;
+                    }
+                });
+
+                // Проигрыш
+                if (playerGroup.position.distanceTo(enemyGroup.position) < 1.5) {
+                    gameOver = true;
+                    document.getElementById('gameover').style.display = 'block';
+                    document.getElementById('finalScore').textContent = score;
+                    document.getElementById('finalTime').textContent = Math.floor(gameTime);
+                    controls.unlock();
+                }
+            }
+
+            // Вращение монет
+            coins.forEach(c => { if (!c.collected) c.mesh.rotation.y += 0.03; });
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

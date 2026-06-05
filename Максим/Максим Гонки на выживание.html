@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гонки на выживание</title>
+    <style>
+        body {
+            margin: 0;
+            background: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            text-align: center;
+        }
+        canvas {
+            background: #555;
+            border: 3px solid #ffcc00;
+            display: block;
+            margin: 0 auto;
+        }
+        .score {
+            color: white;
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .game-over-msg {
+            color: #ff4444;
+            font-size: 22px;
+            height: 28px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Дистанция: <span id="scoreDisplay">0</span> м</div>
+        <canvas id="raceCanvas" width="300" height="500"></canvas>
+        <div class="game-over-msg" id="message"></div>
+    </div>
+    <script>
+        (function() {
+            const canvas = document.getElementById('raceCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreSpan = document.getElementById('scoreDisplay');
+            const messageDiv = document.getElementById('message');
+
+            // Параметры дороги
+            const roadWidth = canvas.width;
+            const roadHeight = canvas.height;
+
+            // Игрок
+            const player = {
+                x: roadWidth / 2 - 15,
+                y: roadHeight - 80,
+                width: 30,
+                height: 50,
+                speed: 5
+            };
+
+            // Вражеские машины
+            let enemies = [];
+            const enemyWidth = 30;
+            const enemyHeight = 50;
+            const enemySpeed = 3;  // базовая скорость врагов
+
+            // Разметка дороги (движущиеся полосы)
+            let roadMarkings = [];
+            const markingWidth = 10;
+            const markingHeight = 30;
+            const markingGap = 40;
+            const markingSpeed = 4;
+
+            // Счёт
+            let distance = 0;
+            let gameRunning = true;
+            let gameOver = false;
+            let animationId = null;
+
+            // Управление
+            const keys = {
+                ArrowLeft: false,
+                ArrowRight: false
+            };
+
+            // Инициализация разметки
+            function initMarkings() {
+                roadMarkings = [];
+                for (let y = -markingHeight; y < roadHeight; y += markingHeight + markingGap) {
+                    roadMarkings.push(y);
+                }
+            }
+
+            // Сброс игры
+            function resetGame() {
+                player.x = roadWidth / 2 - 15;
+                enemies = [];
+                distance = 0;
+                scoreSpan.textContent = '0';
+                gameRunning = true;
+                gameOver = false;
+                messageDiv.textContent = '';
+                initMarkings();
+                if (animationId) cancelAnimationFrame(animationId);
+                gameLoop();
+            }
+
+            // Создание врага
+            function spawnEnemy() {
+                // Случайная полоса: левая или правая половина дороги
+                const lane = Math.random() < 0.5 ? 0 : 1; // 0 - лево, 1 - право
+                let x;
+                if (lane === 0) {
+                    x = roadWidth / 4 - enemyWidth / 2;
+                } else {
+                    x = (3 * roadWidth) / 4 - enemyWidth / 2;
+                }
+                // Не создаём врага, если он перекрывается с существующими слишком близко
+                const tooClose = enemies.some(e => Math.abs(e.y) < enemyHeight + 20 && Math.abs(e.x - x) < enemyWidth);
+                if (!tooClose) {
+                    enemies.push({
+                        x: x,
+                        y: -enemyHeight,
+                        width: enemyWidth,
+                        height: enemyHeight
+                    });
+                }
+            }
+
+            // Обновление игры
+            function update() {
+                if (!gameRunning) return;
+
+                // Движение игрока
+                if (keys.ArrowLeft) {
+                    player.x -= player.speed;
+                }
+                if (keys.ArrowRight) {
+                    player.x += player.speed;
+                }
+                // Границы дороги
+                if (player.x < 0) player.x = 0;
+                if (player.x + player.width > roadWidth) player.x = roadWidth - player.width;
+
+                // Движение дорожной разметки
+                for (let i = 0; i < roadMarkings.length; i++) {
+                    roadMarkings[i] += markingSpeed;
+                    if (roadMarkings[i] > roadHeight) {
+                        roadMarkings[i] = -markingHeight;
+                    }
+                }
+
+                // Движение врагов
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    enemies[i].y += enemySpeed;
+                    // Удаление выехавших за экран
+                    if (enemies[i].y > roadHeight) {
+                        enemies.splice(i, 1);
+                        // Начисляем очки за каждого пропущенного врага
+                        distance += 10;
+                        scoreSpan.textContent = distance;
+                    }
+                }
+
+                // Спавн врагов случайно (вероятность 1.5% на кадр)
+                if (Math.random() < 0.015 && gameRunning) {
+                    spawnEnemy();
+                }
+
+                // Проверка столкновений игрока с врагами
+                for (let enemy of enemies) {
+                    if (player.x < enemy.x + enemy.width &&
+                        player.x + player.width > enemy.x &&
+                        player.y < enemy.y + enemy.height &&
+                        player.y + player.height > enemy.y) {
+                        endGame();
+                        break;
+                    }
+                }
+            }
+
+            // Отрисовка
+            function draw() {
+                ctx.clearRect(0, 0, roadWidth, roadHeight);
+
+                // Дорога
+                ctx.fillStyle = '#444';
+                ctx.fillRect(0, 0, roadWidth, roadHeight);
+
+                // Края дороги (белые полосы)
+                ctx.fillStyle = 'white';
+                ctx.fillRect(5, 0, 5, roadHeight);
+                ctx.fillRect(roadWidth - 10, 0, 5, roadHeight);
+
+                // Дорожная разметка (прерывистая линия по центру)
+                ctx.fillStyle = 'white';
+                for (let y of roadMarkings) {
+                    ctx.fillRect(roadWidth / 2 - markingWidth / 2, y, markingWidth, markingHeight);
+                }
+
+                // Враги
+                ctx.fillStyle = '#e74c3c';
+                for (let enemy of enemies) {
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    // "Лобовое стекло"
+                    ctx.fillStyle = '#c0392b';
+                    ctx.fillRect(enemy.x + 5, enemy.y + 5, enemy.width - 10, 15);
+                    ctx.fillStyle = '#e74c3c';
+                }
+
+                // Игрок
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                // Детали машины игрока
+                ctx.fillStyle = '#27ae60';
+                ctx.fillRect(player.x + 5, player.y + 5, player.width - 10, 15);
+                // Фары
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(player.x + 3, player.y + 35, 6, 8);
+                ctx.fillRect(player.x + player.width - 9, player.y + 35, 6, 8);
+            }
+
+            // Конец игры
+            function endGame() {
+                gameRunning = false;
+                gameOver = true;
+                messageDiv.textContent = 'Авария! Нажмите ПРОБЕЛ для рестарта.';
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            }
+
+            // Главный игровой цикл
+            function gameLoop() {
+                update();
+                draw();
+                if (gameRunning) {
+                    animationId = requestAnimationFrame(gameLoop);
+                }
+            }
+
+            // Обработчики клавиш
+            function handleKeyDown(e) {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    keys[e.key] = true;
+                }
+                if (e.key === ' ' || e.code === 'Space') {
+                    e.preventDefault();
+                    if (gameOver) {
+                        resetGame();
+                    }
+                }
+            }
+
+            function handleKeyUp(e) {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    keys[e.key] = false;
+                }
+            }
+
+            // Привязка событий
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            // Запуск
+            initMarkings();
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>

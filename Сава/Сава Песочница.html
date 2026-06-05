@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Песочница — как в Garry's Mod</title>
+    <!-- Подключаем Matter.js через CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            background: #16213e;
+            cursor: crosshair;
+        }
+        #ui-panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(20, 20, 40, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 16px;
+            color: #eee;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.15);
+            z-index: 10;
+        }
+        button {
+            background: #3a3f5e;
+            border: none;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border-bottom: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        button:hover {
+            background: #4f5480;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+        }
+        button.active {
+            background: #e94560;
+            border-bottom: 2px solid #ff6b81;
+            box-shadow: 0 0 15px #e94560aa;
+        }
+        #mode-indicator {
+            background: #0f3460;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #f9c74f;
+            margin-left: 8px;
+            font-size: 17px;
+            border: 1px solid #f9c74f55;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #ccc;
+            padding: 8px 25px;
+            border-radius: 40px;
+            font-size: 14px;
+            backdrop-filter: blur(8px);
+            white-space: nowrap;
+            z-index: 10;
+        }
+        @media (max-width: 750px) {
+            #ui-panel {
+                flex-wrap: wrap;
+                top: 5px;
+                left: 5px;
+                padding: 10px;
+            }
+            button {
+                padding: 6px 12px;
+                font-size: 14px;
+            }
+            .instructions {
+                font-size: 11px;
+                padding: 5px 15px;
+                bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="world"></canvas>
+        <div id="ui-panel">
+            <button id="btn-cube" class="active">📦 Куб</button>
+            <button id="btn-ball">⚪ Шар</button>
+            <button id="btn-ragdoll">🧍 Болванчик</button>
+            <button id="tool-spawn" class="active">🖱️ Спавн</button>
+            <button id="tool-connect">🔗 Связка</button>
+            <button id="tool-remove">💥 Удалить</button>
+            <span id="mode-indicator">Режим: Спавн</span>
+        </div>
+        <div class="instructions">
+            🖱️ ЛКМ — действие | 🖱️ ПКМ — перетаскивать объекты | 🔗 Выбери "Связка", нажми на два объекта чтобы соединить пружиной
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // ---------- Инициализация движка Matter.js ----------
+            const Engine = Matter.Engine;
+            const Render = Matter.Render;
+            const World = Matter.World;
+            const Bodies = Matter.Bodies;
+            const Body = Matter.Body;
+            const Events = Matter.Events;
+            const Mouse = Matter.Mouse;
+            const MouseConstraint = Matter.MouseConstraint;
+            const Constraint = Matter.Constraint;
+            const Composite = Matter.Composite;
+
+            // Создаём движок
+            const engine = Engine.create();
+            const world = engine.world;
+
+            // Получаем canvas
+            const canvas = document.getElementById('world');
+            const container = document.getElementById('game-container');
+
+            // Устанавливаем размеры
+            function setCanvasSize() {
+                const maxWidth = Math.min(window.innerWidth - 20, 1200);
+                const maxHeight = Math.min(window.innerHeight - 20, 750);
+                canvas.width = maxWidth;
+                canvas.height = maxHeight;
+                container.style.width = maxWidth + 'px';
+                container.style.height = maxHeight + 'px';
+            }
+            setCanvasSize();
+            window.addEventListener('resize', () => {
+                setCanvasSize();
+                // Обновляем границы мира
+                updateWalls();
+            });
+
+            // Создаём рендерер
+            const render = Render.create({
+                canvas: canvas,
+                engine: engine,
+                options: {
+                    width: canvas.width,
+                    height: canvas.height,
+                    wireframes: false,
+                    background: '#16213e',
+                    pixelRatio: window.devicePixelRatio || 1
+                }
+            });
+
+            // ---------- Стены ----------
+            let walls = [];
+            function createWalls() {
+                const w = canvas.width;
+                const h = canvas.height;
+                const options = { 
+                    isStatic: true, 
+                    friction: 0.5,
+                    render: { fillStyle: '#2d3a5c', strokeStyle: '#4a5b82', lineWidth: 2 }
+                };
+                const thickness = 40;
+                // Пол
+                const ground = Bodies.rectangle(w / 2, h + thickness / 2 - 10, w + 40, thickness, options);
+                // Потолок
+                const ceiling = Bodies.rectangle(w / 2, -thickness / 2 + 10, w + 40, thickness, options);
+                // Левая стена
+                const leftWall = Bodies.rectangle(-thickness / 2 + 10, h / 2, thickness, h + 40, options);
+                // Правая стена
+                const rightWall = Bodies.rectangle(w + thickness / 2 - 10, h / 2, thickness, h + 40, options);
+                return [ground, ceiling, leftWall, rightWall];
+            }
+
+            function updateWalls() {
+                // Удаляем старые стены
+                walls.forEach(wall => World.remove(world, wall));
+                walls = createWalls();
+                World.add(world, walls);
+            }
+            walls = createWalls();
+            World.add(world, walls);
+
+            // ---------- Мышь и перетаскивание ----------
+            const mouse = Mouse.create(canvas);
+            const mouseConstraint = MouseConstraint.create(engine, {
+                mouse: mouse,
+                constraint: {
+                    stiffness: 0.2,
+                    render: { visible: false }
+                }
+            });
+            World.add(world, mouseConstraint);
+
+            // Разрешаем перетаскивание только правой кнопкой мыши (или левой с зажатым Alt? Сделаем правую кнопку)
+            // По умолчанию MouseConstraint реагирует на левую кнопку. Перенастроим.
+            mouseConstraint.mouse.element.removeEventListener('mousedown', mouseConstraint.mouse.mousedown);
+            mouseConstraint.mouse.element.removeEventListener('mousemove', mouseConstraint.mouse.mousemove);
+            mouseConstraint.mouse.element.removeEventListener('mouseup', mouseConstraint.mouse.mouseup);
+            
+            // Кастомная обработка мыши для правого перетаскивания
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Запрет контекстного меню
+
+            // ---------- Состояние инструментов ----------
+            const state = {
+                spawnType: 'cube',   // cube, ball, ragdoll
+                tool: 'spawn',       // spawn, connect, remove
+                connectFirstBody: null, // для связки двух объектов
+                selectedBody: null   // для удаления
+            };
+
+            // ---------- UI элементы ----------
+            const btnCube = document.getElementById('btn-cube');
+            const btnBall = document.getElementById('btn-ball');
+            const btnRagdoll = document.getElementById('btn-ragdoll');
+            const btnSpawn = document.getElementById('tool-spawn');
+            const btnConnect = document.getElementById('tool-connect');
+            const btnRemove = document.getElementById('tool-remove');
+            const modeIndicator = document.getElementById('mode-indicator');
+
+            function updateUI() {
+                [btnCube, btnBall, btnRagdoll].forEach(b => b.classList.remove('active'));
+                if (state.spawnType === 'cube') btnCube.classList.add('active');
+                if (state.spawnType === 'ball') btnBall.classList.add('active');
+                if (state.spawnType === 'ragdoll') btnRagdoll.classList.add('active');
+
+                [btnSpawn, btnConnect, btnRemove].forEach(b => b.classList.remove('active'));
+                if (state.tool === 'spawn') btnSpawn.classList.add('active');
+                if (state.tool === 'connect') btnConnect.classList.add('active');
+                if (state.tool === 'remove') btnRemove.classList.add('active');
+
+                let modeText = '';
+                if (state.tool === 'spawn') modeText = `Спавн: ${state.spawnType === 'cube' ? 'Куб' : state.spawnType === 'ball' ? 'Шар' : 'Болванчик'}`;
+                else if (state.tool === 'connect') modeText = 'Связка: выберите первый объект';
+                else if (state.tool === 'remove') modeText = 'Удаление: кликните по объекту';
+                modeIndicator.textContent = `Режим: ${modeText}`;
+            }
+
+            btnCube.addEventListener('click', () => { state.spawnType = 'cube'; updateUI(); });
+            btnBall.addEventListener('click', () => { state.spawnType = 'ball'; updateUI(); });
+            btnRagdoll.addEventListener('click', () => { state.spawnType = 'ragdoll'; updateUI(); });
+            btnSpawn.addEventListener('click', () => { state.tool = 'spawn'; state.connectFirstBody = null; updateUI(); });
+            btnConnect.addEventListener('click', () => { state.tool = 'connect'; state.connectFirstBody = null; updateUI(); });
+            btnRemove.addEventListener('click', () => { state.tool = 'remove'; state.connectFirstBody = null; updateUI(); });
+
+            // ---------- Создание объектов ----------
+            function createCube(x, y) {
+                const size = 50 + Math.random() * 40;
+                const colors = ['#e94560', '#f9c74f', '#90be6d', '#577590', '#f9844a', '#43aa8b'];
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const body = Bodies.rectangle(x, y, size, size, {
+                    friction: 0.8,
+                    restitution: 0.3,
+                    render: { fillStyle: color, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                return body;
+            }
+
+            function createBall(x, y) {
+                const radius = 25 + Math.random() * 25;
+                const colors = ['#f94144', '#f8961e', '#f9c74f', '#90be6d', '#577590', '#9b5de5'];
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const body = Bodies.circle(x, y, radius, {
+                    friction: 0.7,
+                    restitution: 0.5,
+                    render: { fillStyle: color, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                return body;
+            }
+
+            function createRagdoll(x, y) {
+                // Простой "болванчик" из нескольких частей, соединённых ограничениями
+                const group = Matter.Body.nextGroup(true);
+                const headColor = '#f4a261';
+                const bodyColor = '#264653';
+                const limbColor = '#2a9d8f';
+
+                const head = Bodies.circle(x, y - 50, 18, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: headColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                const torso = Bodies.rectangle(x, y - 15, 30, 50, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: bodyColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                const leftArm = Bodies.rectangle(x - 30, y - 20, 20, 50, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: limbColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                const rightArm = Bodies.rectangle(x + 30, y - 20, 20, 50, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: limbColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                const leftLeg = Bodies.rectangle(x - 15, y + 35, 22, 55, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: limbColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+                const rightLeg = Bodies.rectangle(x + 15, y + 35, 22, 55, {
+                    friction: 0.5,
+                    restitution: 0.2,
+                    collisionFilter: { group: group },
+                    render: { fillStyle: limbColor, strokeStyle: '#fff', lineWidth: 2 }
+                });
+
+                const parts = [head, torso, leftArm, rightArm, leftLeg, rightLeg];
+                World.add(world, parts);
+
+                // Соединения
+                const constraints = [
+                    Constraint.create({ bodyA: head, pointA: { x: 0, y: 18 }, bodyB: torso, pointB: { x: 0, y: -25 }, stiffness: 0.8, length: 2 }),
+                    Constraint.create({ bodyA: torso, pointA: { x: -15, y: -15 }, bodyB: leftArm, pointB: { x: 10, y: -20 }, stiffness: 0.7, length: 2 }),
+                    Constraint.create({ bodyA: torso, pointA: { x: 15, y: -15 }, bodyB: rightArm, pointB: { x: -10, y: -20 }, stiffness: 0.7, length: 2 }),
+                    Constraint.create({ bodyA: torso, pointA: { x: -10, y: 25 }, bodyB: leftLeg, pointB: { x: 0, y: -25 }, stiffness: 0.7, length: 2 }),
+                    Constraint.create({ bodyA: torso, pointA: { x: 10, y: 25 }, bodyB: rightLeg, pointB: { x: 0, y: -25 }, stiffness: 0.7, length: 2 })
+                ];
+                World.add(world, constraints);
+                
+                // Возвращаем группу как массив тел для возможного удаления (сохраним ссылки в пользовательских данных)
+                return { parts, constraints };
+            }
+
+            // ---------- Обработка кликов мыши (левая кнопка) ----------
+            canvas.addEventListener('mousedown', (event) => {
+                if (event.button !== 0) return; // только левая кнопка
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mouseX = (event.clientX - rect.left) * scaleX;
+                const mouseY = (event.clientY - rect.top) * scaleY;
+
+                // Проверяем, попали ли в тело (для инструментов связка и удаление)
+                const bodiesUnderMouse = Matter.Query.point(engine.world.bodies, { x: mouseX, y: mouseY });
+                // Фильтруем только динамические тела (не стены и не составные части, если нужно)
+                const dynamicBodies = bodiesUnderMouse.filter(b => !b.isStatic && b.render && b.render.visible !== false);
+
+                if (state.tool === 'spawn') {
+                    // Спавним объект в месте клика
+                    let created;
+                    if (state.spawnType === 'cube') {
+                        created = createCube(mouseX, mouseY);
+                        World.add(world, created);
+                    } else if (state.spawnType === 'ball') {
+                        created = createBall(mouseX, mouseY);
+                        World.add(world, created);
+                    } else if (state.spawnType === 'ragdoll') {
+                        createRagdoll(mouseX, mouseY);
+                        // ragdoll возвращает объект с частями, они уже добавлены
+                    }
+                }
+                else if (state.tool === 'connect') {
+                    if (dynamicBodies.length > 0) {
+                        const clickedBody = dynamicBodies[0];
+                        if (!state.connectFirstBody) {
+                            // Выбираем первый объект
+                            state.connectFirstBody = clickedBody;
+                            // Визуальная подсветка первого объекта (меняем обводку)
+                            if (clickedBody.render) {
+                                clickedBody.render.strokeStyle = '#ffdd00';
+                                clickedBody.render.lineWidth = 4;
+                            }
+                            modeIndicator.textContent = 'Режим: Связка — выберите второй объект';
+                        } else {
+                            // Второй объект: создаём пружину
+                            if (state.connectFirstBody !== clickedBody) {
+                                const constraint = Constraint.create({
+                                    bodyA: state.connectFirstBody,
+                                    bodyB: clickedBody,
+                                    stiffness: 0.05,
+                                    damping: 0.1,
+                                    length: 60,
+                                    render: { 
+                                        visible: true, 
+                                        lineWidth: 3, 
+                                        strokeStyle: '#f9c74f',
+                                        type: 'spring'
+                                    }
+                                });
+                                World.add(world, constraint);
+                            }
+                            // Сброс первого объекта
+                            if (state.connectFirstBody && state.connectFirstBody.render) {
+                                state.connectFirstBody.render.strokeStyle = '#fff';
+                                state.connectFirstBody.render.lineWidth = 2;
+                            }
+                            state.connectFirstBody = null;
+                            updateUI();
+                        }
+                    }
+                }
+                else if (state.tool === 'remove') {
+                    if (dynamicBodies.length > 0) {
+                        const bodyToRemove = dynamicBodies[0];
+                        // Удаляем все ограничения, связанные с этим телом
+                        const constraintsToRemove = Matter.Composite.allConstraints(world).filter(c => 
+                            c.bodyA === bodyToRemove || c.bodyB === bodyToRemove
+                        );
+                        constraintsToRemove.forEach(c => World.remove(world, c));
+                        World.remove(world, bodyToRemove);
+                    }
+                }
+            });
+
+            // Сброс первого объекта связки при переключении инструмента или клике правой кнопкой
+            function clearConnectFirst() {
+                if (state.connectFirstBody && state.connectFirstBody.render) {
+                    state.connectFirstBody.render.strokeStyle = '#fff';
+                    state.connectFirstBody.render.lineWidth = 2;
+                }
+                state.connectFirstBody = null;
+            }
+
+            // Обработка правой кнопки мыши для перетаскивания (используем встроенный mouseConstraint с модификацией)
+            // MouseConstraint по умолчанию использует левую кнопку. Мы переназначим его поведение.
+            // Проще: добавим свой перетаскиватель через правую кнопку, используя Matter.Mouse и события.
+            let rightDragBody = null;
+            let rightDragConstraint = null;
+
+            canvas.addEventListener('mousedown', (event) => {
+                if (event.button !== 2) return; // правая кнопка
+                event.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mouseX = (event.clientX - rect.left) * scaleX;
+                const mouseY = (event.clientY - rect.top) * scaleY;
+
+                const bodiesUnderMouse = Matter.Query.point(engine.world.bodies, { x: mouseX, y: mouseY });
+                const dynamicBodies = bodiesUnderMouse.filter(b => !b.isStatic);
+                if (dynamicBodies.length > 0) {
+                    rightDragBody = dynamicBodies[0];
+                    // Создаём временное ограничение для перетаскивания
+                    rightDragConstraint = Constraint.create({
+                        pointA: { x: mouseX, y: mouseY },
+                        bodyB: rightDragBody,
+                        stiffness: 0.8,
+                        damping: 0.1,
+                        length: 0,
+                        render: { visible: true, lineWidth: 2, strokeStyle: '#00ffcc' }
+                    });
+                    World.add(world, rightDragConstraint);
+                }
+            });
+
+            canvas.addEventListener('mousemove', (event) => {
+                if (!rightDragBody || !rightDragConstraint) return;
+                event.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mouseX = (event.clientX - rect.left) * scaleX;
+                const mouseY = (event.clientY - rect.top) * scaleY;
+                // Обновляем точку привязки
+                rightDragConstraint.pointA = { x: mouseX, y: mouseY };
+            });
+
+            canvas.addEventListener('mouseup', (event) => {
+                if (event.button === 2 && rightDragConstraint) {
+                    World.remove(world, rightDragConstraint);
+                    rightDragConstraint = null;
+                    rightDragBody = null;
+                }
+            });
+
+            // Также убираем подсветку при клике правой кнопкой по пустому месту
+            canvas.addEventListener('mouseup', (event) => {
+                if (event.button === 0) {
+                    // Если клик левой и был выбран первый объект связки, но ничего не произошло, сброс по клику на пустое место
+                    if (state.tool === 'connect' && state.connectFirstBody) {
+                        const rect = canvas.getBoundingClientRect();
+                        const scaleX = canvas.width / rect.width;
+                        const scaleY = canvas.height / rect.height;
+                        const mouseX = (event.clientX - rect.left) * scaleX;
+                        const mouseY = (event.clientY - rect.top) * scaleY;
+                        const bodiesUnderMouse = Matter.Query.point(engine.world.bodies, { x: mouseX, y: mouseY });
+                        const dynamicBodies = bodiesUnderMouse.filter(b => !b.isStatic);
+                        if (dynamicBodies.length === 0) {
+                            clearConnectFirst();
+                            updateUI();
+                        }
+                    }
+                }
+            });
+
+            // Запуск движка и рендерера
+            Engine.run(engine);
+            Render.run(render);
+
+            // Первоначальное обновление UI
+            updateUI();
+
+            // Добавим несколько стартовых объектов для демонстрации
+            function spawnInitialObjects() {
+                const w = canvas.width;
+                const h = canvas.height;
+                World.add(world, createCube(w * 0.3, h * 0.7));
+                World.add(world, createBall(w * 0.6, h * 0.5));
+                World.add(world, createCube(w * 0.7, h * 0.3));
+                createRagdoll(w * 0.5, h * 0.3);
+                // Пара шаров для интереса
+                World.add(world, createBall(w * 0.2, h * 0.4));
+                World.add(world, createBall(w * 0.8, h * 0.6));
+            }
+            spawnInitialObjects();
+
+            // Обработка изменения размера окна для рендера
+            window.addEventListener('resize', () => {
+                render.options.width = canvas.width;
+                render.options.height = canvas.height;
+                render.canvas.width = canvas.width;
+                render.canvas.height = canvas.height;
+            });
+
+            console.log('🎮 Песочница готова! ЛКМ — инструмент, ПКМ — перетаскивать объекты.');
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>👶 Уход за малышом</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: linear-gradient(135deg, #fce4ec, #f8bbd0);
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .game-container {
+      background: #fff0f5;
+      border-radius: 30px;
+      padding: 25px 30px;
+      box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+    h1 {
+      color: #d81b60;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .baby {
+      font-size: 100px;
+      transition: transform 0.3s;
+      display: inline-block;
+    }
+    .baby.happy { transform: scale(1.1); filter: drop-shadow(0 0 15px gold); }
+    .baby.sad { animation: shake 0.5s infinite; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    .status {
+      margin: 20px 0;
+      text-align: left;
+      background: #fff;
+      border-radius: 15px;
+      padding: 15px;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    }
+    .need-bar {
+      display: flex;
+      align-items: center;
+      margin: 10px 0;
+      font-size: 16px;
+    }
+    .need-bar span {
+      width: 80px;
+      font-weight: bold;
+      color: #4a148c;
+    }
+    .bar-bg {
+      flex: 1;
+      height: 20px;
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 0 10px;
+    }
+    .bar-fill {
+      width: 100%;
+      height: 100%;
+      background: #4caf50;
+      border-radius: 10px;
+      transition: width 0.3s;
+    }
+    .bar-fill.low { background: #f44336; }
+    .bar-fill.mid { background: #ff9800; }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .btn {
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      color: white;
+      box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+      transition: transform 0.1s, box-shadow 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #9575cd;
+    }
+    .btn:active { transform: scale(0.95); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    .btn.feed { background: #ff7043; }
+    .btn.diaper { background: #42a5f5; }
+    .btn.sleep { background: #66bb6a; }
+    .message {
+      font-size: 20px;
+      font-weight: bold;
+      color: #6a1b9a;
+      margin-top: 15px;
+      min-height: 30px;
+    }
+    .reset-btn {
+      background: #b0bec5;
+      color: #333;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <h1>👶 Мой малыш</h1>
+    <div id="baby" class="baby">😴</div>
+    <div class="status">
+      <div class="need-bar">
+        <span>🍼 Голод</span>
+        <div class="bar-bg"><div id="hunger-bar" class="bar-fill" style="width: 100%"></div></div>
+        <span id="hunger-val">100%</span>
+      </div>
+      <div class="need-bar">
+        <span>💧 Подгузник</span>
+        <div class="bar-bg"><div id="diaper-bar" class="bar-fill" style="width: 100%"></div></div>
+        <span id="diaper-val">100%</span>
+      </div>
+      <div class="need-bar">
+        <span>😴 Усталость</span>
+        <div class="bar-bg"><div id="sleep-bar" class="bar-fill" style="width: 100%"></div></div>
+        <span id="sleep-val">100%</span>
+      </div>
+    </div>
+    <div class="buttons">
+      <button class="btn feed" id="feed-btn">🍼 Кормить</button>
+      <button class="btn diaper" id="diaper-btn">🧷 Сменить подгузник</button>
+      <button class="btn sleep" id="sleep-btn">🛌 Убаюкать</button>
+    </div>
+    <div id="message" class="message">Всё хорошо 😊</div>
+    <button class="btn reset-btn" id="reset-btn">🔄 Новый малыш</button>
+  </div>
+
+  <script>
+    (function() {
+      // Состояние потребностей (от 0 до 100)
+      const state = {
+        hunger: 100,
+        diaper: 100,
+        sleep: 100
+      };
+
+      // DOM элементы
+      const babyEl = document.getElementById('baby');
+      const hungerBar = document.getElementById('hunger-bar');
+      const diaperBar = document.getElementById('diaper-bar');
+      const sleepBar = document.getElementById('sleep-bar');
+      const hungerVal = document.getElementById('hunger-val');
+      const diaperVal = document.getElementById('diaper-val');
+      const sleepVal = document.getElementById('sleep-val');
+      const messageEl = document.getElementById('message');
+
+      // Аудиоконтекст для звуков
+      let audioCtx = null;
+      function getAudioContext() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+      }
+
+      // Проигрывание короткого звука
+      function playTone(freq, type = 'sine', duration = 0.3, volume = 0.3) {
+        try {
+          const ctx = getAudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+          gain.gain.setValueAtTime(volume, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + duration);
+        } catch(e) { /* без звука */ }
+      }
+
+      // Звук плача (прерывистый)
+      let cryInterval = null;
+      function startCrying() {
+        if (cryInterval) return;
+        cryInterval = setInterval(() => {
+          playTone(600, 'sawtooth', 0.2, 0.15);
+        }, 500);
+      }
+      function stopCrying() {
+        if (cryInterval) {
+          clearInterval(cryInterval);
+          cryInterval = null;
+        }
+        // Короткий смех при успокоении
+        playTone(523, 'sine', 0.15, 0.2);
+        setTimeout(() => playTone(659, 'sine', 0.15, 0.2), 150);
+      }
+
+      // Обновление интерфейса
+      function updateUI() {
+        // Ограничение значений
+        state.hunger = Math.max(0, Math.min(100, state.hunger));
+        state.diaper = Math.max(0, Math.min(100, state.diaper));
+        state.sleep = Math.max(0, Math.min(100, state.sleep));
+
+        // Обновляем полоски
+        hungerBar.style.width = state.hunger + '%';
+        diaperBar.style.width = state.diaper + '%';
+        sleepBar.style.width = state.sleep + '%';
+
+        hungerVal.textContent = Math.round(state.hunger) + '%';
+        diaperVal.textContent = Math.round(state.diaper) + '%';
+        sleepVal.textContent = Math.round(state.sleep) + '%';
+
+        // Цвет полосок
+        [hungerBar, diaperBar, sleepBar].forEach(bar => {
+          const val = parseInt(bar.style.width);
+          bar.classList.remove('low', 'mid');
+          if (val < 30) bar.classList.add('low');
+          else if (val < 60) bar.classList.add('mid');
+        });
+
+        // Общий статус: считаем минимум
+        const minNeed = Math.min(state.hunger, state.diaper, state.sleep);
+        let babyState = 'happy';
+        let message = 'Всё хорошо 😊';
+        let emoji = '😴';
+
+        if (minNeed < 20) {
+          babyState = 'sad';
+          message = 'Малыш ПЛАЧЕТ! 😭';
+          emoji = '😭';
+        } else if (minNeed < 50) {
+          babyState = 'worried';
+          message = 'Малыш капризничает 🥺';
+          emoji = '🥺';
+        } else if (minNeed > 80) {
+          message = 'Малыш счастлив! 😊';
+          emoji = '😊';
+        }
+
+        // Если малыш спит (сон > 80 и остальные норм)
+        if (state.sleep > 90 && state.hunger > 50 && state.diaper > 50) {
+          emoji = '😴';
+          message = 'Малыш сладко спит 💤';
+          babyState = 'sleeping';
+        }
+
+        babyEl.textContent = emoji;
+        babyEl.className = 'baby';
+        if (babyState === 'sad') {
+          babyEl.classList.add('sad');
+          startCrying();
+        } else {
+          babyEl.classList.add('happy');
+          stopCrying();
+        }
+        messageEl.textContent = message;
+      }
+
+      // Действия
+      function feed() {
+        state.hunger = Math.min(100, state.hunger + 25);
+        playTone(440, 'triangle', 0.2, 0.3);
+        updateUI();
+      }
+
+      function changeDiaper() {
+        state.diaper = Math.min(100, state.diaper + 30);
+        playTone(600, 'square', 0.15, 0.2);
+        updateUI();
+      }
+
+      function rockToSleep() {
+        state.sleep = Math.min(100, state.sleep + 20);
+        // Убаюкивающая мелодия
+        playTone(392, 'sine', 0.3, 0.2);
+        setTimeout(() => playTone(330, 'sine', 0.3, 0.2), 300);
+        updateUI();
+      }
+
+      // Ухудшение потребностей со временем
+      function decayNeeds() {
+        state.hunger = Math.max(0, state.hunger - 0.8);
+        state.diaper = Math.max(0, state.diaper - 0.6);
+        state.sleep = Math.max(0, state.sleep - 0.5);
+        updateUI();
+      }
+
+      // Сброс игры
+      function resetGame() {
+        state.hunger = 100;
+        state.diaper = 100;
+        state.sleep = 100;
+        stopCrying();
+        updateUI();
+      }
+
+      // Привязка событий
+      document.getElementById('feed-btn').addEventListener('click', feed);
+      document.getElementById('diaper-btn').addEventListener('click', changeDiaper);
+      document.getElementById('sleep-btn').addEventListener('click', rockToSleep);
+      document.getElementById('reset-btn').addEventListener('click', resetGame);
+
+      // Запуск таймера ухудшения
+      setInterval(decayNeeds, 2000);
+      updateUI();
+    })();
+  </script>
+</body>
+</html>
