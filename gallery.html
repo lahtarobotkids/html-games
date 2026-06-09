@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Галерея</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Arial, sans-serif;
+      background: #111318;
+      color: #f5f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      background: #111318;
+    }
+
+    main {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      margin-bottom: 26px;
+      color: #9debd6;
+      text-decoration: none;
+      font-size: 17px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(32px, 7vw, 58px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 24px;
+      color: #b8c0d4;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .groups {
+      display: grid;
+      gap: 30px;
+    }
+
+    .group-title {
+      margin: 0 0 14px;
+      font-size: 25px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    article {
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    img,
+    video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      background: #05060a;
+    }
+
+    video {
+      object-fit: contain;
+    }
+
+    h3 {
+      margin: 0;
+      padding: 13px 14px 15px;
+      font-size: 16px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+      letter-spacing: 0;
+    }
+
+    @media (max-width: 560px) {
+      body {
+        padding: 16px;
+      }
+
+      p,
+      .back {
+        font-size: 16px;
+      }
+
+      .media-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="index.html">‹ Назад к играм</a>
+    <h1>Галерея</h1>
+    <p>Картинки и видео из работ ребят.</p>
+
+    <section class="groups" id="gallery-groups" aria-label="Галерея картинок и видео"></section>
+  </main>
+
+  <script>
+    const galleryGroups = [
+      {
+        title: "Матвей",
+        items: [
+          ["image", "пиковая дама кс2", "Pictures/Матвей/пиковая дама кс2.png"],
+          ["image", "кот едет на заднем колесе по пустыне", "Pictures/Матвей/кот едет на заднем колесе по пустыне.png"],
+          ["image", "кот с головой коня", "Pictures/Матвей/кот с головой коня.png"],
+          ["image", "кот террорист", "Pictures/Матвей/кот террорист.png"],
+          ["image", "мускулистый кот едет на мотоцикле", "Pictures/Матвей/мускулистый кот едет на мотоцикле.png"]
+        ]
+      },
+      {
+        title: "Маша",
+        items: [
+          ["image", "картинка 1", "Pictures/Маша/картинка1.png"],
+          ["image", "картинка 2", "Pictures/Маша/картинка2.png"],
+          ["image", "картинка 3", "Pictures/Маша/картинка3.png"],
+          ["image", "картинка 4", "Pictures/Маша/картинка4.png"],
+          ["image", "картинка 5", "Pictures/Маша/картинка5.png"],
+          ["image", "картинка 6", "Pictures/Маша/картинка6.png"],
+          ["image", "картинка 7", "Pictures/Маша/картинка7.png"],
+          ["image", "картинка 8", "Pictures/Маша/картинка8.png"],
+          ["image", "картинка 9", "Pictures/Маша/картинка 9.png"],
+          ["image", "картинка 10", "Pictures/Маша/картинка 10.png"],
+          ["video", "видео 1", "Pictures/Маша/видео1.mp4"],
+          ["video", "видео 2", "Pictures/Маша/видео2.mp4"],
+          ["video", "видео 3", "Pictures/Маша/видео3.mp4"]
+        ]
+      }
+    ];
+
+    const groupsRoot = document.querySelector("#gallery-groups");
+
+    for (const group of galleryGroups) {
+      const section = document.createElement("section");
+      const title = document.createElement("h2");
+      const grid = document.createElement("div");
+
+      title.className = "group-title";
+      title.textContent = group.title;
+      grid.className = "media-grid";
+
+      for (const [type, name, src] of group.items) {
+        const article = document.createElement("article");
+        const heading = document.createElement("h3");
+        const media = document.createElement(type === "video" ? "video" : "img");
+
+        heading.textContent = name;
+        media.src = src;
+
+        if (type === "video") {
+          media.controls = true;
+          media.preload = "metadata";
+          media.playsInline = true;
+        } else {
+          media.alt = name;
+          media.loading = "lazy";
+        }
+
+        article.append(media, heading);
+        grid.append(article);
+      }
+
+      section.append(title, grid);
+      groupsRoot.append(section);
+    }
+  </script>
+</body>
+</html>

@@ -345,6 +345,13 @@
       overflow-wrap: anywhere;
     }
 
+    .media-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
     @media (max-width: 980px) {
       .hero {
         grid-template-columns: minmax(0, 1fr);
@@ -382,6 +389,14 @@
 
       .soundtrack-panel {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      .media-actions {
+        justify-content: stretch;
+      }
+
+      .media-actions .button {
+        flex: 1 1 180px;
       }
 
       .hero-badge {
@@ -426,6 +441,7 @@
         <div class="hero-actions">
           <a class="button" href="#games">Смотреть игры</a>
           <a class="button secondary" href="soundtracks.html">Саундтреки</a>
+          <a class="button secondary" href="gallery.html">Галерея</a>
         </div>
       </div>
       <a class="hero-preview" href="Маша%20Mobile%20Legends/Маша%20Mobile%20Legends.html" aria-label="Запустить Маша Mobile Legends">
@@ -442,7 +458,10 @@
         <h2>Музыка и саундтреки</h2>
         <p>Страница с MP3-плеерами.</p>
       </div>
-      <a class="button secondary" href="soundtracks.html">Открыть музыку</a>
+      <div class="media-actions">
+        <a class="button secondary" href="soundtracks.html">Открыть музыку</a>
+        <a class="button secondary" href="gallery.html">Открыть галерею</a>
+      </div>
     </section>
 
     <section id="games" aria-label="Список игр">

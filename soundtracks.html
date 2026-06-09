@@ -20,14 +20,11 @@
       margin: 0;
       min-height: 100vh;
       padding: 24px;
-      background:
-        radial-gradient(circle at 18% 12%, rgba(157, 235, 214, 0.2), transparent 32%),
-        radial-gradient(circle at 86% 84%, rgba(57, 117, 255, 0.22), transparent 34%),
-        #111318;
+      background: #111318;
     }
 
     main {
-      width: min(860px, 100%);
+      width: min(960px, 100%);
       margin: 0 auto;
     }
 
@@ -55,6 +52,18 @@
       font-size: 17px;
     }
 
+    .groups {
+      display: grid;
+      gap: 26px;
+    }
+
+    .group-title {
+      margin: 0 0 12px;
+      font-size: 25px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
     .tracks {
       display: grid;
       gap: 14px;
@@ -67,7 +76,7 @@
       background: rgba(255, 255, 255, 0.07);
     }
 
-    h2 {
+    h3 {
       margin: 0 0 12px;
       font-size: 20px;
       line-height: 1.25;
@@ -95,7 +104,11 @@
         padding: 14px;
       }
 
-      h2 {
+      .group-title {
+        font-size: 21px;
+      }
+
+      h3 {
         font-size: 17px;
       }
     }
@@ -107,161 +120,105 @@
     <h1>Саундтреки</h1>
     <p>Треки можно слушать онлайн прямо на этой странице.</p>
 
-    <section class="tracks" aria-label="Список саундтреков">
-      <article>
-        <h2>Water-Scarred Sky</h2>
-        <audio controls preload="none">
-          <source src="mp3/Water-Scarred Sky.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Water-Scarred Sky (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/Water-Scarred Sky (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Ваня не качайся</h2>
-        <audio controls preload="none">
-          <source src="mp3/Ваня не качайся.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Ваня не качайся (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/Ваня не качайся (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Золотая золотинка</h2>
-        <audio controls preload="none">
-          <source src="mp3/Золотая золотинка.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Золотая золотинка (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/Золотая золотинка (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>ПОСЛЕДНИЙ ПАТРОН</h2>
-        <audio controls preload="none">
-          <source src="mp3/ПОСЛЕДНИЙ ПАТРОН.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>ПОСЛЕДНИЙ ПАТРОН (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/ПОСЛЕДНИЙ ПАТРОН (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Робот Грустит</h2>
-        <audio controls preload="none">
-          <source src="mp3/Робот Грустит.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Робот Грустит (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/Робот Грустит (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 01</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 01.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 02</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 02.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 03</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 03.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 04</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 04.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 05</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 05.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Саундтрек из видео 06</h2>
-        <audio controls preload="none">
-          <source src="mp3/Саундтрек из видео 06.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Тиканье Таймера</h2>
-        <audio controls preload="none">
-          <source src="mp3/Тиканье Таймера.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>Тиканье Таймера (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/Тиканье Таймера (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>목소리 불가청</h2>
-        <audio controls preload="none">
-          <source src="mp3/목소리 불가청.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>목소리 불가청 (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/목소리 불가청 (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>무음발사 심장소리</h2>
-        <audio controls preload="none">
-          <source src="mp3/무음발사 심장소리.mp3" type="audio/mpeg">
-        </audio>
-      </article>
-
-      <article>
-        <h2>무음발사 심장소리 (1)</h2>
-        <audio controls preload="none">
-          <source src="mp3/무음발사 심장소리 (1).mp3" type="audio/mpeg">
-        </audio>
-      </article>
-    </section>
+    <section class="groups" id="soundtrack-groups" aria-label="Список саундтреков"></section>
   </main>
+
+  <script>
+    const soundtrackGroups = [
+      {
+        title: "Разное",
+        tracks: [
+          ["Water-Scarred Sky", "mp3/Water-Scarred Sky.mp3"],
+          ["Water-Scarred Sky (1)", "mp3/Water-Scarred Sky (1).mp3"],
+          ["Ваня не качайся", "mp3/Ваня не качайся.mp3"],
+          ["Ваня не качайся (1)", "mp3/Ваня не качайся (1).mp3"],
+          ["Золотая золотинка", "mp3/Золотая золотинка.mp3"],
+          ["Золотая золотинка (1)", "mp3/Золотая золотинка (1).mp3"],
+          ["ПОСЛЕДНИЙ ПАТРОН", "mp3/ПОСЛЕДНИЙ ПАТРОН.mp3"],
+          ["ПОСЛЕДНИЙ ПАТРОН (1)", "mp3/ПОСЛЕДНИЙ ПАТРОН (1).mp3"],
+          ["Робот Грустит", "mp3/Робот Грустит.mp3"],
+          ["Робот Грустит (1)", "mp3/Робот Грустит (1).mp3"],
+          ["Саундтрек из видео 01", "mp3/Саундтрек из видео 01.mp3"],
+          ["Саундтрек из видео 02", "mp3/Саундтрек из видео 02.mp3"],
+          ["Саундтрек из видео 03", "mp3/Саундтрек из видео 03.mp3"],
+          ["Саундтрек из видео 04", "mp3/Саундтрек из видео 04.mp3"],
+          ["Саундтрек из видео 05", "mp3/Саундтрек из видео 05.mp3"],
+          ["Саундтрек из видео 06", "mp3/Саундтрек из видео 06.mp3"],
+          ["Тиканье Таймера", "mp3/Тиканье Таймера.mp3"],
+          ["Тиканье Таймера (1)", "mp3/Тиканье Таймера (1).mp3"],
+          ["목소리 불가청", "mp3/목소리 불가청.mp3"],
+          ["목소리 불가청 (1)", "mp3/목소리 불가청 (1).mp3"],
+          ["무음발사 심장소리", "mp3/무음발사 심장소리.mp3"],
+          ["무음발사 심장소리 (1)", "mp3/무음발사 심장소리 (1).mp3"]
+        ]
+      },
+      {
+        title: "Иван",
+        tracks: [
+          ["Velvet Conductor", "mp3/Иван/Velvet Conductor.mp3"],
+          ["Девятый вал", "mp3/Иван/Девятый вал.mp3"],
+          ["Девятый вал (1)", "mp3/Иван/Девятый вал (1).mp3"],
+          ["Солёная Карамель", "mp3/Иван/Солёная Карамель.mp3"],
+          ["Фольговая Шапка", "mp3/Иван/Фольговая Шапка.mp3"]
+        ]
+      },
+      {
+        title: "Для Ивана",
+        tracks: [
+          ["Golden Summer 01", "mp3/для Ивана/Golden Summer 01.mp3"],
+          ["Golden Summer 02", "mp3/для Ивана/Golden Summer 02.mp3"],
+          ["Golden Summer 03", "mp3/для Ивана/Golden Summer 03.mp3"],
+          ["Golden Summer 04", "mp3/для Ивана/Golden Summer 04.mp3"],
+          ["Vanya The Greates 01", "mp3/для Ивана/Vanya The Greates 01.mp3"],
+          ["Vanya The Greates 02", "mp3/для Ивана/Vanya The Greates 02.mp3"],
+          ["Vanya The Greates 03", "mp3/для Ивана/Vanya The Greates 03.mp3"],
+          ["Vanya The Greates 04", "mp3/для Ивана/Vanya The Greates 04.mp3"],
+          ["Ваня с Района (Имперский Рэп) 01", "mp3/для Ивана/Ваня с Района (Имперский Рэп) 01.mp3"],
+          ["Ваня с Района (Имперский Рэп) 02", "mp3/для Ивана/Ваня с Района (Имперский Рэп) 02.mp3"]
+        ]
+      },
+      {
+        title: "Матвей",
+        tracks: [
+          ["Диагноз 67 Саксофон 01", "mp3/Матвей/Диагноз 67 Саксофон 01.mp3"],
+          ["Диагноз 67 Саксофон 02", "mp3/Матвей/Диагноз 67 Саксофон 02.mp3"],
+          ["Диагноз Джазик", "mp3/Матвей/Диагноз Джазик.mp3"],
+          ["Диагноз Джазик (1)", "mp3/Матвей/Диагноз Джазик (1).mp3"]
+        ]
+      }
+    ];
+
+    const groupsRoot = document.querySelector("#soundtrack-groups");
+
+    for (const group of soundtrackGroups) {
+      const section = document.createElement("section");
+      const title = document.createElement("h2");
+      const list = document.createElement("div");
+
+      title.className = "group-title";
+      title.textContent = group.title;
+      list.className = "tracks";
+
+      for (const [name, src] of group.tracks) {
+        const article = document.createElement("article");
+        const heading = document.createElement("h3");
+        const audio = document.createElement("audio");
+        const source = document.createElement("source");
+
+        heading.textContent = name;
+        audio.controls = true;
+        audio.preload = "none";
+        source.src = src;
+        source.type = "audio/mpeg";
+
+        audio.append(source);
+        article.append(heading, audio);
+        list.append(article);
+      }
+
+      section.append(title, list);
+      groupsRoot.append(section);
+    }
+  </script>
 </body>
 </html>
