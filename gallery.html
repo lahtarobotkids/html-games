@@ -86,8 +86,38 @@
       background: #05060a;
     }
 
+    img {
+      cursor: zoom-in;
+    }
+
     video {
       object-fit: contain;
+    }
+
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+      background: rgba(0, 0, 0, 0.86);
+    }
+
+    .lightbox.open {
+      display: flex;
+    }
+
+    .lightbox img {
+      width: auto;
+      max-width: min(100%, 1280px);
+      height: auto;
+      max-height: calc(100vh - 44px);
+      aspect-ratio: auto;
+      object-fit: contain;
+      cursor: zoom-out;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
     }
 
     h3 {
@@ -123,6 +153,10 @@
 
     <section class="groups" id="gallery-groups" aria-label="Галерея картинок и видео"></section>
   </main>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <img id="lightbox-image" src="" alt="">
+  </div>
 
   <script>
     const galleryGroups = [
@@ -165,6 +199,22 @@
     ];
 
     const groupsRoot = document.querySelector("#gallery-groups");
+    const lightbox = document.querySelector("#lightbox");
+    const lightboxImage = document.querySelector("#lightbox-image");
+
+    function closeLightbox() {
+      lightbox.classList.remove("open");
+      lightbox.setAttribute("aria-hidden", "true");
+      lightboxImage.src = "";
+      lightboxImage.alt = "";
+    }
+
+    function openLightbox(src, alt) {
+      lightboxImage.src = src;
+      lightboxImage.alt = alt;
+      lightbox.classList.add("open");
+      lightbox.setAttribute("aria-hidden", "false");
+    }
 
     for (const group of galleryGroups) {
       const section = document.createElement("section");
@@ -190,6 +240,7 @@
         } else {
           media.alt = name;
           media.loading = "lazy";
+          media.addEventListener("click", () => openLightbox(src, name));
         }
 
         article.append(media, heading);
@@ -199,6 +250,13 @@
       section.append(title, grid);
       groupsRoot.append(section);
     }
+
+    lightbox.addEventListener("click", closeLightbox);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && lightbox.classList.contains("open")) {
+        closeLightbox();
+      }
+    });
   </script>
 </body>
 </html>
