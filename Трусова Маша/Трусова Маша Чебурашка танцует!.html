@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Чебурашка танцует!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        .game-container {
+            position: relative;
+            width: 400px;
+            height: 650px;
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #fdf6e3;
+            border-radius: 30px;
+            cursor: pointer;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 6px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            pointer-events: none;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="400" height="650"></canvas>
+        <div class="instructions">Нажимай на экран или ПРОБЕЛ в такт нотам!</div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Звуки
+            let audioCtx = null;
+            function initAudio() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            }
+            function playBeep(freq, duration, type = 'sine') {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime);
+                osc.stop(audioCtx.currentTime + duration);
+            }
+
+            const STATE = { WAITING: 'waiting', PLAYING: 'playing', GAMEOVER: 'gameover' };
+            let gameState = STATE.WAITING;
+            let energy = 50;
+            const MAX_ENERGY = 100;
+            const ENERGY_DECAY = 10; // чуть медленнее
+            const HIT_ENERGY = 24;
+            const MISS_ENERGY = -16;
+            let notes = [];
+            let lastTime = 0;
+            let noteSpawnTimer = 0;
+            let spawnInterval = 0.7;
+            let score = 0;
+            let combo = 0;
+
+            // Таймер задержки старта (3 секунды)
+            let startDelay = 0;
+
+            // Анимации
+            let chebDance = 0;
+            let genaWatch = 0;
+            let shakeAmount = 0;
+            let gameOverTimer = 0;
+
+            const HIT_ZONE_Y = 460;
+            const HIT_TOLERANCE = 35;
+
+            let inputQueued = false;
+
+            function resetGame() {
+                energy = 65; // немного больше начальной энергии
+                notes = [];
+                score = 0;
+                combo = 0;
+                chebDance = 0;
+                genaWatch = 0;
+                shakeAmount = 0;
+                gameOverTimer = 0;
+                noteSpawnTimer = 0;
+                spawnInterval = 0.8;
+                startDelay = 3.0; // задержка перед стартом механик
+                gameState = STATE.PLAYING;
+                lastTime = performance.now();
+            }
+
+            function spawnNote() {
+                notes.push({
+                    x: 140 + Math.random() * 120,
+                    y: -30,
+                    speed: 130 + Math.random() * 50,
+                    hit: false,
+                    missed: false,
+                    opacity: 1
+                });
+            }
+
+            function handleHit() {
+                if (gameState !== STATE.PLAYING) return;
+                if (startDelay > 0) return; // во время отсчёта попадания не работают
+
+                let closest = null;
+                let minDist = Infinity;
+                for (let note of notes) {
+                    if (note.hit || note.missed) continue;
+                    let dist = Math.abs(note.y - HIT_ZONE_Y);
+                    if (dist < HIT_TOLERANCE && dist < minDist) {
+                        closest = note;
+                        minDist = dist;
+                    }
+                }
+
+                if (closest) {
+                    closest.hit = true;
+                    closest.opacity = 0;
+                    energy = Math.min(MAX_ENERGY, energy + HIT_ENERGY);
+                    chebDance = 1.0;
+                    combo++;
+                    score += 10 * (1 + Math.floor(combo / 5));
+                    playBeep(520 + combo * 15, 0.12, 'triangle');
+                    spawnParticles(closest.x, closest.y);
+                } else {
+                    combo = 0;
+                    energy = Math.max(0, energy - 7);
+                    playBeep(200, 0.15, 'sawtooth');
+                    shakeAmount = 0.2;
+                }
+                inputQueued = false;
+            }
+
+            let particles = [];
+            function spawnParticles(x, y) {
+                for (let i = 0; i < 8; i++) {
+                    particles.push({
+                        x: x, y: y,
+                        vx: (Math.random() - 0.5) * 80,
+                        vy: (Math.random() - 1) * 70 - 20,
+                        life: 0.5 + Math.random() * 0.4,
+                        color: `hsl(${40 + Math.random()*30}, 80%, 60%)`
+                    });
+                }
+            }
+
+            function updateParticles(dt) {
+                for (let i = particles.length-1; i >= 0; i--) {
+                    let p = particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= dt;
+                    if (p.life <= 0) particles.splice(i,1);
+                }
+            }
+
+            function update(dt) {
+                if (gameState !== STATE.PLAYING) return;
+
+                // Отсчёт задержки старта
+                if (startDelay > 0) {
+                    startDelay -= dt;
+                    // Показываем обратный отсчёт, но механики не работают
+                    return;
+                }
+
+                // Убывание энергии
+                energy = Math.max(0, energy - ENERGY_DECAY * dt);
+
+                // Обновление нот
+                for (let note of notes) {
+                    if (!note.hit && !note.missed) {
+                        note.y += note.speed * dt;
+                        if (note.y > HIT_ZONE_Y + HIT_TOLERANCE + 15 && !note.missed) {
+                            note.missed = true;
+                            combo = 0;
+                            energy = Math.max(0, energy + MISS_ENERGY);
+                            shakeAmount = 0.3;
+                            playBeep(180, 0.2, 'square');
+                        }
+                    }
+                }
+                notes = notes.filter(n => n.y < canvas.height + 50 && !(n.hit && n.opacity <= 0));
+
+                // Спавн нот
+                noteSpawnTimer += dt;
+                if (noteSpawnTimer >= spawnInterval) {
+                    noteSpawnTimer = 0;
+                    spawnInterval = 0.5 + Math.random() * 0.8;
+                    spawnNote();
+                }
+
+                chebDance = Math.max(0, chebDance - dt * 3.5);
+                let targetWatch = energy < 30 ? 1.0 : (energy < 50 ? 0.5 : 0.0);
+                genaWatch += (targetWatch - genaWatch) * Math.min(1, dt * 3);
+                if (shakeAmount > 0) shakeAmount = Math.max(0, shakeAmount - dt * 4);
+
+                if (energy <= 0) {
+                    gameState = STATE.GAMEOVER;
+                    gameOverTimer = 0;
+                    playBeep(100, 0.5, 'sawtooth');
+                }
+
+                if (inputQueued) {
+                    handleHit();
+                }
+
+                updateParticles(dt);
+            }
+
+            // Рисование (без изменений, только добавим надпись при старте)
+            function drawBackground() {
+                ctx.fillStyle = '#f9e7c2';
+                ctx.fillRect(0, 0, 400, 650);
+                ctx.fillStyle = '#f5d7a7';
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 13; j++) {
+                        ctx.beginPath();
+                        ctx.arc(50 + i*50, 20 + j*50, 12, 0, Math.PI*2);
+                        ctx.fillStyle = '#f0c78e';
+                        ctx.fill();
+                    }
+                }
+                ctx.fillStyle = '#b08968';
+                ctx.fillRect(0, 520, 400, 130);
+                ctx.fillStyle = '#9c7a5c';
+                for (let i=0; i<10; i++) {
+                    ctx.fillRect(i*45, 520, 20, 130);
+                }
+                ctx.fillStyle = '#a2d2ff';
+                ctx.fillRect(280, 30, 80, 100);
+                ctx.strokeStyle = '#8b5a2b';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(280, 30, 80, 100);
+                ctx.beginPath();
+                ctx.moveTo(320, 30); ctx.lineTo(320, 130);
+                ctx.moveTo(280, 80); ctx.lineTo(360, 80);
+                ctx.stroke();
+                ctx.fillStyle = '#c0392b';
+                ctx.beginPath();
+                ctx.ellipse(200, 560, 130, 35, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.ellipse(200, 560, 100, 25, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            function drawGena(x, y, watchLevel) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.fillStyle = '#2e7d32';
+                ctx.beginPath();
+                ctx.moveTo(-40, 80);
+                ctx.quadraticCurveTo(-70, 100, -50, 130);
+                ctx.lineWidth = 15;
+                ctx.strokeStyle = '#2e7d32';
+                ctx.stroke();
+                ctx.fillStyle = '#4caf50';
+                ctx.fillRect(-25, 0, 50, 100);
+                ctx.fillStyle = '#d32f2f';
+                ctx.fillRect(-15, 30, 30, 45);
+                ctx.fillStyle = '#b71c1c';
+                for (let i=0; i<6; i++) {
+                    ctx.fillRect(-12, 35 + i*7, 24, 3);
+                }
+                ctx.fillStyle = '#388e3c';
+                ctx.fillRect(-35, 30, 15, 20);
+                ctx.fillRect(20, 30, 15, 20);
+                ctx.fillStyle = '#4caf50';
+                ctx.beginPath();
+                ctx.ellipse(0, -15, 28, 32, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#2e7d32';
+                ctx.beginPath();
+                ctx.ellipse(0, -5, 22, 18, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                for (let i=-8; i<=8; i+=4) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, -15); ctx.lineTo(i+2, -20); ctx.lineTo(i+4, -15);
+                    ctx.fill();
+                }
+                let eyeY = -25;
+                if (watchLevel > 0.5) {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath(); ctx.arc(-10, eyeY, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(10, eyeY, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath(); ctx.arc(-8 + watchLevel*2, eyeY-1, 3.5, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(8 + watchLevel*2, eyeY-1, 3.5, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#1b5e20';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(-16, eyeY-10); ctx.lineTo(-6, eyeY-7); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(16, eyeY-10); ctx.lineTo(6, eyeY-7); ctx.stroke();
+                } else {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath(); ctx.arc(-10, eyeY, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(10, eyeY, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath(); ctx.arc(-9, eyeY, 3.5, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(11, eyeY, 3.5, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.fillStyle = '#5d4037';
+                ctx.fillRect(-25, -48, 50, 12);
+                ctx.fillRect(-17, -62, 34, 18);
+                ctx.restore();
+            }
+
+            function drawCheburashka(x, y, dance) {
+                ctx.save();
+                ctx.translate(x, y);
+                let jump = Math.sin(dance * Math.PI) * 8;
+                ctx.translate(0, -jump);
+                let earRot = dance * 0.3;
+                ctx.fillStyle = '#8B5A2B';
+                ctx.save();
+                ctx.translate(-22, -30);
+                ctx.rotate(-earRot);
+                ctx.beginPath(); ctx.ellipse(0, 0, 20, 22, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#a0522d';
+                ctx.beginPath(); ctx.ellipse(0, 0, 13, 15, 0, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+                ctx.save();
+                ctx.translate(22, -30);
+                ctx.rotate(earRot);
+                ctx.beginPath(); ctx.ellipse(0, 0, 20, 22, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#a0522d';
+                ctx.beginPath(); ctx.ellipse(0, 0, 13, 15, 0, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+                ctx.fillStyle = '#8B5A2B';
+                ctx.beginPath(); ctx.ellipse(0, 10, 24, 30, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#d2a679';
+                ctx.beginPath(); ctx.ellipse(0, 12, 16, 20, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.beginPath(); ctx.arc(-9, -10, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(9, -10, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath(); ctx.arc(-7, -10, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(11, -10, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#5d3a1a';
+                ctx.beginPath(); ctx.arc(0, -4, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#3e2723';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, 7, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+                ctx.fillStyle = '#8B5A2B';
+                ctx.fillRect(-28, 5, 10, 15);
+                ctx.fillRect(18, 5, 10, 15);
+                ctx.restore();
+            }
+
+            function drawNote(x, y, opacity) {
+                ctx.save();
+                ctx.globalAlpha = opacity;
+                ctx.fillStyle = '#e65100';
+                ctx.beginPath();
+                ctx.ellipse(x, y, 9, 7, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#ff9800';
+                ctx.beginPath();
+                ctx.ellipse(x, y, 6, 4.5, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#3e2723';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(x+7, y-2);
+                ctx.lineTo(x+7, y-28);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x+7, y-28);
+                ctx.quadraticCurveTo(x+18, y-22, x+16, y-14);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawEnergyBar(value, max) {
+                const barX = 40, barY = 15, barW = 320, barH = 22;
+                ctx.fillStyle = '#ddd';
+                ctx.fillRect(barX, barY, barW, barH);
+                let ratio = value / max;
+                let color = ratio > 0.5 ? `hsl(${120*ratio}, 70%, 45%)` : `hsl(${0+ (1-ratio)*30}, 80%, 50%)`;
+                ctx.fillStyle = color;
+                ctx.fillRect(barX, barY, barW * ratio, barH);
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(barX, barY, barW, barH);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 13px "Comic Sans MS"';
+                ctx.textAlign = 'center';
+                ctx.fillText('ЭНЕРГИЯ', 200, barY-4);
+            }
+
+            function drawStartScreen() {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, 400, 650);
+                ctx.fillStyle = '#FFD54F';
+                ctx.font = 'bold 28px "Comic Sans MS"';
+                ctx.textAlign = 'center';
+                ctx.fillText('Чебурашка танцует!', 200, 220);
+                ctx.fillStyle = 'white';
+                ctx.font = '18px "Comic Sans MS"';
+                ctx.fillText('под дудочку', 200, 260);
+                ctx.fillText('Следи за энергией!', 200, 310);
+                ctx.fillText('Гена не должен заметить...', 200, 345);
+                ctx.fillText('Нажми, чтобы играть', 200, 440);
+            }
+
+            function drawGame() {
+                drawBackground();
+                drawGena(80, 400, genaWatch);
+                drawCheburashka(200, 470, chebDance);
+                ctx.strokeStyle = '#ffaa00';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 8]);
+                ctx.beginPath();
+                ctx.moveTo(60, HIT_ZONE_Y);
+                ctx.lineTo(340, HIT_ZONE_Y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#ffaa00';
+                ctx.font = '12px "Comic Sans MS"';
+                ctx.fillText('ЖМИ', 15, HIT_ZONE_Y-8);
+
+                for (let note of notes) {
+                    if (!note.hit) drawNote(note.x, note.y, 1);
+                }
+                for (let p of particles) {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = Math.min(1, p.life*2);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+                drawEnergyBar(energy, MAX_ENERGY);
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 16px "Comic Sans MS"';
+                ctx.textAlign = 'right';
+                ctx.fillText('Счёт: '+score, 380, 60);
+                if (combo > 2) {
+                    ctx.fillStyle = '#e65100';
+                    ctx.fillText('Комбо x'+combo, 380, 82);
+                }
+
+                // Если идёт задержка старта — показываем отсчёт
+                if (startDelay > 0) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.fillRect(0, 200, 400, 120);
+                    ctx.fillStyle = '#1a237e';
+                    ctx.font = 'bold 26px "Comic Sans MS"';
+                    ctx.textAlign = 'center';
+                    let sec = Math.ceil(startDelay);
+                    ctx.fillText('Приготовься! ' + sec, 200, 265);
+                }
+            }
+
+            function drawGameOver() {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, 400, 650);
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 32px "Comic Sans MS"';
+                ctx.textAlign = 'center';
+                ctx.fillText('ГЕНА ВЫГОНЯЕТ!', 200, 250);
+                ctx.fillStyle = 'white';
+                ctx.font = '20px "Comic Sans MS"';
+                ctx.fillText('Ты не танцевал...', 200, 300);
+                ctx.fillText('Счёт: '+score, 200, 340);
+                ctx.fillText('Нажми, чтобы начать заново', 200, 420);
+            }
+
+            function gameLoop(timestamp) {
+                if (!lastTime) lastTime = timestamp;
+                let dt = Math.min(0.1, (timestamp - lastTime) / 1000);
+                lastTime = timestamp;
+
+                update(dt);
+                ctx.clearRect(0, 0, 400, 650);
+                drawBackground();
+
+                if (gameState === STATE.WAITING) {
+                    drawGena(80, 400, 0);
+                    drawCheburashka(200, 470, 0.3);
+                    drawStartScreen();
+                } else if (gameState === STATE.PLAYING) {
+                    drawGame();
+                } else if (gameState === STATE.GAMEOVER) {
+                    drawGame();
+                    gameOverTimer += dt;
+                    drawGena(80, 400, 1.0);
+                    drawGameOver();
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            function onInput(e) {
+                e.preventDefault();
+                initAudio();
+                if (gameState === STATE.WAITING) {
+                    resetGame();
+                } else if (gameState === STATE.GAMEOVER) {
+                    resetGame();
+                } else if (gameState === STATE.PLAYING) {
+                    inputQueued = true;
+                }
+            }
+
+            canvas.addEventListener('click', onInput);
+            canvas.addEventListener('touchstart', onInput, {passive: false});
+            window.addEventListener('keydown', function(e) {
+                if (e.code === 'Space' || e.code === 'KeyJ') {
+                    e.preventDefault();
+                    initAudio();
+                    if (gameState === STATE.WAITING || gameState === STATE.GAMEOVER) {
+                        resetGame();
+                    } else if (gameState === STATE.PLAYING) {
+                        inputQueued = true;
+                    }
+                }
+            });
+
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        })();
+    </script>
+</body>
+</html>

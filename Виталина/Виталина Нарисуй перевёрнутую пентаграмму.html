@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Нарисуй перевёрнутую пентаграмму</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1e1e2f, #2a2a40);
+    }
+    .game-wrapper {
+      background: rgba(0,0,0,0.45);
+      border-radius: 30px;
+      padding: 25px 30px 20px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      text-align: center;
+    }
+    h2 {
+      color: #f0e6d2;
+      margin: 0 0 12px;
+      font-weight: 400;
+      letter-spacing: 1px;
+      text-shadow: 2px 2px 4px black;
+    }
+    canvas {
+      border-radius: 20px;
+      display: block;
+      margin: 0 auto;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.7);
+      cursor: crosshair;
+    }
+    .controls {
+      margin-top: 18px;
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+    }
+    button {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      padding: 10px 28px;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 500;
+      backdrop-filter: blur(5px);
+      cursor: pointer;
+      transition: 0.2s;
+      letter-spacing: 0.5px;
+    }
+    button:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    button:active {
+      transform: scale(0.96);
+    }
+    #message {
+      color: #f0e6d2;
+      font-size: 0.95rem;
+      min-height: 24px;
+      margin-top: 10px;
+      text-shadow: 1px 1px 3px black;
+    }
+
+    /* Оверлей результата */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    .overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .overlay-text {
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-align: center;
+      padding: 20px 30px;
+      border-radius: 20px;
+      animation: pulse 1.2s infinite;
+      max-width: 80%;
+    }
+    .overlay-text.lose {
+      color: #800000;
+      text-shadow:
+        -1px -1px 0 white,
+         1px -1px 0 white,
+        -1px  1px 0 white,
+         1px  1px 0 white;
+      background: rgba(0,0,0,0.5);
+    }
+    .overlay-text.win {
+      color: white;
+      text-shadow: 0 0 10px gold;
+      background: rgba(0,0,0,0.4);
+    }
+
+    /* Вступительный экран */
+    #introScreen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+    }
+    .intro-content {
+      text-align: center;
+      color: #fff;
+      font-size: 1.5rem;
+      max-width: 450px;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    #skipIntroBtn {
+      margin-top: 25px;
+      background: #800000;
+      color: white;
+      border: none;
+      padding: 12px 35px;
+      border-radius: 30px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #skipIntroBtn:hover {
+      background: #a00000;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Вступительный экран -->
+<div id="introScreen">
+  <div class="intro-content">
+    <p>Вы случайно оказались у сатанистов, старайтесь нарисовать нормальную пентаграмму чтобы вас не убили</p>
+    <button id="skipIntroBtn">Пропустить</button>
+  </div>
+</div>
+
+<div class="game-wrapper">
+  <h2>Нарисуй перевёрнутую пентаграмму</h2>
+  <canvas id="canvas" width="500" height="500"></canvas>
+  <div class="controls">
+    <button id="evaluateBtn">Оценить</button>
+    <button id="clearBtn">Очистить</button>
+  </div>
+  <div id="message">Внутри красного круга нарисуйте звезду (держите мышь и тяните)</div>
+</div>
+
+<!-- Оверлей результата -->
+<div class="overlay" id="overlay">
+  <div class="overlay-text" id="overlayText"></div>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const evaluateBtn = document.getElementById('evaluateBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const messageDiv = document.getElementById('message');
+    const overlay = document.getElementById('overlay');
+    const overlayText = document.getElementById('overlayText');
+    const introScreen = document.getElementById('introScreen');
+    const skipBtn = document.getElementById('skipIntroBtn');
+
+    let introActive = true;
+
+    const CENTER = { x: 250, y: 250 };
+    const CIRCLE_RADIUS = 220;
+    const OUTER_RADIUS = CIRCLE_RADIUS;
+    const INNER_RADIUS = OUTER_RADIUS * Math.sin(Math.PI/10) / Math.sin(3*Math.PI/10);
+
+    const outerPoints = [];
+    const innerPoints = [];
+    for (let i = 0; i < 5; i++) {
+      const angleOuter = Math.PI/2 + i * (2*Math.PI/5);
+      outerPoints.push({
+        x: CENTER.x + OUTER_RADIUS * Math.cos(angleOuter),
+        y: CENTER.y + OUTER_RADIUS * Math.sin(angleOuter)
+      });
+      const angleInner = angleOuter + Math.PI/5;
+      innerPoints.push({
+        x: CENTER.x + INNER_RADIUS * Math.cos(angleInner),
+        y: CENTER.y + INNER_RADIUS * Math.sin(angleInner)
+      });
+    }
+
+    const idealSegments = [];
+    for (let i = 0; i < 5; i++) {
+      const j = (i + 2) % 5;
+      idealSegments.push({
+        p1: outerPoints[i],
+        p2: outerPoints[j]
+      });
+    }
+
+    let userSegments = [];
+    let isDrawing = false;
+    let startPoint = null;
+    let currentMouse = null;
+    let overlayTimer = null;
+
+    // Ламинат
+    function drawLaminateBackground() {
+      ctx.save();
+      ctx.fillStyle = '#E7CAA3';
+      ctx.fillRect(0, 0, 500, 500);
+
+      const plankHeight = 35;
+      const plankWidth = 160;
+      const rows = Math.ceil(500 / plankHeight);
+      const cols = Math.ceil(500 / plankWidth) + 1;
+
+      ctx.strokeStyle = '#b8956e';
+      ctx.lineWidth = 1.5;
+
+      for (let row = 0; row < rows; row++) {
+        const y = row * plankHeight;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(500, y);
+        ctx.stroke();
+
+        const offsetX = (row % 2 === 0) ? 0 : plankWidth / 2;
+        for (let col = 0; col < cols; col++) {
+          const x = offsetX + col * plankWidth;
+          if (x > 500) break;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + plankHeight);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Затемнение и свечи
+    function applyDarknessAndCandles() {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.53)';
+      ctx.fillRect(0, 0, 500, 500);
+
+      outerPoints.forEach(point => {
+        const glow = ctx.createRadialGradient(point.x, point.y, 5, point.x, point.y, 100);
+        glow.addColorStop(0, 'rgba(255,182,0,0.65)');
+        glow.addColorStop(1, 'rgba(255,182,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 100, 0, 2*Math.PI);
+        ctx.fill();
+      });
+
+      outerPoints.forEach(point => {
+        const flame = ctx.createRadialGradient(point.x, point.y-2, 0, point.x, point.y+4, 7);
+        flame.addColorStop(0, '#fff5cc');
+        flame.addColorStop(0.4, '#FFB600');
+        flame.addColorStop(1, '#cc7a00');
+        ctx.fillStyle = flame;
+        ctx.beginPath();
+        ctx.ellipse(point.x, point.y-1, 5, 8, 0, 0, 2*Math.PI);
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    function drawBackground() {
+      ctx.save();
+      ctx.strokeStyle = '#e53935';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(CENTER.x, CENTER.y, CIRCLE_RADIUS, 0, 2*Math.PI);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawIdealStar() {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      idealSegments.forEach(seg => {
+        ctx.moveTo(seg.p1.x, seg.p1.y);
+        ctx.lineTo(seg.p2.x, seg.p2.y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawUserSegments() {
+      ctx.save();
+      ctx.strokeStyle = '#982412';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      userSegments.forEach(seg => {
+        ctx.beginPath();
+        ctx.moveTo(seg.p1.x, seg.p1.y);
+        ctx.lineTo(seg.p2.x, seg.p2.y);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    function drawPreviewLine() {
+      if (!isDrawing || !startPoint || !currentMouse) return;
+      ctx.save();
+      ctx.strokeStyle = '#982412';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(startPoint.x, startPoint.y);
+      ctx.lineTo(currentMouse.x, currentMouse.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function redrawCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawLaminateBackground();
+      drawUserSegments();
+      drawPreviewLine();
+      drawBackground();
+      drawIdealStar();
+      applyDarknessAndCandles();
+    }
+
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
+    function onMouseDown(e) {
+      if (e.button !== 0 || introActive) return;
+      const coords = getCanvasCoords(e);
+      startPoint = coords;
+      currentMouse = coords;
+      isDrawing = true;
+      redrawCanvas();
+    }
+
+    function onMouseMove(e) {
+      if (!isDrawing || introActive) return;
+      currentMouse = getCanvasCoords(e);
+      redrawCanvas();
+    }
+
+    function onMouseUp(e) {
+      if (!isDrawing || introActive) return;
+      const endPoint = getCanvasCoords(e);
+      const dx = endPoint.x - startPoint.x;
+      const dy = endPoint.y - startPoint.y;
+      if (Math.sqrt(dx*dx + dy*dy) > 3) {
+        userSegments.push({
+          p1: { x: startPoint.x, y: startPoint.y },
+          p2: { x: endPoint.x, y: endPoint.y }
+        });
+      }
+      isDrawing = false;
+      startPoint = null;
+      currentMouse = null;
+      redrawCanvas();
+    }
+
+    function onMouseLeave() {
+      if (isDrawing) {
+        isDrawing = false;
+        startPoint = null;
+        currentMouse = null;
+        redrawCanvas();
+      }
+    }
+
+    // Оценка точности
+    function pointToSegmentDist(px, py, p1, p2) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const lenSq = dx*dx + dy*dy;
+      if (lenSq === 0) return Math.hypot(px - p1.x, py - p1.y);
+      let t = ((px - p1.x) * dx + (py - p1.y) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const nearX = p1.x + t * dx;
+      const nearY = p1.y + t * dy;
+      return Math.hypot(px - nearX, py - nearY);
+    }
+
+    function distToUserSegments(point) {
+      let minDist = Infinity;
+      for (const seg of userSegments) {
+        const d = pointToSegmentDist(point.x, point.y, seg.p1, seg.p2);
+        if (d < minDist) minDist = d;
+      }
+      return minDist;
+    }
+
+    function evaluateAccuracy() {
+      if (userSegments.length === 0) return 0;
+      const sampleCount = 50;
+      const maxDistance = 30;
+
+      let totalScore = 0;
+      idealSegments.forEach(idealSeg => {
+        let sumDist = 0;
+        for (let i = 0; i <= sampleCount; i++) {
+          const t = i / sampleCount;
+          const px = idealSeg.p1.x + t * (idealSeg.p2.x - idealSeg.p1.x);
+          const py = idealSeg.p1.y + t * (idealSeg.p2.y - idealSeg.p1.y);
+          const dist = distToUserSegments({x: px, y: py});
+          sumDist += Math.min(dist, maxDistance);
+        }
+        const avgDist = sumDist / (sampleCount + 1);
+        const lineScore = Math.max(0, 1 - avgDist / maxDistance);
+        totalScore += lineScore;
+      });
+
+      return Math.round((totalScore / 5) * 100);
+    }
+
+    function showOverlay(type) {
+      if (overlayTimer) clearTimeout(overlayTimer);
+
+      overlayText.classList.remove('lose', 'win');
+      if (type === 'lose') {
+        overlayText.textContent = 'Вас поймали сатанисты за враньё, вы стали их жертвой';
+        overlayText.classList.add('lose');
+      } else if (type === 'win') {
+        overlayText.textContent = 'Вы смогли обмануть их, и ушли живым';
+        overlayText.classList.add('win');
+      }
+      overlay.classList.add('active');
+
+      overlayTimer = setTimeout(() => {
+        overlay.classList.remove('active');
+        if (type === 'lose') {
+          clearCanvas();
+        }
+        overlayTimer = null;
+      }, 2500);
+    }
+
+    function clearCanvas() {
+      userSegments = [];
+      isDrawing = false;
+      startPoint = null;
+      currentMouse = null;
+      redrawCanvas();
+      messageDiv.textContent = 'Внутри красного круга нарисуйте звезду (держите мышь и тяните)';
+    }
+
+    // Пропустить вступление
+    skipBtn.addEventListener('click', () => {
+      introScreen.style.display = 'none';
+      introActive = false;
+      redrawCanvas();
+    });
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('mouseleave', onMouseLeave);
+
+    evaluateBtn.addEventListener('click', () => {
+      if (introActive) return;
+      if (userSegments.length === 0) {
+        messageDiv.textContent = 'Сначала нарисуйте хотя бы одну линию!';
+        return;
+      }
+      const accuracy = evaluateAccuracy();
+      messageDiv.textContent = `Точность: ${accuracy}%`;
+
+      if (accuracy < 50) {
+        messageDiv.textContent += ' — недостаточно!';
+        showOverlay('lose');
+      } else {
+        messageDiv.textContent += ' — отличный результат!';
+        showOverlay('win');
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      if (introActive) return;
+      clearCanvas();
+    });
+
+    redrawCanvas();
+  })();
+</script>
+</body>
+</html>

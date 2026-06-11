@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чёрный челик в замке — Большой лабиринт</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            flex-direction: column;
+            color: #eee;
+        }
+        canvas {
+            border: 4px solid #5a4a3a;
+            box-shadow: 0 0 40px rgba(255, 200, 100, 0.3);
+            background: #1a1a2e;
+            display: block;
+            margin: 20px auto;
+        }
+        .info {
+            text-align: center;
+            font-size: 1.3rem;
+            margin: 10px;
+            display: flex;
+            gap: 30px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 25px;
+            border-radius: 30px;
+        }
+        .message {
+            background: #000000cc;
+            padding: 10px 25px;
+            border-radius: 30px;
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin: 5px 0;
+        }
+        button {
+            background: #c0392b;
+            border: none;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            padding: 12px 28px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 10px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(192,57,43,0.5);
+        }
+        button:hover {
+            background: #e74c3c;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <span id="levelDisplay">Уровень 1</span>
+        <span id="keyDisplay">🔑 Ключей: 0 / 1</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="message" id="messageBox">Собери все ключи и дойди до 🚪!</div>
+    <button id="restartButton">🔄 Новая игра</button>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const levelDisplay = document.getElementById('levelDisplay');
+            const keyDisplay = document.getElementById('keyDisplay');
+            const messageBox = document.getElementById('messageBox');
+            const restartBtn = document.getElementById('restartButton');
+
+            // Большой лабиринт
+            const TILE_SIZE = 40;
+            const COLS = 20;
+            const ROWS = 15;
+            canvas.width = COLS * TILE_SIZE;
+            canvas.height = ROWS * TILE_SIZE;
+
+            const TILE = {
+                WALL: '#',
+                FLOOR: '.',
+                KEY: 'K',
+                DOOR_CLOSED: 'D',
+                DOOR_OPEN: 'O',
+                PLAYER: 'P'
+            };
+
+            // Вручную построенные карты (20x15) с гарантированной достижимостью
+            const levels = [
+                {
+                    // Уровень 1: 1 ключ, простой, но уже большой
+                    map: [
+                        "####################",
+                        "#P.................#",
+                        "#######.#######.####",
+                        "#######.#######.####",
+                        "#######......#..####",
+                        "########.##.##.####",
+                        "#######.....##.####",
+                        "#######.##.##..####",
+                        "#######.##.##..#.##",
+                        "#######.....##....#",
+                        "#########.#######.#",
+                        "#########.......#.#",
+                        "###############.#.#",
+                        "#############K..#D#",
+                        "####################"
+                    ],
+                    keysNeeded: 1
+                },
+                {
+                    // Уровень 2: 2 ключа, больше поворотов
+                    map: [
+                        "####################",
+                        "#P.....#.........##",
+                        "####.#.##.####.##.#",
+                        "####.#.##.####.##.#",
+                        "####.#.....##.....#",
+                        "####.##.##.##.#####",
+                        "####.##.##.##.##.##",
+                        "####.##.....##....#",
+                        "####.###########.##",
+                        "####.............##",
+                        "####.###.#######..#",
+                        "####.###.......##.#",
+                        "####.#########.#..#",
+                        "####...K....#..K.D#",
+                        "###################"
+                    ],
+                    keysNeeded: 2
+                },
+                {
+                    // Уровень 3: 3 ключа, сложные развилки
+                    map: [
+                        "###################",
+                        "#P.....#.....#....#",
+                        "####.#.#.#.#.#.##.#",
+                        "####.#.#.#.#.#.##.#",
+                        "####.#.#.#.#.#....#",
+                        "####.#.#.#.#.######",
+                        "####...#.#.#......#",
+                        "####.##.#.#.#..####",
+                        "####.##.#.#.#..####",
+                        "####.##...#.#.....#",
+                        "####.######.#..##.#",
+                        "####........#..##.#",
+                        "####.########..##.#",
+                        "####...K..#K...K.D#",
+                        "####################"
+                    ],
+                    keysNeeded: 3
+                },
+                {
+                    // Уровень 4: 4 ключа, максимальная сложность
+                    map: [
+                        "####################",
+                        "#P.....#......#....#",
+                        "####.#.#.#.#..#.##.#",
+                        "####.#.#.#.#..#.##.#",
+                        "####.#.#.#.#..#....#",
+                        "####.#.#.#.#..######",
+                        "####...#.#.#.......#",
+                        "####.##.#.#.#...####",
+                        "####.##.#.#.#...####",
+                        "####.##...#.#......#",
+                        "####.######.#.##...#",
+                        "####........#.##...#",
+                        "####.#####.##..##..#",
+                        "####.K.#..K.#K..#KD#",
+                        "####################"
+                    ],
+                    keysNeeded: 4
+                }
+            ];
+
+            let currentLevel = 0;
+            let map = [];
+            let playerPos = { x: 0, y: 0 };
+            let keysCollected = 0;
+            let keysRequired = 0;
+            let doorOpen = false;
+            let gameCompleted = false;
+            // Для анимации
+            let playerMoveTween = null; 
+
+            function loadLevel(levelIndex) {
+                if (levelIndex >= levels.length) {
+                    gameCompleted = true;
+                    messageBox.textContent = '🏆 Ты выбрался из замка! Поздравляю!';
+                    draw();
+                    return;
+                }
+                const levelData = levels[levelIndex];
+                map = levelData.map.map(row => row.split(''));
+                keysRequired = levelData.keysNeeded;
+                keysCollected = 0;
+                doorOpen = false;
+
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (map[row][col] === TILE.PLAYER) {
+                            playerPos = { x: col, y: row };
+                            map[row][col] = TILE.FLOOR;
+                        }
+                    }
+                }
+                updateUI();
+                messageBox.textContent = `Уровень ${levelIndex + 1}: собери ${keysRequired} ключ(а/ей) и дойди до двери!`;
+            }
+
+            function updateUI() {
+                levelDisplay.textContent = `Уровень ${currentLevel + 1}`;
+                keyDisplay.textContent = `🔑 Ключей: ${keysCollected} / ${keysRequired}`;
+            }
+
+            function checkLevelComplete() {
+                if (doorOpen && map[playerPos.y] && map[playerPos.y][playerPos.x] === TILE.DOOR_OPEN) {
+                    currentLevel++;
+                    loadLevel(currentLevel);
+                }
+            }
+
+            function movePlayer(dx, dy) {
+                if (gameCompleted) return;
+                const newX = playerPos.x + dx;
+                const newY = playerPos.y + dy;
+
+                if (newX < 0 || newX >= COLS || newY < 0 || newY >= ROWS) return;
+                const tile = map[newY][newX];
+
+                if (tile === TILE.WALL) return;
+
+                if (tile === TILE.DOOR_CLOSED && !doorOpen) {
+                    messageBox.textContent = '❌ Дверь заперта! Найди все ключи.';
+                    return;
+                }
+
+                if (tile === TILE.KEY) {
+                    keysCollected++;
+                    map[newY][newX] = TILE.FLOOR;
+                    updateUI();
+                    if (keysCollected >= keysRequired) {
+                        openAllDoors();
+                        messageBox.textContent = '🚪 Дверь открыта! Спеши к выходу.';
+                    } else {
+                        messageBox.textContent = `🔑 Ключ подобран! (${keysCollected}/${keysRequired})`;
+                    }
+                }
+
+                playerPos.x = newX;
+                playerPos.y = newY;
+                updateUI();
+                checkLevelComplete();
+            }
+
+            function openAllDoors() {
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (map[row][col] === TILE.DOOR_CLOSED) {
+                            map[row][col] = TILE.DOOR_OPEN;
+                        }
+                    }
+                }
+                doorOpen = true;
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Отрисовка тайлов
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        const x = col * TILE_SIZE;
+                        const y = row * TILE_SIZE;
+                        const tile = map[row][col];
+
+                        // Пол
+                        ctx.fillStyle = '#2e2e3e';
+                        ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                        ctx.strokeStyle = '#4a4a5a';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+
+                        if (tile === TILE.WALL) {
+                            // Стена как каменные блоки
+                            ctx.fillStyle = '#5a5244';
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            ctx.fillStyle = '#4a4034';
+                            for (let i = 0; i < TILE_SIZE; i += 8) {
+                                ctx.fillRect(x + i, y, 6, 6);
+                                ctx.fillRect(x + i + 4, y + 8, 6, 6);
+                            }
+                            // Тень
+                            ctx.fillStyle = '#3a3224';
+                            ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, 3);
+                        } else if (tile === TILE.KEY) {
+                            ctx.font = `${TILE_SIZE * 0.7}px "Segoe UI Emoji"`;
+                            ctx.textAlign = 'center';
+                            ctx.fillText('🔑', x + TILE_SIZE / 2, y + TILE_SIZE / 1.5);
+                        } else if (tile === TILE.DOOR_CLOSED) {
+                            ctx.fillStyle = '#8b5a2b';
+                            ctx.fillRect(x + 5, y + 3, TILE_SIZE - 10, TILE_SIZE - 6);
+                            ctx.fillStyle = '#5c3a1e';
+                            ctx.fillRect(x + 8, y + 6, TILE_SIZE - 16, TILE_SIZE - 12);
+                            ctx.font = `${TILE_SIZE * 0.6}px "Segoe UI Emoji"`;
+                            ctx.textAlign = 'center';
+                            ctx.fillText('🔒', x + TILE_SIZE / 2, y + TILE_SIZE / 1.5);
+                        } else if (tile === TILE.DOOR_OPEN) {
+                            ctx.fillStyle = '#2e8b57';
+                            ctx.fillRect(x + 5, y + 3, TILE_SIZE - 10, TILE_SIZE - 6);
+                            ctx.fillStyle = '#1e6b3e';
+                            ctx.fillRect(x + 8, y + 6, TILE_SIZE - 16, TILE_SIZE - 12);
+                            ctx.font = `${TILE_SIZE * 0.6}px "Segoe UI Emoji"`;
+                            ctx.textAlign = 'center';
+                            ctx.fillText('🚪', x + TILE_SIZE / 2, y + TILE_SIZE / 1.5);
+                        }
+                    }
+                }
+
+                // Игрок (чёрный челик с белыми глазами)
+                const px = playerPos.x * TILE_SIZE + TILE_SIZE / 2;
+                const py = playerPos.y * TILE_SIZE + TILE_SIZE / 2;
+                const radius = TILE_SIZE * 0.35;
+
+                // Тень под персонажем
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath();
+                ctx.ellipse(px, py + radius * 0.8, radius * 0.8, radius * 0.25, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Тело
+                ctx.fillStyle = '#111111';
+                ctx.beginPath();
+                ctx.arc(px, py - radius * 0.1, radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Белые глаза
+                const eyeR = radius * 0.28;
+                const eyeX = radius * 0.35;
+                const eyeY = -radius * 0.15;
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(px - eyeX, py + eyeY, eyeR, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(px + eyeX, py + eyeY, eyeR, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Зрачки
+                ctx.fillStyle = '#111';
+                const pupilR = eyeR * 0.55;
+                ctx.beginPath();
+                ctx.arc(px - eyeX, py + eyeY, pupilR, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(px + eyeX, py + eyeY, pupilR, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Рот (улыбка)
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(px, py + radius * 0.2, radius * 0.2, 0, Math.PI);
+                ctx.stroke();
+
+                // Победный экран
+                if (gameCompleted) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = 'bold 32px "Courier New"';
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ТЫ ВЫБРАЛСЯ ИЗ ЗАМКА!', canvas.width / 2, canvas.height / 2 - 30);
+                    ctx.font = '60px "Segoe UI Emoji"';
+                    ctx.fillText('🏆', canvas.width / 2, canvas.height / 2 + 40);
+                }
+            }
+
+            // Управление
+            window.addEventListener('keydown', (e) => {
+                if (gameCompleted) return;
+                switch (e.key) {
+                    case 'ArrowUp': case 'w': case 'W': movePlayer(0, -1); e.preventDefault(); break;
+                    case 'ArrowDown': case 's': case 'S': movePlayer(0, 1); e.preventDefault(); break;
+                    case 'ArrowLeft': case 'a': case 'A': movePlayer(-1, 0); e.preventDefault(); break;
+                    case 'ArrowRight': case 'd': case 'D': movePlayer(1, 0); e.preventDefault(); break;
+                }
+                draw();
+            });
+
+            restartBtn.addEventListener('click', () => {
+                currentLevel = 0;
+                gameCompleted = false;
+                loadLevel(0);
+                draw();
+            });
+
+            // Проверка достижимости (для отладки, не влияет на игру)
+            function isReachable(startX, startY) {
+                const visited = Array(ROWS).fill().map(() => Array(COLS).fill(false));
+                const queue = [[startX, startY]];
+                visited[startY][startX] = true;
+                while (queue.length) {
+                    const [x, y] = queue.shift();
+                    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+                    for (let [dx, dy] of dirs) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && !visited[ny][nx] && map[ny][nx] !== TILE.WALL) {
+                            visited[ny][nx] = true;
+                            queue.push([nx, ny]);
+                        }
+                    }
+                }
+                // Проверяем, что все ключи и дверь посещены
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if ((map[r][c] === TILE.KEY || map[r][c] === TILE.DOOR_CLOSED || map[r][c] === TILE.DOOR_OPEN) && !visited[r][c]) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // Запуск
+            loadLevel(0);
+            draw();
+            console.log("Лабиринт проверен: все ключи достижимы", isReachable(playerPos.x, playerPos.y));
+        })();
+    </script>
+</body>
+</html>
