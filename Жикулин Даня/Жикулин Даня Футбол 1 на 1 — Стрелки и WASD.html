@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Футбол 1 на 1 — Стрелки и WASD</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a2a1a;
+            background-image: radial-gradient(circle at 20% 30%, #2d4a2d 0%, #0f1a0f 90%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding: 20px;
+        }
+        .game-wrapper {
+            background: #0a1f0a;
+            border-radius: 28px;
+            padding: 20px 20px 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 2px #3a5a3a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        canvas {
+            display: block;
+            border-radius: 16px;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.5), 0 10px 20px rgba(0,0,0,0.4);
+            background: #2e7d32;
+        }
+        .info-panel {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            color: #e0e0c0;
+            font-weight: 600;
+            font-size: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .score {
+            background: #1e3b1e;
+            padding: 8px 20px;
+            border-radius: 20px;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+        .score span {
+            color: #ffd966;
+            font-size: 1.4rem;
+            margin: 0 6px;
+        }
+        .controls {
+            display: flex;
+            gap: 16px;
+            font-size: 0.8rem;
+            color: #b0c0a0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .controls kbd {
+            background: #2a3a2a;
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 2px 0 #0a0f0a;
+        }
+        .btn {
+            background: #3a5a3a;
+            border: none;
+            color: white;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            letter-spacing: 0.03em;
+        }
+        .btn:hover {
+            background: #4e7a4e;
+            transform: scale(1.02);
+        }
+        @media (max-width: 850px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            .game-wrapper {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <canvas id="gameCanvas" width="800" height="500" aria-label="Футбольное поле"></canvas>
+        <div class="info-panel">
+            <div class="score">
+                Вы <span id="playerScore">0</span> : <span id="botScore">0</span> Бот
+            </div>
+            <button class="btn" id="resetBtn">Новая игра</button>
+        </div>
+        <div class="controls">
+            <span><kbd>Стрелки</kbd> нападающий</span>
+            <span><kbd>Пробел</kbd> удар</span>
+            <span><kbd>WASD / ЦФЫВ</kbd> вратарь</span>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const playerScoreSpan = document.getElementById('playerScore');
+            const botScoreSpan = document.getElementById('botScore');
+            const resetBtn = document.getElementById('resetBtn');
+
+            const W = canvas.width;
+            const H = canvas.height;
+
+            // ──────────────────────────────────────
+            // Состояние игры
+            // ──────────────────────────────────────
+            let ball = {
+                x: W / 2,
+                y: H / 2,
+                vx: 0,
+                vy: 0,
+                radius: 10,
+                friction: 0.985
+            };
+
+            // Нападающий игрока (теперь управляется стрелками)
+            let playerAttacker = {
+                x: 150,
+                y: H / 2,
+                radius: 22,
+                speed: 5.5
+            };
+
+            // Вратарь игрока (WASD, левые ворота)
+            let playerGoalie = {
+                x: 45,
+                y: H / 2,
+                width: 18,
+                height: 70,
+                speed: 4.2,
+                minY: 150,
+                maxY: 350,
+                minX: 25,
+                maxX: 70
+            };
+
+            // Нападающий бота
+            let botAttacker = {
+                x: 650,
+                y: H / 2,
+                radius: 22,
+                speed: 3.8,
+            };
+
+            // Вратарь бота (правые ворота)
+            let botGoalie = {
+                x: W - 45,
+                y: H / 2,
+                width: 18,
+                height: 70,
+                speed: 3.0,
+                minY: 150,
+                maxY: 350,
+                minX: W - 70,
+                maxX: W - 25
+            };
+
+            // Счет
+            let playerScore = 0;
+            let botScore = 0;
+
+            // Управление (используем коды клавиш для независимости от раскладки)
+            const keys = {
+                ArrowUp: false,
+                ArrowDown: false,
+                ArrowLeft: false,
+                ArrowRight: false,
+                KeyW: false,
+                KeyA: false,
+                KeyS: false,
+                KeyD: false
+            };
+
+            let gameActive = true;
+            let goalCooldown = 0;
+
+            // ──────────────────────────────────────
+            // Вспомогательные функции
+            // ──────────────────────────────────────
+            function clamp(value, min, max) {
+                return Math.min(max, Math.max(min, value));
+            }
+
+            function distance(x1, y1, x2, y2) {
+                return Math.hypot(x2 - x1, y2 - y1);
+            }
+
+            function resetAfterGoal() {
+                ball.x = W / 2;
+                ball.y = H / 2;
+                ball.vx = 0;
+                ball.vy = 0;
+
+                playerAttacker.x = 150;
+                playerAttacker.y = H / 2;
+                botAttacker.x = 650;
+                botAttacker.y = H / 2;
+                playerGoalie.y = H / 2;
+                botGoalie.y = H / 2;
+
+                goalCooldown = 40;
+                gameActive = true;
+            }
+
+            function handleGoal(scorer) {
+                if (goalCooldown > 0) return;
+
+                if (scorer === 'player') {
+                    playerScore++;
+                    playerScoreSpan.textContent = playerScore;
+                } else if (scorer === 'bot') {
+                    botScore++;
+                    botScoreSpan.textContent = botScore;
+                }
+                gameActive = false;
+                resetAfterGoal();
+            }
+
+            // ──────────────────────────────────────
+            // Обновление
+            // ──────────────────────────────────────
+            function update() {
+                if (goalCooldown > 0) {
+                    goalCooldown--;
+                    if (goalCooldown === 0) gameActive = true;
+                    return;
+                }
+                if (!gameActive) return;
+
+                // ─── Движение нападающего игрока (стрелки) ───
+                let moveX = 0, moveY = 0;
+                if (keys.ArrowUp) moveY -= 1;
+                if (keys.ArrowDown) moveY += 1;
+                if (keys.ArrowLeft) moveX -= 1;
+                if (keys.ArrowRight) moveX += 1;
+                if (moveX !== 0 || moveY !== 0) {
+                    const len = Math.hypot(moveX, moveY);
+                    moveX /= len;
+                    moveY /= len;
+                    playerAttacker.x += moveX * playerAttacker.speed;
+                    playerAttacker.y += moveY * playerAttacker.speed;
+                    playerAttacker.x = clamp(playerAttacker.x, playerAttacker.radius, W - playerAttacker.radius);
+                    playerAttacker.y = clamp(playerAttacker.y, playerAttacker.radius, H - playerAttacker.radius);
+                }
+
+                // ─── Движение вратаря игрока (WASD / ЦФЫВ) ───
+                let goalieMoveX = 0, goalieMoveY = 0;
+                if (keys.KeyW) goalieMoveY -= 1;  // W / Ц
+                if (keys.KeyS) goalieMoveY += 1;  // S / Ы
+                if (keys.KeyA) goalieMoveX -= 1;  // A / Ф
+                if (keys.KeyD) goalieMoveX += 1;  // D / В
+                if (goalieMoveX !== 0 || goalieMoveY !== 0) {
+                    const len = Math.hypot(goalieMoveX, goalieMoveY);
+                    goalieMoveX /= len;
+                    goalieMoveY /= len;
+                    playerGoalie.x += goalieMoveX * playerGoalie.speed;
+                    playerGoalie.y += goalieMoveY * playerGoalie.speed;
+                    playerGoalie.x = clamp(playerGoalie.x, playerGoalie.minX, playerGoalie.maxX);
+                    playerGoalie.y = clamp(playerGoalie.y, playerGoalie.minY, playerGoalie.maxY);
+                }
+
+                // ─── ИИ нападающего бота ───
+                let dxBot = ball.x - botAttacker.x;
+                let dyBot = ball.y - botAttacker.y;
+                let distBotToBall = Math.hypot(dxBot, dyBot);
+                if (distBotToBall > 1) {
+                    let move = Math.min(botAttacker.speed, distBotToBall);
+                    botAttacker.x += (dxBot / distBotToBall) * move;
+                    botAttacker.y += (dyBot / distBotToBall) * move;
+                }
+                botAttacker.x = clamp(botAttacker.x, botAttacker.radius, W - botAttacker.radius);
+                botAttacker.y = clamp(botAttacker.y, botAttacker.radius, H - botAttacker.radius);
+
+                let botKickDistance = botAttacker.radius + ball.radius + 8;
+                if (distance(botAttacker.x, botAttacker.y, ball.x, ball.y) < botKickDistance) {
+                    let targetGoalY = H / 2 + (Math.random() - 0.5) * 120;
+                    let angle = Math.atan2(targetGoalY - ball.y, 0 - ball.x);
+                    let power = 7.5 + Math.random() * 2.5;
+                    ball.vx = Math.cos(angle) * power;
+                    ball.vy = Math.sin(angle) * power;
+                    ball.x += Math.cos(angle) * (botAttacker.radius + ball.radius + 2);
+                    ball.y += Math.sin(angle) * (botAttacker.radius + ball.radius + 2);
+                }
+
+                // ─── ИИ вратаря бота ───
+                if (ball.x > W * 0.55) {
+                    let targetY = clamp(ball.y, botGoalie.minY + botGoalie.height/2, botGoalie.maxY - botGoalie.height/2);
+                    let diff = targetY - botGoalie.y;
+                    let move = Math.sign(diff) * Math.min(Math.abs(diff), botGoalie.speed);
+                    botGoalie.y += move;
+                } else {
+                    let centerY = H / 2;
+                    let diff = centerY - botGoalie.y;
+                    let move = Math.sign(diff) * Math.min(Math.abs(diff), botGoalie.speed * 0.6);
+                    botGoalie.y += move;
+                }
+                botGoalie.y = clamp(botGoalie.y, botGoalie.minY + botGoalie.height/2, botGoalie.maxY - botGoalie.height/2);
+
+                // ─── Физика мяча ───
+                ball.vx *= ball.friction;
+                ball.vy *= ball.friction;
+                ball.x += ball.vx;
+                ball.y += ball.vy;
+
+                // Отскок от верхней и нижней границ
+                if (ball.y - ball.radius < 0) {
+                    ball.y = ball.radius;
+                    ball.vy *= -0.7;
+                } else if (ball.y + ball.radius > H) {
+                    ball.y = H - ball.radius;
+                    ball.vy *= -0.7;
+                }
+
+                // Столкновение с вратарем игрока
+                let closestX = clamp(ball.x, playerGoalie.x - playerGoalie.width/2, playerGoalie.x + playerGoalie.width/2);
+                let closestY = clamp(ball.y, playerGoalie.y - playerGoalie.height/2, playerGoalie.y + playerGoalie.height/2);
+                let distToPlayerGoalie = distance(ball.x, ball.y, closestX, closestY);
+                if (distToPlayerGoalie < ball.radius) {
+                    let angle = Math.atan2(ball.y - playerGoalie.y, ball.x - playerGoalie.x);
+                    let overlap = ball.radius - distToPlayerGoalie;
+                    ball.x += Math.cos(angle) * overlap;
+                    ball.y += Math.sin(angle) * overlap;
+                    let normalX = (ball.x - playerGoalie.x) / (distToPlayerGoalie || 1);
+                    let normalY = (ball.y - playerGoalie.y) / (distToPlayerGoalie || 1);
+                    let dot = ball.vx * normalX + ball.vy * normalY;
+                    ball.vx -= 1.8 * dot * normalX;
+                    ball.vy -= 1.8 * dot * normalY;
+                    ball.vx *= 0.6;
+                    ball.vy *= 0.6;
+                }
+
+                // Столкновение с вратарем бота
+                let closestXBot = clamp(ball.x, botGoalie.x - botGoalie.width/2, botGoalie.x + botGoalie.width/2);
+                let closestYBot = clamp(ball.y, botGoalie.y - botGoalie.height/2, botGoalie.y + botGoalie.height/2);
+                let distToBotGoalie = distance(ball.x, ball.y, closestXBot, closestYBot);
+                if (distToBotGoalie < ball.radius) {
+                    let angle = Math.atan2(ball.y - botGoalie.y, ball.x - botGoalie.x);
+                    let overlap = ball.radius - distToBotGoalie;
+                    ball.x += Math.cos(angle) * overlap;
+                    ball.y += Math.sin(angle) * overlap;
+                    let normalX = (ball.x - botGoalie.x) / (distToBotGoalie || 1);
+                    let normalY = (ball.y - botGoalie.y) / (distToBotGoalie || 1);
+                    let dot = ball.vx * normalX + ball.vy * normalY;
+                    ball.vx -= 1.8 * dot * normalX;
+                    ball.vy -= 1.8 * dot * normalY;
+                    ball.vx *= 0.6;
+                    ball.vy *= 0.6;
+                }
+
+                // Столкновение с нападающим игрока
+                let distToPlayerAtt = distance(ball.x, ball.y, playerAttacker.x, playerAttacker.y);
+                let minDistPlayerAtt = playerAttacker.radius + ball.radius;
+                if (distToPlayerAtt < minDistPlayerAtt) {
+                    let angle = Math.atan2(ball.y - playerAttacker.y, ball.x - playerAttacker.x);
+                    let overlap = minDistPlayerAtt - distToPlayerAtt;
+                    ball.x += Math.cos(angle) * overlap;
+                    ball.y += Math.sin(angle) * overlap;
+                    let normalX = Math.cos(angle);
+                    let normalY = Math.sin(angle);
+                    let dot = ball.vx * normalX + ball.vy * normalY;
+                    ball.vx -= 1.5 * dot * normalX;
+                    ball.vy -= 1.5 * dot * normalY;
+                    ball.vx *= 0.8;
+                    ball.vy *= 0.8;
+                }
+
+                // Столкновение с нападающим бота
+                let distToBotAtt = distance(ball.x, ball.y, botAttacker.x, botAttacker.y);
+                let minDistBotAtt = botAttacker.radius + ball.radius;
+                if (distToBotAtt < minDistBotAtt) {
+                    let angle = Math.atan2(ball.y - botAttacker.y, ball.x - botAttacker.x);
+                    let overlap = minDistBotAtt - distToBotAtt;
+                    ball.x += Math.cos(angle) * overlap;
+                    ball.y += Math.sin(angle) * overlap;
+                    let normalX = Math.cos(angle);
+                    let normalY = Math.sin(angle);
+                    let dot = ball.vx * normalX + ball.vy * normalY;
+                    ball.vx -= 1.5 * dot * normalX;
+                    ball.vy -= 1.5 * dot * normalY;
+                    ball.vx *= 0.8;
+                    ball.vy *= 0.8;
+                }
+
+                // Голы
+                if (ball.x - ball.radius < 0 && ball.y > 150 && ball.y < 350) {
+                    handleGoal('bot');
+                } else if (ball.x + ball.radius > W && ball.y > 150 && ball.y < 350) {
+                    handleGoal('player');
+                }
+
+                if (ball.x - ball.radius < 0 && (ball.y <= 150 || ball.y >= 350)) {
+                    ball.x = ball.radius;
+                    ball.vx *= -0.5;
+                }
+                if (ball.x + ball.radius > W && (ball.y <= 150 || ball.y >= 350)) {
+                    ball.x = W - ball.radius;
+                    ball.vx *= -0.5;
+                }
+            }
+
+            // ──────────────────────────────────────
+            // Отрисовка
+            // ──────────────────────────────────────
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = '#2e7d32';
+                ctx.fillRect(0, 0, W, H);
+
+                // Разметка
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(W / 2, 0);
+                ctx.lineTo(W / 2, H);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(W / 2, H / 2, 60, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeRect(0, 150, 120, 200);
+                ctx.strokeRect(W - 120, 150, 120, 200);
+                ctx.fillStyle = '#ffffff33';
+                ctx.fillRect(0, 190, 10, 120);
+                ctx.fillRect(W - 10, 190, 10, 120);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(0, 190, 10, 120);
+                ctx.strokeRect(W - 10, 190, 10, 120);
+                ctx.globalAlpha = 1.0;
+
+                // Мяч
+                ctx.fillStyle = '#f5f5f5';
+                ctx.shadowColor = '#00000066';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.arc(ball.x - 2, ball.y - 2, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(ball.x + 3, ball.y + 3, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                // Нападающий игрока
+                ctx.fillStyle = '#1976d2';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00000055';
+                ctx.beginPath();
+                ctx.arc(playerAttacker.x, playerAttacker.y, playerAttacker.radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px "Segoe UI"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Я', playerAttacker.x, playerAttacker.y);
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                // Вратарь игрока
+                ctx.fillStyle = '#0d47a1';
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = '#00000044';
+                ctx.fillRect(playerGoalie.x - playerGoalie.width/2, playerGoalie.y - playerGoalie.height/2,
+                    playerGoalie.width, playerGoalie.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px "Segoe UI"';
+                ctx.fillText('ВР', playerGoalie.x, playerGoalie.y);
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                // Нападающий бота
+                ctx.fillStyle = '#d32f2f';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00000055';
+                ctx.beginPath();
+                ctx.arc(botAttacker.x, botAttacker.y, botAttacker.radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px "Segoe UI"';
+                ctx.fillText('Бот', botAttacker.x, botAttacker.y);
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                // Вратарь бота
+                ctx.fillStyle = '#b71c1c';
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = '#00000044';
+                ctx.fillRect(botGoalie.x - botGoalie.width/2, botGoalie.y - botGoalie.height/2,
+                    botGoalie.width, botGoalie.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px "Segoe UI"';
+                ctx.fillText('ВР', botGoalie.x, botGoalie.y);
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                if (goalCooldown > 0) {
+                    ctx.fillStyle = '#ffffffdd';
+                    ctx.font = 'bold 32px "Segoe UI"';
+                    ctx.textAlign = 'center';
+                    if (playerScore > 0 && goalCooldown === 39) ctx.fillText('ГОЛ!', W/2, H/2 - 30);
+                    else if (botScore > 0 && goalCooldown === 39) ctx.fillText('ПРОПУЩЕН...', W/2, H/2 - 30);
+                }
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // ──────────────────────────────────────
+            // Обработчики клавиш (через code)
+            // ──────────────────────────────────────
+            window.addEventListener('keydown', (e) => {
+                const code = e.code;
+                if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' ||
+                    code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') {
+                    e.preventDefault();
+                    keys[code] = true;
+                }
+                if (code === 'Space') {
+                    e.preventDefault();
+                    if (gameActive && goalCooldown <= 0) {
+                        const dist = distance(playerAttacker.x, playerAttacker.y, ball.x, ball.y);
+                        const kickRange = playerAttacker.radius + ball.radius + 15;
+                        if (dist < kickRange) {
+                            let baseAngle = 0;
+                            let randomOffset = (Math.random() - 0.5) * 0.8;
+                            let angle = baseAngle + randomOffset;
+                            let power = 9.5 + Math.random() * 3;
+                            ball.vx = Math.cos(angle) * power;
+                            ball.vy = Math.sin(angle) * power;
+                            ball.x = playerAttacker.x + Math.cos(angle) * (playerAttacker.radius + ball.radius + 2);
+                            ball.y = playerAttacker.y + Math.sin(angle) * (playerAttacker.radius + ball.radius + 2);
+                        }
+                    }
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const code = e.code;
+                if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' ||
+                    code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') {
+                    e.preventDefault();
+                    keys[code] = false;
+                }
+                if (code === 'Space') {
+                    e.preventDefault();
+                }
+            });
+
+            // Кнопка сброса
+            resetBtn.addEventListener('click', () => {
+                playerScore = 0;
+                botScore = 0;
+                playerScoreSpan.textContent = '0';
+                botScoreSpan.textContent = '0';
+                gameActive = true;
+                goalCooldown = 0;
+                ball.x = W / 2;
+                ball.y = H / 2;
+                ball.vx = 0;
+                ball.vy = 0;
+                playerAttacker.x = 150;
+                playerAttacker.y = H / 2;
+                botAttacker.x = 650;
+                botAttacker.y = H / 2;
+                playerGoalie.x = 45;
+                playerGoalie.y = H / 2;
+                botGoalie.x = W - 45;
+                botGoalie.y = H / 2;
+                // Сброс всех клавиш
+                for (let k in keys) keys[k] = false;
+            });
+
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>

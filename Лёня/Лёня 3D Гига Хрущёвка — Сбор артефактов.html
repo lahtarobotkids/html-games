@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Гига Хрущёвка — Сбор артефактов</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            z-index: 10;
+            text-align: center;
+            flex-direction: column;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 20px;
+            z-index: 5;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px black;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="blocker">
+        <p>🏠 Кликни, чтобы войти во двор Гига Хрущёвки</p>
+        <p style="font-size:16px">WASD — двигаться | Мышь — смотреть | ЛКМ — стрелять</p>
+        <p style="font-size:14px">Собирай синие артефакты, уничтожай монстров-мух!</p>
+    </div>
+    <div id="hud">
+        💎 Артефактов собрано: <span id="artifactCount">0</span><br>
+        🪰 Монстров убито: <span id="monsterCount">0</span>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ===== СЦЕНА =====
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 30, 80);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(8, 2.5, 12);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Освещение
+        scene.add(new THREE.AmbientLight(0x404060));
+        const sun = new THREE.DirectionalLight(0xffeedd, 0.9);
+        sun.position.set(15, 20, 10);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 1024;
+        sun.shadow.mapSize.height = 1024;
+        scene.add(sun);
+
+        // ===== ПОЛ (двор) =====
+        const groundGeo = new THREE.PlaneGeometry(40, 40);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a6741, roughness: 0.9 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Асфальтовые дорожки
+        const asphaltGeo = new THREE.PlaneGeometry(4, 40);
+        const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+        const asphalt = new THREE.Mesh(asphaltGeo, asphaltMat);
+        asphalt.rotation.x = -Math.PI / 2;
+        asphalt.position.set(6, 0.01, 0);
+        asphalt.receiveShadow = true;
+        scene.add(asphalt);
+        const asphalt2 = new THREE.Mesh(new THREE.PlaneGeometry(40, 4), asphaltMat);
+        asphalt2.rotation.x = -Math.PI / 2;
+        asphalt2.position.set(0, 0.01, -6);
+        asphalt2.receiveShadow = true;
+        scene.add(asphalt2);
+
+        // ===== ГИГА ХРУЩЁВКА (большой кирпичный 5-этажный дом) =====
+        const buildingGroup = new THREE.Group();
+
+        // Основание дома
+        const baseGeo = new THREE.BoxGeometry(12, 14, 8);
+        const brickMat = new THREE.MeshStandardMaterial({ color: 0xcc8855, roughness: 0.7 });
+        const base = new THREE.Mesh(baseGeo, brickMat);
+        base.position.y = 7;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        buildingGroup.add(base);
+
+        // Кирпичная текстура (имитация рядов)
+        for (let floor = 0; floor < 5; floor++) {
+            for (let w = 0; w < 4; w++) {
+                const windowGeo = new THREE.BoxGeometry(1.2, 1.6, 0.2);
+                const windowMat = new THREE.MeshStandardMaterial({ color: 0xaaddff, roughness: 0.3, emissive: new THREE.Color(0x112233) });
+                const windowMesh = new THREE.Mesh(windowGeo, windowMat);
+                windowMesh.position.set(-4 + w * 2.5, 2.5 + floor * 2.7, 4.01);
+                windowMesh.castShadow = true;
+                buildingGroup.add(windowMesh);
+            }
+            for (let w = 0; w < 4; w++) {
+                const windowGeo = new THREE.BoxGeometry(1.2, 1.6, 0.2);
+                const windowMat = new THREE.MeshStandardMaterial({ color: 0xaaddff, roughness: 0.3, emissive: new THREE.Color(0x112233) });
+                const windowMesh = new THREE.Mesh(windowGeo, windowMat);
+                windowMesh.position.set(-4 + w * 2.5, 2.5 + floor * 2.7, -3.99);
+                buildingGroup.add(windowMesh);
+            }
+        }
+
+        // Крыша
+        const roofGeo = new THREE.ConeGeometry(7, 2.5, 4);
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b0000, roughness: 0.5 });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = 14.7;
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        buildingGroup.add(roof);
+
+        // Подъезды
+        const doorGeo = new THREE.BoxGeometry(2, 3, 0.3);
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.6 });
+        const door1 = new THREE.Mesh(doorGeo, doorMat);
+        door1.position.set(-2.5, 1.5, 4.01);
+        buildingGroup.add(door1);
+        const door2 = new THREE.Mesh(doorGeo, doorMat);
+        door2.position.set(2.5, 1.5, 4.01);
+        buildingGroup.add(door2);
+        const door3 = new THREE.Mesh(doorGeo, doorMat);
+        door3.position.set(-2.5, 1.5, -3.99);
+        buildingGroup.add(door3);
+
+        buildingGroup.position.set(0, 0, -8);
+        scene.add(buildingGroup);
+
+        // Лавочки и деревья во дворе
+        const treeTrunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 3, 8);
+        const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        const treeTopGeo = new THREE.SphereGeometry(1.2, 8, 8);
+        const treeTopMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+
+        for (let i = 0; i < 6; i++) {
+            const treeTrunk = new THREE.Mesh(treeTrunkGeo, treeTrunkMat);
+            treeTrunk.position.set((Math.random() - 0.5) * 16, 1.5, (Math.random() - 0.5) * 16);
+            treeTrunk.castShadow = true;
+            scene.add(treeTrunk);
+            const treeTop = new THREE.Mesh(treeTopGeo, treeTopMat);
+            treeTop.position.set(treeTrunk.position.x, 3.5, treeTrunk.position.z);
+            treeTop.castShadow = true;
+            scene.add(treeTop);
+        }
+
+        // ===== АРТЕФАКТЫ =====
+        const artifacts = [];
+        const artifactGeo = new THREE.OctahedronGeometry(0.4);
+        const artifactMat = new THREE.MeshStandardMaterial({ 
+            color: 0x00aaff, 
+            roughness: 0.2, 
+            emissive: new THREE.Color(0x003366),
+            metalness: 0.8
+        });
+
+        function spawnArtifact() {
+            const art = new THREE.Mesh(artifactGeo, artifactMat);
+            art.position.set(
+                (Math.random() - 0.5) * 32,
+                1.0,
+                (Math.random() - 0.5) * 32
+            );
+            art.castShadow = true;
+            art.userData = { bobPhase: Math.random() * Math.PI * 2 };
+            scene.add(art);
+            artifacts.push(art);
+        }
+
+        // Спавним 8 артефактов
+        for (let i = 0; i < 8; i++) spawnArtifact();
+
+        // ===== МОНСТРЫ-МУХИ =====
+        const monsters = [];
+        
+        function createMonster() {
+            const group = new THREE.Group();
+            
+            // Тело
+            const bodyGeo = new THREE.SphereGeometry(0.35, 12, 12);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.3 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.castShadow = true;
+            group.add(body);
+
+            // Крылья
+            const wingGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.06, 6);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const leftWing = new THREE.Mesh(wingGeo, wingMat);
+            leftWing.position.set(-0.35, 0.05, 0);
+            leftWing.rotation.z = Math.PI/2;
+            group.add(leftWing);
+            const rightWing = new THREE.Mesh(wingGeo, wingMat);
+            rightWing.position.set(0.35, 0.05, 0);
+            rightWing.rotation.z = Math.PI/2;
+            group.add(rightWing);
+
+            // Кольцо
+            const ringGeo = new THREE.TorusGeometry(0.5, 0.07, 8, 16);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0xd63031, roughness: 0.3, emissive: new THREE.Color(0x220000) });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI/2;
+            group.add(ring);
+
+            // Глаза
+            const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff4444, emissive: new THREE.Color(0x220000) });
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.15, 0.15, -0.3);
+            group.add(leftEye);
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.15, 0.15, -0.3);
+            group.add(rightEye);
+
+            // Позиция
+            group.position.set(
+                (Math.random() - 0.5) * 28,
+                1.0 + Math.random() * 3,
+                (Math.random() - 0.5) * 28
+            );
+            scene.add(group);
+            monsters.push({
+                mesh: group,
+                health: 3,
+                speed: 0.02 + Math.random() * 0.03,
+                leftWing: leftWing,
+                rightWing: rightWing,
+                wingTime: Math.random() * Math.PI * 2
+            });
+        }
+
+        // Спавним 5 монстров
+        for (let i = 0; i < 5; i++) createMonster();
+
+        // ===== ИГРОК =====
+        let yaw = 0, pitch = 0;
+        const moveState = { forward: false, backward: false, left: false, right: false };
+        const playerSpeed = 0.12;
+        let artifactsCollected = 0;
+        let monstersKilled = 0;
+
+        // Оружие
+        const gunGroup = new THREE.Group();
+        const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.3), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        gunBody.position.set(0.15, -0.15, -0.4);
+        gunGroup.add(gunBody);
+        const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), new THREE.MeshStandardMaterial({ color: 0x666666 }));
+        gunBarrel.rotation.x = Math.PI/2;
+        gunBarrel.position.set(0.15, -0.22, -0.65);
+        gunGroup.add(gunBarrel);
+        camera.add(gunGroup);
+        scene.add(camera);
+
+        // Пули
+        const bullets = [];
+        const bulletGeo = new THREE.SphereGeometry(0.07, 6, 6);
+        const bulletMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: new THREE.Color(0x331100) });
+
+        function shoot() {
+            if (document.pointerLockElement !== renderer.domElement) return;
+            const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+            bullet.position.copy(camera.position);
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+            bullet.userData = { direction: dir, speed: 1.0, life: 60 };
+            scene.add(bullet);
+            bullets.push(bullet);
+        }
+
+        // Захват указателя
+        const blocker = document.getElementById('blocker');
+        blocker.addEventListener('click', () => renderer.domElement.requestPointerLock());
+        document.addEventListener('pointerlockchange', () => {
+            blocker.style.display = document.pointerLockElement === renderer.domElement ? 'none' : 'flex';
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === renderer.domElement) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.forward = true; break;
+                case 'KeyS': moveState.backward = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.forward = false; break;
+                case 'KeyS': moveState.backward = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+            }
+        });
+        window.addEventListener('click', () => { if (document.pointerLockElement) shoot(); });
+
+        function clamp(pos) {
+            const lim = 18;
+            pos.x = Math.max(-lim, Math.min(lim, pos.x));
+            pos.z = Math.max(-lim, Math.min(lim, pos.z));
+            return pos;
+        }
+
+        // ===== ИГРОВОЙ ЦИКЛ =====
+        const artifactDisplay = document.getElementById('artifactCount');
+        const monsterDisplay = document.getElementById('monsterCount');
+        let lastTime = performance.now();
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+            const delta = Math.min(0.1, (now - lastTime) / 1000);
+            lastTime = now;
+
+            // Движение игрока
+            if (document.pointerLockElement === renderer.domElement) {
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                forward.y = 0; forward.normalize();
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                right.y = 0; right.normalize();
+                const move = new THREE.Vector3();
+                if (moveState.forward) move.add(forward);
+                if (moveState.backward) move.sub(forward);
+                if (moveState.left) move.sub(right);
+                if (moveState.right) move.add(right);
+                if (move.length() > 0) {
+                    move.normalize().multiplyScalar(playerSpeed);
+                    camera.position.add(move);
+                    camera.position.copy(clamp(camera.position));
+                }
+            }
+
+            // Поворот камеры
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = yaw;
+            camera.rotation.x = pitch;
+
+            // Анимация артефактов (парят и вращаются)
+            artifacts.forEach(art => {
+                art.rotation.y += 0.02;
+                art.rotation.x += 0.01;
+                art.userData.bobPhase += 0.03;
+                art.position.y = 1.0 + Math.sin(art.userData.bobPhase) * 0.3;
+                
+                // Сбор артефакта при касании
+                if (art.position.distanceTo(camera.position) < 1.5) {
+                    scene.remove(art);
+                    const index = artifacts.indexOf(art);
+                    if (index > -1) artifacts.splice(index, 1);
+                    artifactsCollected++;
+                    artifactDisplay.textContent = artifactsCollected;
+                    // Спавним новый артефакт
+                    spawnArtifact();
+                    // И нового монстра
+                    if (monsters.length < 8) createMonster();
+                }
+            });
+
+            // Поведение монстров
+            monsters.forEach(mon => {
+                const mpos = mon.mesh.position;
+                const ppos = camera.position;
+                
+                // Лететь к игроку
+                const toPlayer = new THREE.Vector3().subVectors(ppos, mpos).normalize();
+                mpos.add(toPlayer.clone().multiplyScalar(mon.speed));
+                
+                // Смотреть на игрока
+                mon.mesh.lookAt(ppos.x, mpos.y, ppos.z);
+                
+                // Анимация крыльев
+                mon.wingTime += delta * 8;
+                const flap = Math.sin(mon.wingTime) * 0.3;
+                mon.leftWing.rotation.z = Math.PI/2 + flap;
+                mon.rightWing.rotation.z = Math.PI/2 - flap;
+                
+                // Ограничение по арене
+                mpos.x = Math.max(-17, Math.min(17, mpos.x));
+                mpos.z = Math.max(-17, Math.min(17, mpos.z));
+                mpos.y = Math.max(0.8, Math.min(4, mpos.y));
+            });
+
+            // Движение пуль и попадания
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.position.add(b.userData.direction.clone().multiplyScalar(b.userData.speed));
+                b.userData.life--;
+                
+                let hit = false;
+                // Попадание в монстров
+                for (let j = monsters.length - 1; j >= 0; j--) {
+                    const mon = monsters[j];
+                    if (b.position.distanceTo(mon.mesh.position) < 0.9) {
+                        mon.health--;
+                        if (mon.health <= 0) {
+                            scene.remove(mon.mesh);
+                            monsters.splice(j, 1);
+                            monstersKilled++;
+                            monsterDisplay.textContent = monstersKilled;
+                            // Спавним нового монстра через паузу
+                            setTimeout(() => { if (monsters.length < 6) createMonster(); }, 3000);
+                        }
+                        hit = true;
+                        break;
+                    }
+                }
+                
+                if (hit || b.userData.life <= 0 || b.position.y < 0) {
+                    scene.remove(b);
+                    bullets.splice(i, 1);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate(performance.now());
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

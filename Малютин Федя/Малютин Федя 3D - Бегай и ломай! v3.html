@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D - Бегай и ломай! v3 🐒</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: #000; }
+
+        #ui-controls {
+            position: absolute;
+            bottom: 18px;
+            left: 18px;
+            color: white;
+            background: rgba(0,0,0,0.72);
+            padding: 10px 18px;
+            border-radius: 12px;
+            pointer-events: none;
+            font-size: 13px;
+            line-height: 1.8;
+            z-index: 10;
+        }
+
+        #stats {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(0,0,0,0.78);
+            border-radius: 16px;
+            padding: 14px 20px;
+            pointer-events: none;
+            z-index: 10;
+            font-size: 16px;
+            color: white;
+            line-height: 2;
+        }
+        .stat-row { display: flex; gap: 10px; justify-content: space-between; }
+        .stat-val  { font-weight: bold; color: #FFD700; min-width: 32px; text-align: right; }
+
+        #boxes-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(0,0,0,0.72);
+            border-radius: 12px;
+            padding: 10px 16px;
+            pointer-events: none;
+            z-index: 10;
+            color: #ccc;
+            font-size: 15px;
+            text-align: center;
+        }
+        #wave-num { font-size: 12px; color: #aaa; margin-top: 2px; }
+
+        #popup {
+            position: absolute;
+            top: 36%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 30px;
+            font-weight: bold;
+            text-shadow: 1px 1px 6px rgba(0,0,0,0.9);
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0;
+            white-space: nowrap;
+            transition: none;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 24px; height: 24px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.85);
+            border-radius: 1px;
+        }
+        #crosshair::before { width: 2px; height: 24px; left: 11px; top: 0; }
+        #crosshair::after  { width: 24px; height: 2px; top: 11px; left: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-controls">
+        <b>↑↓</b> движение &nbsp;|&nbsp; <b>←→</b> поворот<br>
+        <b>Пробел</b> прыжок &nbsp;|&nbsp; <b>ЛКМ</b> ломать
+    </div>
+
+    <div id="stats">
+        <div class="stat-row">🏆 Очки    <span class="stat-val" id="score">0</span></div>
+        <div class="stat-row">❤️ Жизни  <span class="stat-val" id="lives">3</span></div>
+        <div class="stat-row">🍖 Еда     <span class="stat-val" id="food">0</span></div>
+        <div class="stat-row">⚔️ Оружие <span class="stat-val" id="weapons">0</span></div>
+        <div class="stat-row">📦 Сломано <span class="stat-val" id="broken">0</span></div>
+    </div>
+
+    <div id="boxes-panel">
+        📦 Осталось: <b id="remaining">30</b>
+        <div id="wave-num">Волна 1</div>
+    </div>
+
+    <div id="popup"></div>
+    <div id="crosshair"></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.157.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ===== СЦЕНА =====
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 35, 85);
+
+        const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Освещение
+        scene.add(new THREE.AmbientLight(0x608070, 1.8));
+
+        const sun = new THREE.DirectionalLight(0xfff5d6, 1.3);
+        sun.position.set(20, 35, 10);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(1024, 1024);
+        sun.shadow.camera.near = 1;
+        sun.shadow.camera.far = 90;
+        sun.shadow.camera.left = sun.shadow.camera.bottom = -30;
+        sun.shadow.camera.right = sun.shadow.camera.top = 30;
+        scene.add(sun);
+
+        // Пол
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(90, 90),
+            new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.9 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // ===== СТАТИСТИКА =====
+        const st = { score: 0, lives: 3, food: 0, weapons: 0, broken: 0, wave: 1 };
+
+        const elScore     = document.getElementById('score');
+        const elLives     = document.getElementById('lives');
+        const elFood      = document.getElementById('food');
+        const elWeapons   = document.getElementById('weapons');
+        const elBroken    = document.getElementById('broken');
+        const elRemaining = document.getElementById('remaining');
+        const elWave      = document.getElementById('wave-num');
+
+        function updateUI() {
+            elScore.textContent   = st.score;
+            elLives.textContent   = st.lives;
+            elFood.textContent    = st.food;
+            elWeapons.textContent = st.weapons;
+            elBroken.textContent  = st.broken;
+        }
+
+        // ===== ПОПАПЫ =====
+        const popupEl = document.getElementById('popup');
+        let popupTO = null;
+
+        function showPopup(text, color = '#FFD700') {
+            popupEl.style.transition = 'none';
+            popupEl.style.opacity = '1';
+            popupEl.style.top = '36%';
+            popupEl.style.color = color;
+            popupEl.textContent = text;
+            void popupEl.offsetHeight;
+            popupEl.style.transition = 'top 1.0s ease-out, opacity 0.6s ease-in 0.5s';
+            popupEl.style.top = '22%';
+            if (popupTO) clearTimeout(popupTO);
+            popupTO = setTimeout(() => { popupEl.style.opacity = '0'; }, 500);
+        }
+
+        // ===== ТИПЫ ЯЩИКОВ =====
+        const BOX_TYPES = [
+            { id: 'normal', w: 50, pts: 10,  hb: 0, fb: 0, wb: 0,
+              emoji: '💥', msg: '+10 очков!',        color: '#ffffff' },
+            { id: 'heart',  w: 15, pts: 25,  hb: 1, fb: 0, wb: 0,
+              emoji: '❤️', msg: '+1 жизнь! +25',    color: '#FF6B6B' },
+            { id: 'food',   w: 15, pts: 15,  hb: 0, fb: 1, wb: 0,
+              emoji: '🍖', msg: 'Еда! +15 очков',   color: '#90EE90' },
+            { id: 'weapon', w: 15, pts: 20,  hb: 0, fb: 0, wb: 1,
+              emoji: '⚔️', msg: 'Оружие! +20',      color: '#87CEEB' },
+            { id: 'gold',   w:  5, pts: 50,  hb: 0, fb: 0, wb: 0,
+              emoji: '🌟', msg: 'ДЖЕКПОТ! +50!',    color: '#FFD700' },
+        ];
+        const TOTAL_W = BOX_TYPES.reduce((s, t) => s + t.w, 0);
+
+        function pickType() {
+            let r = Math.random() * TOTAL_W;
+            for (const t of BOX_TYPES) { r -= t.w; if (r <= 0) return t; }
+            return BOX_TYPES[0];
+        }
+
+        // ===== ЯЩИКИ =====
+        const breakables = [];
+
+        const BOX_MAT    = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.7 });
+        const STRIPE_MAT = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.4 });
+        const GOLD_MAT   = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.3, metalness: 0.6 });
+        const GOLD_STR   = new THREE.MeshStandardMaterial({ color: 0xC8900A, roughness: 0.3, metalness: 0.4 });
+
+        function createBox(x, z) {
+            const btype = pickType();
+            const g = new THREE.Group();
+            const isGold = btype.id === 'gold';
+
+            const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), isGold ? GOLD_MAT : BOX_MAT);
+            box.castShadow = box.receiveShadow = true;
+            g.add(box);
+
+            const strGeo = new THREE.BoxGeometry(0.95, 0.11, 0.11);
+            const sMat = isGold ? GOLD_STR : STRIPE_MAT;
+            [-0.34, 0.34].forEach(y => {
+                const s = new THREE.Mesh(strGeo, sMat);
+                s.position.set(0, y, 0);
+                s.castShadow = true;
+                g.add(s);
+            });
+
+            if (isGold) {
+                const gem = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 8, 8),
+                    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xFFD700, emissiveIntensity: 2 })
+                );
+                gem.position.y = 0.56;
+                g.add(gem);
+            }
+
+            g.position.set(x, 0.45, z);
+            scene.add(g);
+            breakables.push({ mesh: g, position: new THREE.Vector3(x, 0.45, z), btype });
+            elRemaining.textContent = breakables.length;
+        }
+
+        function spawnWave(count) {
+            for (let i = 0; i < count; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const d = 5 + Math.random() * 22;
+                createBox(Math.cos(a) * d, Math.sin(a) * d);
+            }
+        }
+
+        spawnWave(30);
+
+        // ===== ЧАСТИЦЫ =====
+        function spawnParticles(pos, isGold) {
+            const mat = new THREE.MeshStandardMaterial({ color: isGold ? 0xFFD700 : 0x8B4513 });
+            for (let i = 0; i < 20; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.11), mat.clone());
+                p.position.copy(pos);
+                p.castShadow = true;
+                scene.add(p);
+
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 9,
+                    2 + Math.random() * 7,
+                    (Math.random() - 0.5) * 9
+                );
+                let life = 1.0;
+
+                (function anim() {
+                    if (life <= 0) { scene.remove(p); return; }
+                    life -= 0.035;
+                    vel.y -= 20 * 0.016;
+                    p.position.addScaledVector(vel, 0.016);
+                    p.rotation.x += 0.12; p.rotation.z += 0.08;
+                    p.material.opacity = life;
+                    p.material.transparent = true;
+                    requestAnimationFrame(anim);
+                })();
+            }
+        }
+
+        // ===== РАЗРУШЕНИЕ =====
+        function smash(target) {
+            scene.remove(target.mesh);
+            const idx = breakables.indexOf(target);
+            if (idx !== -1) breakables.splice(idx, 1);
+
+            const bt = target.btype;
+            spawnParticles(target.position, bt.id === 'gold');
+
+            st.score   += bt.pts;
+            st.broken  += 1;
+            st.lives   += bt.hb;
+            st.food    += bt.fb;
+            st.weapons += bt.wb;
+            updateUI();
+
+            showPopup(`${bt.emoji} ${bt.msg}`, bt.color);
+            elRemaining.textContent = breakables.length;
+
+            if (breakables.length === 0) {
+                st.wave++;
+                elWave.textContent = `Волна ${st.wave}`;
+                const nextCount = 20 + st.wave * 3;
+                spawnWave(Math.min(nextCount, 50));
+                setTimeout(() => showPopup(`🎉 Волна ${st.wave}! Новые ящики!`, '#FFD700'), 400);
+            }
+        }
+
+        // ===== ПЕРСОНАЖ — ОБЕЗЬЯНОЧЕЛОВЕК (КВАДРОБЕР) 🐒 =====
+        const player = new THREE.Group();
+        scene.add(player);
+
+        // Материалы персонажа
+        const M_SKIN  = new THREE.MeshStandardMaterial({ color: 0xffccbc }); // кожа лица
+        const M_FUR   = new THREE.MeshStandardMaterial({ color: 0xb5651d }); // шерсть
+        const M_SHIRT = new THREE.MeshStandardMaterial({ color: 0x2196F3 }); // синяя футболка
+        const M_PANTS = new THREE.MeshStandardMaterial({ color: 0x1565C0 }); // тёмные штаны
+        const M_EAR   = new THREE.MeshStandardMaterial({ color: 0xff9999 }); // внутренность уха
+        const M_MUZZLE = new THREE.MeshStandardMaterial({ color: 0xe8c090 }); // морда
+        const M_DARK  = new THREE.MeshStandardMaterial({ color: 0x111111 }); // зрачки/ноздри
+        const M_WHITE = new THREE.MeshStandardMaterial({ color: 0xffffff }); // белки глаз
+        const M_NOSE  = new THREE.MeshStandardMaterial({ color: 0x7a4a3a }); // ноздри
+
+        // ---- ГОЛОВА (впереди, немного приподнята) ----
+        const headG = new THREE.Group();
+        headG.position.set(0, 0.78, 0.52);
+        player.add(headG);
+
+        // Основная голова — кожа
+        const HEAD = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 14), M_SKIN.clone());
+        HEAD.castShadow = true;
+        headG.add(HEAD);
+
+        // Обезьяньи уши (торчат по бокам)
+        [-1, 1].forEach(s => {
+            const eo = new THREE.Mesh(new THREE.SphereGeometry(0.105, 9, 9), M_FUR.clone());
+            eo.position.set(s * 0.28, 0.10, -0.04);
+            headG.add(eo);
+            const ei = new THREE.Mesh(new THREE.SphereGeometry(0.065, 9, 9), M_EAR.clone());
+            ei.position.set(s * 0.30, 0.10, 0.06);
+            headG.add(ei);
+        });
+
+        // Выступающая морда (приматья)
+        const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.145, 10, 10), M_MUZZLE.clone());
+        muzzle.scale.set(1.05, 0.68, 0.82);
+        muzzle.position.set(0, -0.07, 0.22);
+        headG.add(muzzle);
+
+        // Ноздри
+        [-0.048, 0.048].forEach(nx => {
+            const n = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), M_NOSE.clone());
+            n.position.set(nx, -0.11, 0.34);
+            headG.add(n);
+        });
+
+        // Глаза (белки + зрачки)
+        [-1, 1].forEach(s => {
+            const ew = new THREE.Mesh(new THREE.SphereGeometry(0.052, 8, 8), M_WHITE.clone());
+            ew.position.set(s * 0.115, 0.055, 0.220);
+            headG.add(ew);
+            const ep = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 8), M_DARK.clone());
+            ep.position.set(s * 0.117, 0.055, 0.265);
+            headG.add(ep);
+        });
+
+        // ---- ТОРС (наклонён вперёд — квадробер!) ----
+        const torsoMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.46, 0.28, 0.60),
+            M_SHIRT.clone()
+        );
+        torsoMesh.position.set(0, 0.60, 0.10);
+        torsoMesh.rotation.x = -0.48; // наклон вперёд ~27°
+        torsoMesh.castShadow = true;
+        player.add(torsoMesh);
+
+        // ---- ПЕРЕДНИЕ ЛАПЫ (руки, тянутся к земле) ----
+        // Плечо → локтевая группа → предплечье → лапа
+        function buildArm(side) {
+            const UA = 0.30, FA = 0.27; // длины плеча и предплечья
+
+            const shoulderG = new THREE.Group();
+            shoulderG.position.set(side * 0.22, 0.61, 0.24);
+            shoulderG.rotation.x = 0.82; // наклон вперёд-вниз к земле
+
+            const upperArm = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.075, 0.068, UA, 7),
+                M_SHIRT.clone()
+            );
+            upperArm.position.y = -UA / 2;
+            upperArm.castShadow = true;
+            shoulderG.add(upperArm);
+
+            const elbowG = new THREE.Group();
+            elbowG.position.y = -UA;
+
+            const forearm = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.063, 0.058, FA, 7),
+                M_FUR.clone()
+            );
+            forearm.position.y = -FA / 2;
+            forearm.castShadow = true;
+            elbowG.add(forearm);
+
+            // Лапа
+            const paw = new THREE.Mesh(
+                new THREE.BoxGeometry(0.16, 0.07, 0.22),
+                M_FUR.clone()
+            );
+            paw.position.set(0, -FA - 0.015, 0.06);
+            elbowG.add(paw);
+
+            shoulderG.add(elbowG);
+            player.add(shoulderG);
+            return { shoulder: shoulderG, elbow: elbowG };
+        }
+
+        const armL = buildArm(-1); // левая передняя лапа
+        const armR = buildArm(1);  // правая передняя лапа
+
+        // ---- ЗАДНИЕ НОГИ ----
+        // Бедро → коленная группа → голень → ступня
+        function buildLeg(side) {
+            const TH = 0.24, SH = 0.24; // бедро и голень
+
+            const hipG = new THREE.Group();
+            hipG.position.set(side * 0.14, 0.43, -0.13);
+            hipG.rotation.x = 0.09; // лёгкий наклон
+
+            const thigh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.095, 0.085, TH, 7),
+                M_PANTS.clone()
+            );
+            thigh.position.y = -TH / 2;
+            thigh.castShadow = true;
+            hipG.add(thigh);
+
+            const kneeG = new THREE.Group();
+            kneeG.position.y = -TH;
+
+            const shin = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.080, 0.072, SH, 7),
+                M_PANTS.clone()
+            );
+            shin.position.y = -SH / 2;
+            shin.castShadow = true;
+            kneeG.add(shin);
+
+            // Ступня-лапа
+            const foot = new THREE.Mesh(
+                new THREE.BoxGeometry(0.14, 0.07, 0.24),
+                M_FUR.clone()
+            );
+            foot.position.set(0, -SH - 0.015, 0.07);
+            kneeG.add(foot);
+
+            hipG.add(kneeG);
+            player.add(hipG);
+            return { hip: hipG, knee: kneeG };
+        }
+
+        const legL = buildLeg(-1); // левая задняя нога
+        const legR = buildLeg(1);  // правая задняя нога
+
+        // ---- ХВОСТ (цепочка сегментов, изгибается кверху и назад) ----
+        const M_TAIL = new THREE.MeshStandardMaterial({ color: 0xa0522d });
+        const TAIL_COUNT = 7;
+        const tailSegs = [];
+
+        const tailPivot = new THREE.Group();
+        tailPivot.position.set(0, 0.41, -0.24);
+        tailPivot.rotation.x = Math.PI * 0.60; // ~108° — хвост уходит назад и чуть вверх
+        player.add(tailPivot);
+
+        let prevNode = tailPivot;
+        for (let i = 0; i < TAIL_COUNT; i++) {
+            const seg = new THREE.Group();
+            const r = 0.068 - i * 0.008;
+            const len = 0.16;
+            const segM = new THREE.Mesh(
+                new THREE.CylinderGeometry(Math.max(r, 0.025), Math.max(r - 0.008, 0.02), len, 7),
+                M_TAIL.clone()
+            );
+            segM.position.y = -len / 2;
+            seg.add(segM);
+            seg.position.y = -len;
+            seg.rotation.x = 0.10 + i * 0.07; // изгиб нарастает к кончику
+            prevNode.add(seg);
+            prevNode = seg;
+            tailSegs.push(seg);
+        }
+
+        // ===== УПРАВЛЕНИЕ =====
+        const keys = {};
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
+                e.preventDefault();
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        let attackPending = false;
+        document.addEventListener('mousedown', e => {
+            if (e.button === 0) attackPending = true;
+        });
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // ===== ФИЗИКА =====
+        const SPEED = 5, TURN = 3;
+        let vy = 0;
+        const GRAVITY = -16, JUMP_V = 7.5;
+        let physY = 0; // физическая высота (отдельно от прыжков при ходьбе)
+
+        // ===== АТАКА (XZ-плоскость, без Y — баг исправлен) =====
+        let strikeAnim = 0;
+
+        function tryAttack() {
+            if (!attackPending) return;
+            attackPending = false;
+
+            const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
+            fwd.y = 0;
+            if (fwd.lengthSq() < 0.0001) return;
+            fwd.normalize();
+
+            let best = null;
+            let bestDist = 3.8;
+
+            for (const b of breakables) {
+                const dx = b.position.x - player.position.x;
+                const dz = b.position.z - player.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist > bestDist) continue;
+
+                const toXZ = new THREE.Vector3(dx, 0, dz);
+                if (toXZ.lengthSq() < 0.0001) { best = b; bestDist = dist; continue; }
+                toXZ.normalize();
+                const angle = fwd.angleTo(toXZ);
+                if (angle < 1.25) { best = b; bestDist = dist; }
+            }
+
+            if (best) {
+                smash(best);
+                strikeAnim = 1.0;
+            } else {
+                strikeAnim = 0.4; // промах — лёгкий взмах
+            }
+        }
+
+        // ===== ИГРОВОЙ ЦИКЛ =====
+        const clock = new THREE.Clock();
+        let walkT = 0; // накопленное время для анимации
+
+        function loop() {
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            // Поворот
+            if (keys['ArrowLeft'])  player.rotation.y += TURN * dt;
+            if (keys['ArrowRight']) player.rotation.y -= TURN * dt;
+
+            // Движение
+            let mz = 0;
+            if (keys['ArrowUp'])   mz =  1;
+            if (keys['ArrowDown']) mz = -1;
+
+            const isMoving = mz !== 0;
+            if (isMoving) {
+                walkT += dt;
+                const d = new THREE.Vector3(0, 0, mz).applyQuaternion(player.quaternion);
+                player.position.x += d.x * SPEED * dt;
+                player.position.z += d.z * SPEED * dt;
+            }
+
+            // Физика прыжка (пробел)
+            if (keys[' '] && physY <= 0.02) vy = JUMP_V;
+            vy += GRAVITY * dt;
+            physY = Math.max(0, physY + vy * dt);
+            if (physY <= 0) vy = 0;
+
+            // ~~~~ АНИМАЦИЯ КВАДРОБЕРА ~~~~
+            // 1. Прыжки при ходьбе — тело ритмично подпрыгивает (~2.2 раза/сек)
+            const hopPhase = walkT * 13.5;
+            const isOnGround = physY <= 0.02;
+            const walkHop = (isMoving && isOnGround)
+                ? Math.max(0, Math.sin(hopPhase)) * 0.17   // высота подпрыжки
+                : 0;
+
+            // Итоговая высота = физика + прыжки ходьбы
+            player.position.y = physY + walkHop;
+
+            // 2. Диагональный галоп: FL+RR, FR+RL — синхронно с прыжком
+            // gait = 1 → FL-лапа и RR-нога идут вперёд
+            // gait = -1 → FR-лапа и RL-нога идут вперёд
+            const gait = Math.sin(hopPhase);
+            const ga = isMoving ? 1.0 : 0.0; // коэффициент анимации
+
+            // Передние лапы (руки) — от плеча
+            // Base = 0.82 (наклон к земле). Больше = вперёд-вниз, меньше = назад-вверх
+            const baseArm = 0.82;
+            armL.shoulder.rotation.x = baseArm + gait * 0.52 * ga;  // FL
+            armR.shoulder.rotation.x = baseArm - gait * 0.52 * ga;  // FR (противофаза)
+
+            // Локоть гнётся когда лапа вынесена вперёд (подхват)
+            armL.elbow.rotation.x = Math.max(0, gait)  * 0.28 * ga;  // FL локоть
+            armR.elbow.rotation.x = Math.max(0, -gait) * 0.28 * ga;  // FR локоть
+
+            // Задние ноги — диагональ: FL+RR вместе, FR+RL вместе
+            const baseHip = 0.09;
+            legR.hip.rotation.x = baseHip + gait * 0.46 * ga;   // RR (диагональ с FL)
+            legL.hip.rotation.x = baseHip - gait * 0.46 * ga;   // RL (диагональ с FR)
+
+            // Колено гнётся при выносе ноги вперёд
+            legR.knee.rotation.x = Math.max(0, gait)  * 0.38 * ga;  // RR колено
+            legL.knee.rotation.x = Math.max(0, -gait) * 0.38 * ga;  // RL колено
+
+            // 3. Лёгкое боковое покачивание тела при беге
+            player.rotation.z = isMoving ? Math.sin(hopPhase) * 0.04 : 0;
+
+            // 4. Голова чуть покачивается вверх-вниз (свободная шея)
+            const headBob = isMoving ? Math.sin(hopPhase * 0.5) * 0.03 : 0;
+            headG.position.y = 0.78 + headBob + (physY > 0 ? 0 : walkHop * 0.3);
+
+            // 5. Хвост виляет — нарастает к кончику
+            const tailPhase = walkT * 5.5;
+            tailSegs.forEach((seg, i) => {
+                const amp = 0.18 * ((i + 1) / TAIL_COUNT);
+                seg.rotation.z = Math.sin(tailPhase + i * 0.7) * amp;
+                seg.rotation.y = Math.sin(tailPhase * 0.8 + i * 0.5) * amp * 0.4;
+            });
+
+            // 6. Анимация удара — правая передняя лапа резко взлетает и бьёт
+            if (strikeAnim > 0) {
+                strikeAnim -= dt * 5.5;
+                const s = Math.max(0, strikeAnim);
+                // Лапа поднимается вверх-назад и бьёт вперёд
+                armR.shoulder.rotation.x = baseArm - gait * 0.52 * ga
+                    - Math.PI * 0.55 * s;
+            }
+
+            // Камера сзади персонажа (чуть выше для квадробера)
+            const a = player.rotation.y;
+            camera.position.set(
+                player.position.x - Math.sin(a) * 6.5,
+                player.position.y + 3.5,
+                player.position.z - Math.cos(a) * 6.5
+            );
+            camera.lookAt(player.position.x, player.position.y + 0.7, player.position.z);
+
+            tryAttack();
+            renderer.render(scene, camera);
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+
+        console.log('🐒 Квадробер готов! Управление: стрелки, пробел, ЛКМ.');
+    </script>
+</body>
+</html>

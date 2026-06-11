@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Супер Сложные Цифры - Hard Connect Numbers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #000000, #1a0033, #000000);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.5), 0 0 100px rgba(0, 0, 255, 0.3);
+            text-align: center;
+            max-width: 700px;
+            width: 100%;
+            border: 3px solid #ff0000;
+            animation: borderPulse 2s infinite;
+        }
+
+        @keyframes borderPulse {
+            0%, 100% { border-color: #ff0000; box-shadow: 0 0 50px rgba(255, 0, 0, 0.5); }
+            25% { border-color: #ff6600; box-shadow: 0 0 50px rgba(255, 102, 0, 0.5); }
+            50% { border-color: #ff0000; box-shadow: 0 0 50px rgba(255, 0, 0, 0.5); }
+            75% { border-color: #ff0066; box-shadow: 0 0 50px rgba(255, 0, 102, 0.5); }
+        }
+
+        h1 {
+            color: #ff0000;
+            margin-bottom: 15px;
+            font-size: 2.5em;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
+            animation: textGlow 1s infinite;
+        }
+
+        @keyframes textGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(255, 0, 0, 0.8); }
+            50% { text-shadow: 0 0 40px rgba(255, 0, 0, 1), 0 0 80px rgba(255, 0, 0, 0.6); }
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .score, .moves, .level, .combo, .time, .lives {
+            background: linear-gradient(135deg, #ff0000, #cc0000);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.3);
+        }
+
+        canvas {
+            border: 3px solid #ff0000;
+            border-radius: 10px;
+            background: #000011;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3);
+            display: block;
+            margin: 0 auto;
+            cursor: pointer;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: linear-gradient(135deg, #ff0000, #cc0000);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
+            font-weight: bold;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 0, 0, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .game-over-message {
+            color: #ff0000;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-top: 10px;
+            min-height: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>💀 СЛОЖНЫЕ ЦИФРЫ 💀</h1>
+        
+        <div class="game-info">
+            <div class="score">⭐ <span id="score">0</span></div>
+            <div class="moves">👆 <span id="moves">0</span></div>
+            <div class="level">📊 <span id="level">1</span></div>
+            <div class="combo">🔥 <span id="combo">0</span></div>
+            <div class="time">⏱️ <span id="time">60</span>с</div>
+            <div class="lives">❤️ <span id="lives">3</span></div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="game-over-message" id="gameOverMessage"></div>
+        
+        <div class="controls">
+            <button onclick="startGame()">🔄 Новая игра</button>
+            <button onclick="shuffleBoard()">🔀 Перемешать (-500)</button>
+            <button onclick="undoMove()">↩️ Отмена</button>
+            <button onclick="useHint()">💡 Подсказка (-300)</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const COLS = 10;
+        const ROWS = 10;
+        const CELL_SIZE = 55;
+        const PADDING = 3;
+        
+        canvas.width = COLS * CELL_SIZE;
+        canvas.height = ROWS * CELL_SIZE;
+        
+        const NUMBER_COLORS = [
+            '#ff0000', '#ff6600', '#ffcc00', '#00ff00',
+            '#00ccff', '#0066ff', '#cc00ff', '#ff00ff',
+            '#ff3366', '#00ffcc', '#ff9900', '#6600ff'
+        ];
+        
+        let board = [];
+        let selectedBlock = null;
+        let score = 0;
+        let moves = 0;
+        let combo = 0;
+        let level = 1;
+        let lives = 3;
+        let timeLeft = 60;
+        let gameOver = false;
+        let moveHistory = [];
+        let lockedCells = [];
+        let bombs = [];
+        let gameLoop = null;
+        let timeLoop = null;
+        
+        const scoreElement = document.getElementById('score');
+        const movesElement = document.getElementById('moves');
+        const levelElement = document.getElementById('level');
+        const comboElement = document.getElementById('combo');
+        const timeElement = document.getElementById('time');
+        const livesElement = document.getElementById('lives');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+        
+        function initBoard() {
+            board = [];
+            lockedCells = [];
+            bombs = [];
+            
+            const numbers = [];
+            const totalPairs = 40; // 80 клеток из 100
+            
+            for (let i = 0; i < totalPairs; i++) {
+                const num = Math.floor(Math.random() * 10);
+                numbers.push(num, num);
+            }
+            
+            for (let i = numbers.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+            }
+            
+            let numIndex = 0;
+            for (let row = 0; row < ROWS; row++) {
+                board[row] = [];
+                for (let col = 0; col < COLS; col++) {
+                    if (numIndex < numbers.length) {
+                        board[row][col] = {
+                            value: numbers[numIndex++],
+                            row: row,
+                            col: col,
+                            locked: false,
+                            bomb: false
+                        };
+                    } else {
+                        board[row][col] = {
+                            value: -1,
+                            row: row,
+                            col: col,
+                            locked: false,
+                            bomb: false
+                        };
+                    }
+                }
+            }
+            
+            // Добавляем заблокированные клетки
+            for (let i = 0; i < 5 + level * 2; i++) {
+                const row = Math.floor(Math.random() * ROWS);
+                const col = Math.floor(Math.random() * COLS);
+                if (board[row][col].value !== -1) {
+                    board[row][col].locked = true;
+                    lockedCells.push({row, col});
+                }
+            }
+            
+            // Добавляем бомбы
+            for (let i = 0; i < 2 + level; i++) {
+                const row = Math.floor(Math.random() * ROWS);
+                const col = Math.floor(Math.random() * COLS);
+                if (board[row][col].value !== -1 && !board[row][col].locked) {
+                    board[row][col].bomb = true;
+                    bombs.push({row, col, timer: 5 + Math.floor(Math.random() * 10)});
+                }
+            }
+        }
+        
+        function findPath(startRow, startCol, endRow, endCol) {
+            if (startRow === endRow && startCol === endCol) return null;
+            if (board[startRow][startCol].value !== board[endRow][endCol].value) return null;
+            if (board[startRow][startCol].locked || board[endRow][endCol].locked) return null;
+            
+            // Прямой путь
+            if (startRow === endRow) {
+                let minCol = Math.min(startCol, endCol);
+                let maxCol = Math.max(startCol, endCol);
+                let canConnect = true;
+                
+                for (let col = minCol + 1; col < maxCol; col++) {
+                    if (board[startRow][col].value !== -1 || board[startRow][col].locked) {
+                        canConnect = false;
+                        break;
+                    }
+                }
+                
+                if (canConnect) return [{row: startRow, col: startCol}, {row: endRow, col: endCol}];
+            }
+            
+            if (startCol === endCol) {
+                let minRow = Math.min(startRow, endRow);
+                let maxRow = Math.max(startRow, endRow);
+                let canConnect = true;
+                
+                for (let row = minRow + 1; row < maxRow; row++) {
+                    if (board[row][startCol].value !== -1 || board[row][startCol].locked) {
+                        canConnect = false;
+                        break;
+                    }
+                }
+                
+                if (canConnect) return [{row: startRow, col: startCol}, {row: endRow, col: endCol}];
+            }
+            
+            // Один поворот
+            if (board[startRow][endCol].value === -1 && !board[startRow][endCol].locked) {
+                let canConnectH = true;
+                let minCol = Math.min(startCol, endCol);
+                let maxCol = Math.max(startCol, endCol);
+                
+                for (let col = minCol + 1; col < maxCol; col++) {
+                    if (board[startRow][col].value !== -1 || board[startRow][col].locked) {
+                        canConnectH = false;
+                        break;
+                    }
+                }
+                
+                let canConnectV = true;
+                let minRow = Math.min(startRow, endRow);
+                let maxRow = Math.max(startRow, endRow);
+                
+                for (let row = minRow + 1; row < maxRow; row++) {
+                    if (board[row][endCol].value !== -1 || board[row][endCol].locked) {
+                        canConnectV = false;
+                        break;
+                    }
+                }
+                
+                if (canConnectH && canConnectV) {
+                    return [
+                        {row: startRow, col: startCol},
+                        {row: startRow, col: endCol},
+                        {row: endRow, col: endCol}
+                    ];
+                }
+            }
+            
+            if (board[endRow][startCol].value === -1 && !board[endRow][startCol].locked) {
+                let canConnectV = true;
+                let minRow = Math.min(startRow, endRow);
+                let maxRow = Math.max(startRow, endRow);
+                
+                for (let row = minRow + 1; row < maxRow; row++) {
+                    if (board[row][startCol].value !== -1 || board[row][startCol].locked) {
+                        canConnectV = false;
+                        break;
+                    }
+                }
+                
+                let canConnectH = true;
+                let minCol = Math.min(startCol, endCol);
+                let maxCol = Math.max(startCol, endCol);
+                
+                for (let col = minCol + 1; col < maxCol; col++) {
+                    if (board[endRow][col].value !== -1 || board[endRow][col].locked) {
+                        canConnectH = false;
+                        break;
+                    }
+                }
+                
+                if (canConnectV && canConnectH) {
+                    return [
+                        {row: startRow, col: startCol},
+                        {row: endRow, col: startCol},
+                        {row: endRow, col: endCol}
+                    ];
+                }
+            }
+            
+            // Два поворота
+            for (let row = 0; row < ROWS; row++) {
+                if (row !== startRow && row !== endRow && 
+                    board[row][startCol].value === -1 && !board[row][startCol].locked && 
+                    board[row][endCol].value === -1 && !board[row][endCol].locked) {
+                    
+                    let canConnectV1 = true;
+                    let minRow1 = Math.min(startRow, row);
+                    let maxRow1 = Math.max(startRow, row);
+                    for (let r = minRow1 + 1; r < maxRow1; r++) {
+                        if (board[r][startCol].value !== -1 || board[r][startCol].locked) {
+                            canConnectV1 = false;
+                            break;
+                        }
+                    }
+                    
+                    let canConnectH = true;
+                    let minCol = Math.min(startCol, endCol);
+                    let maxCol = Math.max(startCol, endCol);
+                    for (let c = minCol + 1; c < maxCol; c++) {
+                        if (board[row][c].value !== -1 || board[row][c].locked) {
+                            canConnectH = false;
+                            break;
+                        }
+                    }
+                    
+                    let canConnectV2 = true;
+                    let minRow2 = Math.min(row, endRow);
+                    let maxRow2 = Math.max(row, endRow);
+                    for (let r = minRow2 + 1; r < maxRow2; r++) {
+                        if (board[r][endCol].value !== -1 || board[r][endCol].locked) {
+                            canConnectV2 = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canConnectV1 && canConnectH && canConnectV2) {
+                        return [
+                            {row: startRow, col: startCol},
+                            {row: row, col: startCol},
+                            {row: row, col: endCol},
+                            {row: endRow, col: endCol}
+                        ];
+                    }
+                }
+            }
+            
+            for (let col = 0; col < COLS; col++) {
+                if (col !== startCol && col !== endCol && 
+                    board[startRow][col].value === -1 && !board[startRow][col].locked && 
+                    board[endRow][col].value === -1 && !board[endRow][col].locked) {
+                    
+                    let canConnectH1 = true;
+                    let minCol1 = Math.min(startCol, col);
+                    let maxCol1 = Math.max(startCol, col);
+                    for (let c = minCol1 + 1; c < maxCol1; c++) {
+                        if (board[startRow][c].value !== -1 || board[startRow][c].locked) {
+                            canConnectH1 = false;
+                            break;
+                        }
+                    }
+                    
+                    let canConnectV = true;
+                    let minRow = Math.min(startRow, endRow);
+                    let maxRow = Math.max(startRow, endRow);
+                    for (let r = minRow + 1; r < maxRow; r++) {
+                        if (board[r][col].value !== -1 || board[r][col].locked) {
+                            canConnectV = false;
+                            break;
+                        }
+                    }
+                    
+                    let canConnectH2 = true;
+                    let minCol2 = Math.min(col, endCol);
+                    let maxCol2 = Math.max(col, endCol);
+                    for (let c = minCol2 + 1; c < maxCol2; c++) {
+                        if (board[endRow][c].value !== -1 || board[endRow][c].locked) {
+                            canConnectH2 = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canConnectH1 && canConnectV && canConnectH2) {
+                        return [
+                            {row: startRow, col: startCol},
+                            {row: startRow, col: col},
+                            {row: endRow, col: col},
+                            {row: endRow, col: endCol}
+                        ];
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        function tryConnect(row1, col1, row2, col2) {
+            if (board[row1][col1].bomb || board[row2][col2].bomb) {
+                explodeBomb(row1, col1);
+                return false;
+            }
+            
+            const path = findPath(row1, col1, row2, col2);
+            
+            if (path) {
+                moveHistory.push({
+                    block1: {row: row1, col: col1, value: board[row1][col1].value},
+                    block2: {row: row2, col: col2, value: board[row2][col2].value}
+                });
+                
+                board[row1][col1].value = -1;
+                board[row2][col2].value = -1;
+                
+                combo++;
+                let pointsEarned = 100 * combo * level;
+                score += pointsEarned;
+                moves++;
+                timeLeft += 3; // Бонус времени
+                
+                scoreElement.textContent = score;
+                movesElement.textContent = moves;
+                comboElement.textContent = combo;
+                
+                if (score >= level * 2000) {
+                    level++;
+                    levelElement.textContent = level;
+                    timeLeft = Math.min(90, timeLeft + 15);
+                    showMessage(`💀 Уровень ${level}! Сложность повышена!`, '#ff0000');
+                    initBoard();
+                }
+                
+                setTimeout(() => {
+                    if (isEmpty()) {
+                        gameWin();
+                    } else if (!hasMoves()) {
+                        shuffleBoard();
+                    }
+                }, 300);
+                
+                return true;
+            }
+            
+            return false;
+        }
+        
+        function explodeBomb(row, col) {
+            board[row][col].value = -1;
+            board[row][col].bomb = false;
+            lives--;
+            livesElement.textContent = lives;
+            combo = 0;
+            comboElement.textContent = combo;
+            
+            showMessage('💣 БОМБА! -1 жизнь!', '#ff0000');
+            
+            if (lives <= 0) {
+                gameOver = true;
+                clearInterval(gameLoop);
+                clearInterval(timeLoop);
+                gameOverMessage.textContent = `💀 ИГРА ОКОНЧЕНА! Счет: ${score}`;
+            }
+        }
+        
+        function updateBombs() {
+            bombs = bombs.filter(bomb => {
+                bomb.timer--;
+                if (bomb.timer <= 0 && board[bomb.row][bomb.col].bomb) {
+                    explodeBomb(bomb.row, bomb.col);
+                    return false;
+                }
+                return board[bomb.row][bomb.col].bomb;
+            });
+        }
+        
+        function showMessage(text, color) {
+            gameOverMessage.textContent = text;
+            gameOverMessage.style.color = color;
+            setTimeout(() => {
+                if (!gameOver) gameOverMessage.textContent = '';
+            }, 2000);
+        }
+        
+        function hasMoves() {
+            for (let row1 = 0; row1 < ROWS; row1++) {
+                for (let col1 = 0; col1 < COLS; col1++) {
+                    if (board[row1][col1].value === -1 || board[row1][col1].locked) continue;
+                    
+                    for (let row2 = 0; row2 < ROWS; row2++) {
+                        for (let col2 = 0; col2 < COLS; col2++) {
+                            if (row1 === row2 && col1 === col2) continue;
+                            if (board[row2][col2].value === -1 || board[row2][col2].locked) continue;
+                            
+                            if (board[row1][col1].value === board[row2][col2].value) {
+                                if (findPath(row1, col1, row2, col2)) return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        
+        function isEmpty() {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (board[row][col].value !== -1 && !board[row][col].locked) return false;
+                }
+            }
+            return true;
+        }
+        
+        function gameWin() {
+            gameOver = true;
+            clearInterval(gameLoop);
+            clearInterval(timeLoop);
+            gameOverMessage.textContent = `🎊 ПОБЕДА! Счет: ${score} | Уровень: ${level}`;
+            gameOverMessage.style.color = '#ffd700';
+        }
+        
+        function shuffleBoard() {
+            if (gameOver) return;
+            
+            score -= 500;
+            scoreElement.textContent = score;
+            combo = 0;
+            comboElement.textContent = combo;
+            
+            let blocks = [];
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (board[row][col].value !== -1 && !board[row][col].locked) {
+                        blocks.push({
+                            value: board[row][col].value,
+                            bomb: board[row][col].bomb
+                        });
+                    }
+                }
+            }
+            
+            for (let i = blocks.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+            }
+            
+            let index = 0;
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (board[row][col].value !== -1 && !board[row][col].locked) {
+                        board[row][col].value = blocks[index].value;
+                        board[row][col].bomb = blocks[index].bomb;
+                        index++;
+                    }
+                }
+            }
+            
+            if (!hasMoves() && !isEmpty()) {
+                shuffleBoard();
+            }
+            
+            showMessage('🔀 Перемешано! -500 очков', '#ff6600');
+            draw();
+        }
+        
+        function useHint() {
+            if (gameOver || score < 300) return;
+            
+            score -= 300;
+            scoreElement.textContent = score;
+            
+            for (let row1 = 0; row1 < ROWS; row1++) {
+                for (let col1 = 0; col1 < COLS; col1++) {
+                    if (board[row1][col1].value === -1 || board[row1][col1].locked) continue;
+                    
+                    for (let row2 = 0; row2 < ROWS; row2++) {
+                        for (let col2 = 0; col2 < COLS; col2++) {
+                            if (row1 === row2 && col1 === col2) continue;
+                            if (board[row2][col2].value === -1 || board[row2][col2].locked) continue;
+                            
+                            if (board[row1][col1].value === board[row2][col2].value) {
+                                const path = findPath(row1, col1, row2, col2);
+                                if (path) {
+                                    selectedBlock = {row: row1, col: col1};
+                                    showMessage(`💡 Подсказка: ${board[row1][col1].value}!`, '#ffff00');
+                                    draw();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        function undoMove() {
+            if (gameOver || moveHistory.length === 0) return;
+            
+            const lastMove = moveHistory.pop();
+            board[lastMove.block1.row][lastMove.block1.col].value = lastMove.block1.value;
+            board[lastMove.block2.row][lastMove.block2.col].value = lastMove.block2.value;
+            
+            combo = Math.max(0, combo - 1);
+            score = Math.max(0, score - 100 * (combo + 1));
+            moves = Math.max(0, moves - 1);
+            
+            scoreElement.textContent = score;
+            movesElement.textContent = moves;
+            comboElement.textContent = combo;
+            
+            draw();
+        }
+        
+        function startGame() {
+            score = 0;
+            moves = 0;
+            combo = 0;
+            level = 1;
+            lives = 3;
+            timeLeft = 60;
+            gameOver = false;
+            selectedBlock = null;
+            moveHistory = [];
+            
+            scoreElement.textContent = score;
+            movesElement.textContent = moves;
+            comboElement.textContent = combo;
+            levelElement.textContent = level;
+            livesElement.textContent = lives;
+            timeElement.textContent = timeLeft;
+            gameOverMessage.textContent = '';
+            
+            initBoard();
+            
+            if (gameLoop) clearInterval(gameLoop);
+            if (timeLoop) clearInterval(timeLoop);
+            
+            gameLoop = setInterval(() => {
+                if (!gameOver) {
+                    updateBombs();
+                    draw();
+                }
+            }, 1000);
+            
+            timeLoop = setInterval(() => {
+                if (!gameOver) {
+                    timeLeft--;
+                    timeElement.textContent = timeLeft;
+                    if (timeLeft <= 0) {
+                        lives--;
+                        livesElement.textContent = lives;
+                        timeLeft = 30;
+                        showMessage('⏰ Время вышло! -1 жизнь!', '#ff0000');
+                        if (lives <= 0) {
+                            gameOver = true;
+                            clearInterval(gameLoop);
+                            clearInterval(timeLoop);
+                            gameOverMessage.textContent = `💀 ИГРА ОКОНЧЕНА! Счет: ${score}`;
+                        }
+                    }
+                }
+            }, 1000);
+            
+            draw();
+        }
+        
+        canvas.addEventListener('click', (e) => {
+            if (gameOver) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const col = Math.floor(x / CELL_SIZE);
+            const row = Math.floor(y / CELL_SIZE);
+            
+            if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+            if (board[row][col].value === -1 || board[row][col].locked) return;
+            
+            if (selectedBlock === null) {
+                selectedBlock = {row, col};
+            } else if (selectedBlock.row === row && selectedBlock.col === col) {
+                selectedBlock = null;
+            } else {
+                if (tryConnect(selectedBlock.row, selectedBlock.col, row, col)) {
+                    selectedBlock = null;
+                    draw();
+                } else {
+                    showMessage('❌ Нет пути!', '#ff0000');
+                    selectedBlock = {row, col};
+                }
+            }
+            
+            draw();
+        });
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000011';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Сетка
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.1)';
+            ctx.lineWidth = 1;
+            for (let row = 0; row <= ROWS; row++) {
+                ctx.beginPath();
+                ctx.moveTo(0, row * CELL_SIZE);
+                ctx.lineTo(canvas.width, row * CELL_SIZE);
+                ctx.stroke();
+            }
+            for (let col = 0; col <= COLS; col++) {
+                ctx.beginPath();
+                ctx.moveTo(col * CELL_SIZE, 0);
+                ctx.lineTo(col * CELL_SIZE, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Блоки
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const block = board[row][col];
+                    const x = col * CELL_SIZE + PADDING;
+                    const y = row * CELL_SIZE + PADDING;
+                    const size = CELL_SIZE - PADDING * 2;
+                    
+                    if (block.value === -1) continue;
+                    
+                    // Бомба
+                    if (block.bomb) {
+                        const bombGradient = ctx.createRadialGradient(x + size/2, y + size/2, size/4, x + size/2, y + size/2, size/2);
+                        bombGradient.addColorStop(0, '#ff0000');
+                        bombGradient.addColorStop(1, '#660000');
+                        ctx.fillStyle = bombGradient;
+                        ctx.fillRect(x, y, size, size);
+                        
+                        ctx.strokeStyle = '#ff0000';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(x, y, size, size);
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.font = 'bold 20px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('💣', x + size/2, y + size/2);
+                        continue;
+                    }
+                    
+                    // Заблокированные клетки
+                    if (block.locked) {
+                        ctx.fillStyle = '#333333';
+                        ctx.fillRect(x, y, size, size);
+                        ctx.strokeStyle = '#666666';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(x, y, size, size);
+                        ctx.fillStyle = '#666666';
+                        ctx.font = 'bold 20px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('🔒', x + size/2, y + size/2);
+                        continue;
+                    }
+                    
+                    // Тень
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(x + 2, y + 2, size, size);
+                    
+                    // Блок
+                    const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
+                    const color = NUMBER_COLORS[block.value];
+                    gradient.addColorStop(0, color);
+                    gradient.addColorStop(1, '#000000');
+                    ctx.fillStyle = gradient;
+                    
+                    const radius = 5;
+                    ctx.beginPath();
+                    ctx.moveTo(x + radius, y);
+                    ctx.lineTo(x + size - radius, y);
+                    ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
+                    ctx.lineTo(x + size, y + size - radius);
+                    ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+                    ctx.lineTo(x + radius, y + size);
+                    ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
+                    ctx.lineTo(x, y + radius);
+                    ctx.quadraticCurveTo(x, y, x + radius, y);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    
+                    // Цифра
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 22px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.fillText(block.value, x + size/2, y + size/2);
+                    ctx.shadowBlur = 0;
+                    
+                    // Подсветка выбранного
+                    if (selectedBlock && selectedBlock.row === row && selectedBlock.col === col) {
+                        ctx.strokeStyle = '#ffd700';
+                        ctx.lineWidth = 3;
+                        ctx.shadowColor = '#ffd700';
+                        ctx.shadowBlur = 15;
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                    
+                    // Подсветка возможных пар
+                    if (selectedBlock && 
+                        !(selectedBlock.row === row && selectedBlock.col === col) &&
+                        board[selectedBlock.row][selectedBlock.col].value === block.value &&
+                        !block.locked && !block.bomb) {
+                        
+                        const path = findPath(selectedBlock.row, selectedBlock.col, row, col);
+                        if (path) {
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                            ctx.beginPath();
+                            ctx.moveTo(x + radius, y);
+                            ctx.lineTo(x + size - radius, y);
+                            ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
+                            ctx.lineTo(x + size, y + size - radius);
+                            ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+                            ctx.lineTo(x + radius, y + size);
+                            ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
+                            ctx.lineTo(x, y + radius);
+                            ctx.quadraticCurveTo(x, y, x + radius, y);
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+                    }
+                }
+            }
+        }
+        
+        startGame();
+    </script>
+</body>
+</html>

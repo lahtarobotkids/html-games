@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Охота на Олегов - Candy Shooter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bff6b, #ff6bff);
+            background-size: 400% 400%;
+            animation: crazyBg 4s ease infinite;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        @keyframes crazyBg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .ui-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid #ff6600;
+            border-radius: 20px;
+            padding: 10px 25px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(255, 102, 0, 0.3);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .ui-label {
+            font-size: 0.9em;
+            color: #ff6600;
+            font-weight: bold;
+        }
+
+        .ui-value {
+            font-size: 2em;
+            color: #333;
+            font-weight: bold;
+        }
+
+        #message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.5em;
+            font-weight: bold;
+            z-index: 100;
+            pointer-events: none;
+            text-align: center;
+            text-shadow: 3px 3px 0 #ff6600, -3px -3px 0 #ff0066;
+            color: #ffdd00;
+        }
+
+        #combo-text {
+            position: fixed;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            font-weight: bold;
+            z-index: 100;
+            pointer-events: none;
+            color: #ff0066;
+            text-shadow: 0 0 20px rgba(255, 0, 102, 0.8);
+            animation: comboPop 0.5s ease-out;
+        }
+
+        @keyframes comboPop {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            50% { transform: translate(-50%, -50%) scale(1.5); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 1em;
+            z-index: 100;
+            pointer-events: none;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 25px;
+            border-radius: 25px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div class="ui-card">
+            <div class="ui-label">🍬 КОНФЕТЫ</div>
+            <div class="ui-value" id="candy-display">0</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">💀 ОЛЕГОВ УБИТО</div>
+            <div class="ui-value" id="kills-display">0</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">🔥 КОМБО</div>
+            <div class="ui-value" id="combo-display">x1</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">⭐ УРОВЕНЬ</div>
+            <div class="ui-value" id="level-display">1</div>
+        </div>
+    </div>
+    
+    <div id="message"></div>
+    <div id="combo-text"></div>
+    
+    <div id="controls">
+        🎯 ПРИЦЕЛЬСЯ МЫШКОЙ | 🔫 ЛКМ - СТРЕЛЯЙ | R - ПЕРЕЗАРЯДКА | 🎯 УБЕЙ ВСЕХ ОЛЕГОВ ИЛЬИЧЕЙ!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Игрок (АК-47)
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height - 150,
+            ammo: 30,
+            maxAmmo: 90,
+            reloading: false,
+            reloadTimer: 0,
+            combo: 0,
+            maxCombo: 0,
+            candy: 0,
+            kills: 0,
+            level: 1,
+            shootCooldown: 0
+        };
+        
+        // Олеги Ильичи
+        let olegs = [];
+        let bullets = [];
+        let candies = [];
+        let particles = [];
+        let powerups = [];
+        
+        // Состояние
+        let gameOver = false;
+        let mouseX = canvas.width / 2;
+        let mouseY = canvas.height / 2;
+        let shooting = false;
+        let messageTimer = 0;
+        let comboTextTimer = 0;
+        let spawnTimer = 0;
+        let difficultyTimer = 0;
+        
+        // Фразы Олегов
+        const olegPhrases = [
+            'Я ОЛЕГ!', 'ИЛЬИЧ!', 'ДАЙ ДЕНЕГ!', 'ГДЕ КОНФЕТЫ?',
+            'Я НЕ ДАМ!', 'ОЙ!', 'БОЛЬНО!', 'ЗАЧЕМ?',
+            'АААА!', 'КОНФЕТЫ МОИ!', 'НЕ СТРЕЛЯЙ!', 'ПОЖАЛУЙСТА!'
+        ];
+        
+        // Имена Олегов
+        const olegNames = [
+            'Олег', 'Олежа', 'Олежек', 'Олежка',
+            'Олежик', 'Олежонок', 'Олегуша', 'Олежара',
+            'Ильич', 'Ильюша', 'Ильичок', 'ОлегИльич'
+        ];
+        
+        // Создание Олега
+        function spawnOleg() {
+            const name = olegNames[Math.floor(Math.random() * olegNames.length)];
+            const phrase = olegPhrases[Math.floor(Math.random() * olegPhrases.length)];
+            
+            const oleg = {
+                x: Math.random() * (canvas.width - 200) + 100,
+                y: -100 - Math.random() * 300,
+                width: 60 + Math.random() * 30,
+                height: 80 + Math.random() * 30,
+                speed: 1 + Math.random() * 3 + player.level * 0.5,
+                health: 2 + Math.floor(Math.random() * 3) + player.level,
+                maxHealth: 3 + player.level,
+                name: name,
+                phrase: phrase,
+                color: `hsl(${Math.random() * 60 + 10}, 80%, ${50 + Math.random() * 30}%)`,
+                candyChance: 0.3 + Math.random() * 0.4,
+                wobble: Math.random() * Math.PI * 2,
+                wobbleSpeed: 0.02 + Math.random() * 0.05,
+                hat: Math.random() > 0.5,
+                glasses: Math.random() > 0.6,
+                mustache: Math.random() > 0.3,
+                screaming: false,
+                escapeX: 0,
+                escapeY: 0
+            };
+            
+            olegs.push(oleg);
+        }
+        
+        // Создание конфеты
+        function spawnCandy(x, y) {
+            const types = ['🍬', '🍭', '🍫', '🍪', '🍩', '🧁', '🍰', '🎂', '🍡', '🍧'];
+            candies.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 5,
+                vy: -5 - Math.random() * 8,
+                life: 120,
+                type: types[Math.floor(Math.random() * types.length)],
+                collected: false,
+                rotation: 0,
+                rotSpeed: (Math.random() - 0.5) * 0.3
+            });
+        }
+        
+        // Выстрел
+        function shoot() {
+            if (player.ammo <= 0 || player.reloading || player.shootCooldown > 0) return;
+            
+            player.ammo--;
+            player.shootCooldown = 8;
+            
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            const spread = (Math.random() - 0.5) * 0.1;
+            
+            bullets.push({
+                x: player.x,
+                y: player.y - 20,
+                vx: Math.cos(angle + spread) * 15,
+                vy: Math.sin(angle + spread) * 15,
+                damage: 1,
+                life: 60,
+                trail: []
+            });
+            
+            // Эффект выстрела
+            for (let i = 0; i < 5; i++) {
+                particles.push({
+                    x: player.x + Math.cos(angle) * 30,
+                    y: player.y - 20 + Math.sin(angle) * 30,
+                    vx: Math.cos(angle) * 3 + (Math.random() - 0.5) * 2,
+                    vy: Math.sin(angle) * 3 + (Math.random() - 0.5) * 2,
+                    life: 0.5,
+                    color: '#ffaa00',
+                    size: 2 + Math.random() * 3,
+                    type: 'spark'
+                });
+            }
+            
+            // Звук выстрела (гильза)
+            particles.push({
+                x: player.x + 20,
+                y: player.y,
+                vx: 3 + Math.random() * 3,
+                vy: -2 + Math.random() * 4,
+                life: 1,
+                color: '#ffcc00',
+                size: 4,
+                type: 'shell'
+            });
+            
+            updateUI();
+        }
+        
+        // Перезарядка
+        function reload() {
+            if (player.reloading || player.maxAmmo <= 0 || player.ammo === 30) return;
+            
+            player.reloading = true;
+            player.reloadTimer = 60;
+            
+            setTimeout(() => {
+                const needed = 30 - player.ammo;
+                const available = Math.min(needed, player.maxAmmo);
+                player.ammo += available;
+                player.maxAmmo -= available;
+                player.reloading = false;
+                updateUI();
+            }, 1000);
+        }
+        
+        // Показать сообщение
+        function showMessage(text, duration = 2) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.style.animation = 'none';
+            msg.offsetHeight;
+            msg.style.animation = '';
+            
+            setTimeout(() => {
+                if (document.getElementById('message').textContent === text) {
+                    document.getElementById('message').textContent = '';
+                }
+            }, duration * 1000);
+        }
+        
+        // Показать комбо
+        function showCombo(combo) {
+            const comboEl = document.getElementById('combo-text');
+            comboEl.textContent = `🔥 x${combo}!`;
+            comboEl.style.animation = 'none';
+            comboEl.offsetHeight;
+            comboEl.style.animation = 'comboPop 0.5s ease-out';
+            
+            setTimeout(() => {
+                comboEl.textContent = '';
+            }, 1000);
+        }
+        
+        // Обновление UI
+        function updateUI() {
+            document.getElementById('candy-display').textContent = player.candy;
+            document.getElementById('kills-display').textContent = player.kills;
+            document.getElementById('combo-display').textContent = `x${player.combo}`;
+            document.getElementById('level-display').textContent = player.level;
+        }
+        
+        // Игровой цикл
+        function update() {
+            if (gameOver) return;
+            
+            // Спавн Олегов
+            spawnTimer++;
+            const spawnRate = Math.max(20, 60 - player.level * 5);
+            if (spawnTimer > spawnRate) {
+                spawnTimer = 0;
+                spawnOleg();
+                if (Math.random() < 0.3 + player.level * 0.05) {
+                    spawnOleg();
+                }
+            }
+            
+            // Сложность
+            difficultyTimer++;
+            if (difficultyTimer > 600) {
+                difficultyTimer = 0;
+                player.level++;
+                showMessage(`⭐ УРОВЕНЬ ${player.level}! Олегов стало больше!`, 2);
+                updateUI();
+            }
+            
+            // Стрельба
+            if (player.shootCooldown > 0) player.shootCooldown--;
+            if (shooting && player.shootCooldown <= 0) {
+                shoot();
+            }
+            
+            // Обновление Олегов
+            olegs.forEach((oleg, index) => {
+                oleg.y += oleg.speed;
+                oleg.wobble += oleg.wobbleSpeed;
+                
+                // Олег пытается убежать если рядом выстрелы
+                if (oleg.health < oleg.maxHealth * 0.5) {
+                    oleg.screaming = true;
+                    oleg.x += (Math.random() - 0.5) * 4;
+                }
+                
+                // Олег уходит за экран
+                if (oleg.y > canvas.height + 200) {
+                    olegs.splice(index, 1);
+                    if (player.combo > 0) {
+                        player.combo = Math.max(0, player.combo - 1);
+                    }
+                    updateUI();
+                }
+                
+                // Столкновение с игроком
+                const dx = player.x - oleg.x;
+                const dy = player.y - oleg.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 60 && oleg.health > 0) {
+                    player.candy = Math.max(0, player.candy - 1);
+                    oleg.health = 0;
+                    
+                    // Эффект кражи конфет
+                    for (let i = 0; i < 10; i++) {
+                        particles.push({
+                            x: oleg.x,
+                            y: oleg.y,
+                            vx: (Math.random() - 0.5) * 5,
+                            vy: (Math.random() - 0.5) * 5,
+                            life: 0.8,
+                            color: '#ff0000',
+                            size: 3,
+                            type: 'steal'
+                        });
+                    }
+                    
+                    showMessage('😱 ОЛЕГ УКРАЛ КОНФЕТУ!', 1.5);
+                    olegs.splice(index, 1);
+                    updateUI();
+                }
+            });
+            
+            // Обновление пуль
+            bullets = bullets.filter(bullet => {
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                bullet.life--;
+                
+                // Трейл пули
+                bullet.trail.push({ x: bullet.x, y: bullet.y, life: 5 });
+                bullet.trail = bullet.trail.filter(t => { t.life--; return t.life > 0; });
+                
+                // Проверка попадания в Олегов
+                for (let i = olegs.length - 1; i >= 0; i--) {
+                    const oleg = olegs[i];
+                    const dx = bullet.x - oleg.x;
+                    const dy = bullet.y - (oleg.y + oleg.height/2);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < oleg.width * 0.8 && oleg.health > 0) {
+                        oleg.health -= bullet.damage;
+                        
+                        // Частицы попадания
+                        for (let j = 0; j < 8; j++) {
+                            particles.push({
+                                x: bullet.x,
+                                y: bullet.y,
+                                vx: (Math.random() - 0.5) * 6,
+                                vy: (Math.random() - 0.5) * 6,
+                                life: 0.6,
+                                color: '#ff4444',
+                                size: 2 + Math.random() * 4,
+                                type: 'hit'
+                            });
+                        }
+                        
+                        if (oleg.health <= 0) {
+                            // Олег убит!
+                            player.combo++;
+                            player.kills++;
+                            player.candy += Math.floor(1 + Math.random() * 3) * player.combo;
+                            
+                            if (player.combo > player.maxCombo) {
+                                player.maxCombo = player.combo;
+                            }
+                            
+                            // Конфеты выпадают
+                            const candyCount = 3 + Math.floor(Math.random() * 5);
+                            for (let j = 0; j < candyCount; j++) {
+                                spawnCandy(oleg.x, oleg.y);
+                            }
+                            
+                            // Эффект смерти
+                            for (let j = 0; j < 25; j++) {
+                                particles.push({
+                                    x: oleg.x,
+                                    y: oleg.y,
+                                    vx: (Math.random() - 0.5) * 10,
+                                    vy: (Math.random() - 0.5) * 10 - 5,
+                                    life: 1.5,
+                                    color: `hsl(${Math.random() * 60}, 100%, 60%)`,
+                                    size: 3 + Math.random() * 8,
+                                    type: 'death'
+                                });
+                            }
+                            
+                            // Фраза при смерти
+                            const deathPhrases = [
+                                'ААА! ДЕРЖИ КОНФЕТЫ!',
+                                'ВОТ ТВОИ КОНФЕТЫ!',
+                                'ЗАБИРАЙ!',
+                                'БОЛЬШЕ НЕ БУДУ!',
+                                'ПРОЩАЙТЕ КОНФЕТЫ!'
+                            ];
+                            showMessage(deathPhrases[Math.floor(Math.random() * deathPhrases.length)], 1.5);
+                            
+                            if (player.combo > 1) {
+                                showCombo(player.combo);
+                            }
+                            
+                            olegs.splice(i, 1);
+                        }
+                        
+                        updateUI();
+                        return false;
+                    }
+                }
+                
+                return bullet.life > 0 &&
+                       bullet.x > -50 && bullet.x < canvas.width + 50 &&
+                       bullet.y > -50 && bullet.y < canvas.height + 50;
+            });
+            
+            // Обновление конфет
+            candies = candies.filter(candy => {
+                candy.x += candy.vx;
+                candy.y += candy.vy;
+                candy.vy += 0.3;
+                candy.life--;
+                candy.rotation += candy.rotSpeed;
+                
+                // Сбор конфет
+                const dx = player.x - candy.x;
+                const dy = player.y - candy.y;
+                if (Math.sqrt(dx * dx + dy * dy) < 50 && !candy.collected) {
+                    candy.collected = true;
+                    player.candy += 1;
+                    updateUI();
+                    
+                    particles.push({
+                        x: candy.x,
+                        y: candy.y,
+                        vx: 0, vy: 0,
+                        life: 0.5,
+                        color: '#ffdd00',
+                        size: 20,
+                        type: 'collect'
+                    });
+                    
+                    return false;
+                }
+                
+                return candy.life > 0 && candy.y < canvas.height + 100;
+            });
+            
+            // Обновление частиц
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.type !== 'spark') p.vy += 0.3;
+                p.life -= 0.02;
+                return p.life > 0;
+            });
+            
+            draw();
+        }
+        
+        // Отрисовка
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Фон (город)
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(0.7, '#ffccaa');
+            gradient.addColorStop(1, '#ff9966');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Здания на фоне
+            for (let i = 0; i < 10; i++) {
+                const bx = i * 150 + 50;
+                const bh = 200 + Math.sin(i * 2.7) * 150;
+                ctx.fillStyle = `rgba(100, 100, 120, 0.5)`;
+                ctx.fillRect(bx, canvas.height - bh, 120, bh);
+                
+                // Окна
+                for (let wy = canvas.height - bh + 30; wy < canvas.height - 20; wy += 40) {
+                    for (let wx = bx + 15; wx < bx + 105; wx += 30) {
+                        const light = 0.3 + Math.sin(wx + wy + Date.now() * 0.001) * 0.3;
+                        ctx.fillStyle = `rgba(255, 255, 200, ${light})`;
+                        ctx.fillRect(wx, wy, 15, 20);
+                    }
+                }
+            }
+            
+            // Конфеты
+            candies.forEach(candy => {
+                ctx.save();
+                ctx.translate(candy.x, candy.y);
+                ctx.rotate(candy.rotation);
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(candy.type, 0, 0);
+                ctx.restore();
+                
+                // Свечение
+                const alpha = 0.3 + Math.sin(Date.now() * 0.01) * 0.2;
+                ctx.fillStyle = `rgba(255, 221, 0, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(candy.x, candy.y, 20, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Олеги Ильичи
+            olegs.forEach(oleg => {
+                if (oleg.health <= 0) return;
+                
+                const wobbleX = Math.sin(oleg.wobble) * 10;
+                const wobbleY = Math.cos(oleg.wobble * 1.3) * 5;
+                
+                ctx.save();
+                ctx.translate(oleg.x + wobbleX, oleg.y + wobbleY);
+                
+                // Тень
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.fillRect(-oleg.width/2 + 3, oleg.height/2 + 3, oleg.width, oleg.height);
+                
+                // Тело
+                ctx.fillStyle = oleg.color;
+                ctx.fillRect(-oleg.width/2, -oleg.height/2, oleg.width, oleg.height);
+                
+                // Рубашка
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-oleg.width/2, -oleg.height/4, oleg.width, oleg.height/2);
+                
+                // Галстук
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.moveTo(0, -oleg.height/4);
+                ctx.lineTo(-10, oleg.height/8);
+                ctx.lineTo(0, oleg.height/4);
+                ctx.lineTo(10, oleg.height/8);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Голова
+                ctx.fillStyle = '#ffcc99';
+                ctx.beginPath();
+                ctx.arc(0, -oleg.height/3, oleg.width/2.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Шапка
+                if (oleg.hat) {
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-oleg.width/2.2, -oleg.height/2.5, oleg.width/1.1, oleg.height/8);
+                    ctx.fillRect(-oleg.width/3, -oleg.height/2.2, oleg.width/1.5, oleg.height/6);
+                }
+                
+                // Очки
+                if (oleg.glasses) {
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(-8, -oleg.height/3 - 2, 8, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(8, -oleg.height/3 - 2, 8, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(0, -oleg.height/3 - 2);
+                    ctx.lineTo(0, -oleg.height/3 - 5);
+                    ctx.stroke();
+                }
+                
+                // Глаза
+                if (!oleg.glasses) {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(-6, -oleg.height/3, 6, 0, Math.PI * 2);
+                    ctx.arc(6, -oleg.height/3, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(-6, -oleg.height/3, 3, 0, Math.PI * 2);
+                    ctx.arc(6, -oleg.height/3, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Усы
+                if (oleg.mustache) {
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(-15, -oleg.height/3 + 8, 30, 5);
+                    ctx.fillRect(-10, -oleg.height/3 + 5, 20, 3);
+                }
+                
+                // Рот (кричит)
+                if (oleg.screaming) {
+                    ctx.fillStyle = '#ff0000';
+                    ctx.beginPath();
+                    ctx.arc(0, -oleg.height/3 + 15, 8, 0, Math.PI);
+                    ctx.fill();
+                }
+                
+                // Имя над головой
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 14px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText(oleg.name, 0, -oleg.height/2 - 15);
+                
+                // Фраза
+                ctx.fillStyle = oleg.screaming ? '#ff0000' : '#333';
+                ctx.font = '12px Comic Sans MS';
+                ctx.fillText(oleg.phrase, 0, oleg.height/2 + 20);
+                
+                // Полоска здоровья
+                if (oleg.health < oleg.maxHealth) {
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-20, -oleg.height/2 - 25, 40, 5);
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillRect(-20, -oleg.height/2 - 25, 40 * (oleg.health / oleg.maxHealth), 5);
+                }
+                
+                ctx.restore();
+            });
+            
+            // Пули
+            bullets.forEach(bullet => {
+                // Трейл
+                bullet.trail.forEach((t, i) => {
+                    ctx.fillStyle = `rgba(255, 170, 0, ${t.life / 5})`;
+                    ctx.fillRect(t.x - 1, t.y - 1, 3, 3);
+                });
+                
+                // Пуля
+                ctx.fillStyle = '#ffdd00';
+                ctx.shadowColor = '#ffaa00';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+            
+            // Частицы
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                if (p.type === 'spark') {
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                } else if (p.type === 'shell') {
+                    ctx.fillRect(p.x, p.y, 4, 6);
+                } else if (p.type === 'collect') {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+            ctx.globalAlpha = 1;
+            
+            // Игрок (АК-47)
+            const playerAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            
+            // Руки с АК
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(playerAngle);
+            
+            // АК-47
+            ctx.fillStyle = '#333';
+            ctx.fillRect(20, -8, 80, 12);
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(30, -5, 50, 6);
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, -5, 25, 8);
+            
+            // Приклад
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(-30, -10, 35, 15);
+            
+            // Магазин
+            ctx.fillStyle = '#222';
+            ctx.fillRect(15, 5, 10, 20);
+            
+            // Ствол
+            ctx.fillStyle = '#555';
+            ctx.fillRect(95, -4, 15, 4);
+            
+            // Дульный тормоз
+            ctx.fillStyle = '#444';
+            ctx.fillRect(108, -5, 8, 6);
+            
+            ctx.restore();
+            
+            // Тело игрока
+            ctx.fillStyle = '#4488ff';
+            ctx.fillRect(player.x - 25, player.y, 50, 60);
+            
+            // Бронежилет
+            ctx.fillStyle = '#335588';
+            ctx.fillRect(player.x - 25, player.y + 5, 50, 30);
+            
+            // Голова
+            ctx.fillStyle = '#ffcc99';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y - 20, 20, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Шлем
+            ctx.fillStyle = '#335588';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y - 25, 22, Math.PI, Math.PI * 2);
+            ctx.fill();
+            
+            // Прицел
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(mouseX - 20, mouseY);
+            ctx.lineTo(mouseX + 20, mouseY);
+            ctx.moveTo(mouseX, mouseY - 20);
+            ctx.lineTo(mouseX, mouseY + 20);
+            ctx.stroke();
+            
+            // Счетчик патронов на экране
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(
+                `🔫 ${player.ammo} / ${player.maxAmmo}` + (player.reloading ? ' ПЕРЕЗАРЯДКА...' : ''),
+                canvas.width / 2,
+                canvas.height - 40
+            );
+        }
+        
+        // Управление
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+        
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                shooting = true;
+                shoot();
+            }
+        });
+        
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                shooting = false;
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                reload();
+            }
+        });
+        
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
+        // Игровой цикл
+        setInterval(update, 1000 / 60);
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 150;
+        });
+        
+        // Стартовое сообщение
+        setTimeout(() => {
+            showMessage('🎯 ОХОТА НА ОЛЕГОВ ИЛЬИЧЕЙ! УБЕЙ ИХ И ЗАБЕРИ КОНФЕТЫ! 🍬', 3);
+        }, 500);
+        
+        // Первые Олеги
+        for (let i = 0; i < 5; i++) {
+            setTimeout(() => spawnOleg(), i * 500);
+        }
+        
+        updateUI();
+    </script>
+</body>
+</html>

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Экосистема 4.0: Генетика • Симбиоз • Климат • Эволюция</title>
+    <style>
+        * { user-select: none; -webkit-tap-highlight-color: transparent; }
+        body {
+            background: linear-gradient(145deg, #0a2f1f 0%, #041a0e 100%);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; font-family: 'Segoe UI', monospace; margin: 0; padding: 20px;
+        }
+        .game-container {
+            background: #1b4d2e; border-radius: 48px; padding: 16px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.6), inset 0 1px 4px rgba(255,255,255,0.2);
+        }
+        canvas { display: block; margin: 0 auto; border-radius: 32px; box-shadow: 0 8px 18px rgba(0,0,0,0.4); cursor: grab; }
+        .toolbar {
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 14px; margin-bottom: 8px;
+            background: #1e3a2fcc; backdrop-filter: blur(8px); padding: 6px 10px; border-radius: 60px;
+            max-height: 110px; overflow-y: auto;
+        }
+        .creature-card {
+            background: #fef7e0; border-radius: 100px; display: inline-flex; align-items: center; gap: 3px;
+            padding: 2px 8px 2px 5px; cursor: pointer; transition: all 0.2s; border: 2px solid #e0b354;
+            font-weight: bold; font-size: 0.65rem;
+        }
+        .creature-card.selected { background: #ffec9f; border: 3px solid #f5a623; transform: scale(0.96); }
+        .creature-icon { font-size: 18px; }
+        .stats-panel {
+            background: #221c12d9; color: #f9eec1; padding: 5px 12px; border-radius: 32px; margin-top: 10px;
+            display: flex; justify-content: space-between; font-size: 0.7rem; gap: 8px; flex-wrap: wrap;
+            backdrop-filter: blur(4px);
+        }
+        .btn-reset { background: #c97e2a; border: none; font-family: inherit; font-weight: bold; padding: 2px 12px; border-radius: 40px; color: white; cursor: pointer; }
+        .warning { background: #a1220a; border-radius: 20px; padding: 2px 8px; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 0.7; } 100% { opacity: 1; } }
+        .info-panel { display: flex; gap: 12px; align-items: center; }
+    </style>
+</head>
+<body>
+<div>
+    <div class="game-container">
+        <canvas id="ecosystemCanvas" width="1300" height="750" style="width:100%; height:auto; max-width:1300px; aspect-ratio:1300/750"></canvas>
+        <div class="toolbar" id="toolbar"></div>
+        <div class="stats-panel">
+            <span>🌍 Энергия: <strong id="totalEnergy">0</strong></span>
+            <span>🧬 Живых: <strong id="totalCreatures">0</strong></span>
+            <span id="climateZone">🌲 Лес</span>
+            <span id="globalEvent"></span>
+            <button class="btn-reset" id="resetBtn">🌀 Перезапустить мир</button>
+            <span class="info-text">🧬 Гены, мутации, симбиоз, паразиты, токсины, стаи</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('ecosystemCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // ---- КЛИМАТИЧЕСКИЕ ЗОНЫ (карта высот / влажности) ----
+        const ZONES = {
+            FOREST: { name: "🌲 Лес", color: "#6f9e5c", regenGrass: 1.2, regenTree: 0.9, waterMalus: 0 },
+            DESERT: { name: "🏜️ Пустыня", color: "#d6b575", regenGrass: 0.2, regenTree: 0.05, waterMalus: -0.5 },
+            SWAMP: { name: "🌊 Болото", color: "#7b9c6e", regenGrass: 0.8, regenTree: 0.4, waterMalus: 0.2 }
+        };
+        // Генерация зон (простая сетка 6x4)
+        const zoneMap = [];
+        for (let i = 0; i < 6; i++) {
+            zoneMap[i] = [];
+            for (let j = 0; j < 4; j++) {
+                let r = Math.random();
+                if (r < 0.6) zoneMap[i][j] = ZONES.FOREST;
+                else if (r < 0.8) zoneMap[i][j] = ZONES.DESERT;
+                else zoneMap[i][j] = ZONES.SWAMP;
+            }
+        }
+        function getZoneAt(x, y) {
+            let xi = Math.floor((x / canvas.width) * 6);
+            let yi = Math.floor((y / canvas.height) * 4);
+            xi = Math.min(5, Math.max(0, xi));
+            yi = Math.min(3, Math.max(0, yi));
+            return zoneMap[xi][yi];
+        }
+        
+        // ---- СПИСОК ВИДОВ (50+) С ГЕНЕТИЧЕСКИМИ БАЗОВЫМИ ПАРАМЕТРАМИ ----
+        const SPECIES = [
+            { id: "grass", name: "🌾 Трава", emoji: "🌾", baseEnergy: 15, maxEnergy: 40, energyDelta: +0.6, diet: [], isPlant: true, toxic: 0, symbiont: null },
+            { id: "bush", name: "🌿 Куст", emoji: "🌿", baseEnergy: 30, maxEnergy: 70, energyDelta: +0.5, diet: [], isPlant: true, toxic: 0 },
+            { id: "oak", name: "🌳 Дуб", emoji: "🌳", baseEnergy: 80, maxEnergy: 200, energyDelta: +0.4, diet: [], isTree: true, canHide: true },
+            { id: "pine", name: "🎄 Сосна", emoji: "🎄", baseEnergy: 75, maxEnergy: 180, energyDelta: +0.45, diet: [], isTree: true },
+            { id: "berry", name: "🍓 Ягодник", emoji: "🍓", baseEnergy: 25, maxEnergy: 60, energyDelta: +0.7, diet: [], isPlant: true },
+            { id: "toxic_ivy", name: "☠️ Ядовитый плющ", emoji: "🌿☠️", baseEnergy: 20, maxEnergy: 50, energyDelta: +0.5, diet: [], isPlant: true, toxic: 40, bioaccum: true },
+            { id: "mouse", name: "🐭 Мышь", emoji: "🐭", baseEnergy: 30, maxEnergy: 70, energyDelta: -0.3, diet: ["grass","berry","bush"], canReproduce: true, social: false },
+            { id: "rabbit", name: "🐇 Заяц", emoji: "🐇", baseEnergy: 55, maxEnergy: 110, energyDelta: -0.4, diet: ["grass","bush","berry"] },
+            { id: "squirrel", name: "🐿️ Белка", emoji: "🐿️", baseEnergy: 50, maxEnergy: 100, energyDelta: -0.35, diet: ["oak","pine","berry"] },
+            { id: "fox", name: "🦊 Лиса", emoji: "🦊", baseEnergy: 70, maxEnergy: 140, energyDelta: -0.5, diet: ["mouse","rabbit","squirrel"], nightActive: true },
+            { id: "wolf", name: "🐺 Волк", emoji: "🐺", baseEnergy: 80, maxEnergy: 160, energyDelta: -0.55, diet: ["rabbit","fox","mouse"], pack: true, packBonus: 0.25 },
+            { id: "bear", name: "🐻 Медведь", emoji: "🐻", baseEnergy: 120, maxEnergy: 250, energyDelta: -0.85, diet: ["berry","rabbit","fish","mouse","salmon"] },
+            { id: "eagle", name: "🦅 Орёл", emoji: "🦅", baseEnergy: 85, maxEnergy: 170, energyDelta: -0.6, diet: ["rabbit","squirrel","fish"] },
+            { id: "owl", name: "🦉 Сова", emoji: "🦉", baseEnergy: 70, maxEnergy: 140, energyDelta: -0.45, diet: ["mouse","rabbit"], canHide: true, nightActive: true },
+            { id: "tiger", name: "🐅 Тигр", emoji: "🐅", baseEnergy: 95, maxEnergy: 190, energyDelta: -0.65, diet: ["wolf","fox","bear","rabbit"], canReproduce: true },
+            { id: "cobra", name: "🐍 Кобра", emoji: "🐍", baseEnergy: 85, maxEnergy: 170, energyDelta: -0.55, diet: ["tiger","wolf","rabbit"], toxicVenom: 25 },
+            { id: "python", name: "🐍 Питон", emoji: "🐍", baseEnergy: 105, maxEnergy: 210, energyDelta: -0.7, diet: ["rabbit","fox","tiger"], special: "feast" },
+            { id: "frog", name: "🐸 Лягушка", emoji: "🐸", baseEnergy: 25, maxEnergy: 60, energyDelta: -0.2, diet: ["insect"], amphibian: true },
+            { id: "insect", name: "🦗 Жук", emoji: "🦗", baseEnergy: 12, maxEnergy: 30, energyDelta: -0.1, diet: ["grass","berry"] },
+            { id: "ant", name: "🐜 Муравей", emoji: "🐜", baseEnergy: 8, maxEnergy: 20, energyDelta: -0.05, diet: ["insect","berry"], social: true, symbiosis: "aphid" },
+            { id: "aphid", name: "🪰 Тля", emoji: "🪰", baseEnergy: 10, maxEnergy: 25, energyDelta: -0.08, diet: ["grass","bush"] },
+            { id: "ladybug", name: "🐞 Божья коровка", emoji: "🐞", baseEnergy: 20, maxEnergy: 45, energyDelta: -0.15, diet: ["aphid"] },
+            { id: "parasite_tick", name: "🕷️ Клещ", emoji: "🕷️", baseEnergy: 15, maxEnergy: 35, energyDelta: -0.05, parasitic: true, diet: ["blood"] },
+            { id: "fish", name: "🐟 Рыба", emoji: "🐟", baseEnergy: 35, maxEnergy: 80, energyDelta: -0.25, aquatic: true, diet: ["insect","algae"] },
+            { id: "algae", name: "🌊 Водоросль", emoji: "🌊", baseEnergy: 15, maxEnergy: 40, energyDelta: +0.5, aquatic: true, isPlant: true },
+            { id: "salmon", name: "🐟 Лосось", emoji: "🐟", baseEnergy: 50, maxEnergy: 100, energyDelta: -0.3, aquatic: true, diet: ["insect","algae"] },
+            { id: "pike", name: "🐟 Щука", emoji: "🐟", baseEnergy: 70, maxEnergy: 140, energyDelta: -0.45, aquatic: true, diet: ["salmon","fish"] },
+            { id: "shark", name: "🦈 Акула", emoji: "🦈", baseEnergy: 95, maxEnergy: 190, energyDelta: -0.55, aquatic: true, diet: ["pike","salmon","dolphin"] },
+            { id: "dolphin", name: "🐬 Дельфин", emoji: "🐬", baseEnergy: 85, maxEnergy: 170, energyDelta: -0.5, aquatic: true, diet: ["salmon","pike"], social: true },
+            { id: "crocodile", name: "🐊 Крокодил", emoji: "🐊", baseEnergy: 110, maxEnergy: 220, energyDelta: -0.65, aquatic: true, diet: ["shark","dolphin","tiger","wolf","rabbit","pike"] },
+            { id: "triton", name: "🧪 Тритон", emoji: "🦎", baseEnergy: 60, maxEnergy: 120, energyDelta: -0.3, amphibian: true, diet: ["insect","frog"] },
+            { id: "crow", name: "🐦‍⬛ Ворона", emoji: "🐦‍⬛", baseEnergy: 45, maxEnergy: 90, energyDelta: -0.25, diet: ["insect","berry","scavenger"], scavenger: true },
+            { id: "tit", name: "🐦 Синица", emoji: "🐦", baseEnergy: 30, maxEnergy: 65, energyDelta: -0.2, diet: ["insect","grass"] },
+            { id: "elephant", name: "🐘 Слон", emoji: "🐘", baseEnergy: 140, maxEnergy: 280, energyDelta: -0.9, diet: ["grass","bush","oak","pine"] },
+            { id: "giraffe", name: "🦒 Жираф", emoji: "🦒", baseEnergy: 125, maxEnergy: 250, energyDelta: -0.8, diet: ["oak","pine"] },
+            { id: "spider", name: "🕷️ Паук", emoji: "🕷️", baseEnergy: 25, maxEnergy: 55, energyDelta: -0.18, diet: ["insect"] }
+        ];
+        
+        const speciesMap = Object.fromEntries(SPECIES.map(s => [s.id, s]));
+        
+        // ---- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ----
+        let creatures = [];    // каждый: { id, speciesId, x, y, energy, genes: { speed, fertility, resistance, toxicity }, extra }
+        let nextId = 1;
+        let selectedSpeciesId = "grass";
+        let isDragging = false;
+        
+        // Время суток и климат
+        let dayTime = true;
+        let dayCounter = 0;
+        let drought = false, droughtTimer = 0;
+        let flood = false, floodTimer = 0;
+        let globalEventMsg = "";
+        
+        // ---- ГЕНЕТИКА: начальные гены для вида ----
+        function getRandomGenes(speciesId) {
+            // базовые значения: скорость (0.5-2.0), плодовитость (0.5-2.0), устойчивость к болезням (0-1), накопление токсинов (0-1)
+            return {
+                speed: 0.8 + Math.random() * 1.2,
+                fertility: 0.7 + Math.random() * 1.3,
+                resistance: 0.5 + Math.random() * 0.8,
+                toxicityAcc: 0.2 + Math.random() * 0.8
+            };
+        }
+        
+        function mutateGenes(genes) {
+            let newGenes = { ...genes };
+            if (Math.random() < 0.05) newGenes.speed += (Math.random() - 0.5) * 0.3;
+            if (Math.random() < 0.05) newGenes.fertility += (Math.random() - 0.5) * 0.3;
+            if (Math.random() < 0.05) newGenes.resistance += (Math.random() - 0.5) * 0.2;
+            if (Math.random() < 0.05) newGenes.toxicityAcc += (Math.random() - 0.5) * 0.2;
+            // ограничения
+            newGenes.speed = Math.min(2.5, Math.max(0.4, newGenes.speed));
+            newGenes.fertility = Math.min(2.2, Math.max(0.4, newGenes.fertility));
+            newGenes.resistance = Math.min(1.2, Math.max(0.2, newGenes.resistance));
+            newGenes.toxicityAcc = Math.min(1.5, Math.max(0.1, newGenes.toxicityAcc));
+            return newGenes;
+        }
+        
+        function addCreature(speciesId, x, y, parentGenes = null) {
+            let sp = speciesMap[speciesId];
+            if (!sp) return null;
+            let zone = getZoneAt(x, y);
+            let margin = 25;
+            let cx = Math.min(Math.max(x, margin), canvas.width - margin);
+            let cy = Math.min(Math.max(y, margin), canvas.height - margin);
+            if (sp.aquatic && cy < 500) cy = 510;
+            if (!sp.aquatic && !sp.amphibian && cy > 490) cy = 480;
+            let genes = parentGenes ? mutateGenes(parentGenes) : getRandomGenes(speciesId);
+            let newC = {
+                id: nextId++,
+                speciesId,
+                x: cx, y: cy,
+                energy: sp.baseEnergy * (0.8 + genes.fertility * 0.2),
+                genes: genes,
+                extra: { cooldown: 0, packCount: 1, parasite: null, symbiont: null, toxicLevel: 0, alpha: false, age: 0 }
+            };
+            creatures.push(newC);
+            return newC;
+        }
+        
+        function removeCreatureById(id) { creatures = creatures.filter(c => c.id !== id); }
+        
+        // ---- СИМБИОЗ: муравьи и тля ----
+        function applySymbiosis() {
+            for (let ant of creatures.filter(c => c.speciesId === "ant")) {
+                let aphid = creatures.find(a => a.speciesId === "aphid" && Math.hypot(ant.x - a.x, ant.y - a.y) < 45);
+                if (aphid) {
+                    ant.energy += 1.2;
+                    aphid.energy += 1.2;
+                }
+            }
+            for (let ladybug of creatures.filter(c => c.speciesId === "ladybug")) {
+                let aphid = creatures.find(a => a.speciesId === "aphid" && Math.hypot(ladybug.x - a.x, ladybug.y - a.y) < 40);
+                if (aphid) { removeCreatureById(aphid.id); ladybug.energy = Math.min(ladybug.energy+18, speciesMap.ladybug.maxEnergy); }
+            }
+        }
+        
+        // ---- ПАРАЗИТЫ (клещи) ----
+        function applyParasites() {
+            for (let tick of creatures.filter(c => c.speciesId === "parasite_tick")) {
+                let host = creatures.find(h => h.id !== tick.id && !speciesMap[h.speciesId].isPlant && Math.hypot(tick.x - h.x, tick.y - h.y) < 35);
+                if (host) {
+                    let drain = Math.min(2.5, host.energy * 0.1);
+                    host.energy -= drain;
+                    tick.energy += drain;
+                    if (host.energy <= 0) removeCreatureById(host.id);
+                    if (tick.energy > speciesMap.parasite_tick.maxEnergy) tick.energy = speciesMap.parasite_tick.maxEnergy;
+                }
+            }
+        }
+        
+        // ---- РАЗМНОЖЕНИЕ С НАСЛЕДОВАНИЕМ ГЕНОВ ----
+        function tryReproduce(c) {
+            let sp = speciesMap[c.speciesId];
+            if (!sp.canReproduce && !(sp.id === "mouse" && c.energy > 45)) return false;
+            let fertilityFactor = c.genes.fertility;
+            if (c.energy < sp.baseEnergy * 1.1) return false;
+            if (c.extra.cooldown > 0) { c.extra.cooldown--; return false; }
+            if (Math.random() > 0.035 * fertilityFactor) return false;
+            let offX = c.x + (Math.random() - 0.5) * 45;
+            let offY = c.y + (Math.random() - 0.5) * 45;
+            addCreature(c.speciesId, offX, offY, c.genes);
+            c.energy -= 18;
+            c.extra.cooldown = 180 / fertilityFactor;
+            return true;
+        }
+        
+        // ---- СТАЯ ВОЛКОВ И ИЕРАРХИЯ (альфа) ----
+        function updateSocial() {
+            let wolves = creatures.filter(c => c.speciesId === "wolf");
+            for (let w of wolves) {
+                let nearby = wolves.filter(o => o.id !== w.id && Math.hypot(w.x - o.x, w.y - o.y) < 100);
+                w.extra.packCount = nearby.length + 1;
+                if (w.extra.packCount >= 4) w.energy += 0.3;
+                // альфа-самец: самый сильный в группе
+                if (nearby.length > 0) {
+                    let alpha = nearby.reduce((a,b) => a.energy > b.energy ? a : b, w);
+                    alpha.extra.alpha = true;
+                    alpha.energy += 0.5;
+                }
+            }
+            let dolphins = creatures.filter(c => c.speciesId === "dolphin");
+            for (let d of dolphins) {
+                let friends = dolphins.filter(o => o.id !== d.id && Math.hypot(d.x - o.x, d.y - o.y) < 90);
+                if (friends.length > 2) d.energy += 0.4;
+            }
+        }
+        
+        // ---- БИОАККУМУЛЯЦИЯ ТОКСИНОВ (яд накапливается по цепи) ----
+        function applyToxins(predator, prey) {
+            let preySp = speciesMap[prey.speciesId];
+            let predatorSp = speciesMap[predator.speciesId];
+            let toxinGain = (prey.extra.toxicLevel || 0) + (preySp.toxic || 0);
+            if (preySp.bioaccum) toxinGain *= 1.5;
+            predator.extra.toxicLevel = (predator.extra.toxicLevel || 0) + toxinGain * 0.4;
+            if (predator.extra.toxicLevel > 50) {
+                predator.energy -= 3;
+                if (predator.energy <= 0) removeCreatureById(predator.id);
+            }
+        }
+        
+        // ---- ПИЩЕВАЯ СЕТЬ С УЧЁТОМ ГЕНОВ, УКРЫТИЙ, АКТИВНОСТИ ----
+        function applyPredation() {
+            let toRemove = new Set();
+            let predators = [...creatures].sort((a,b) => (speciesMap[b.speciesId].special === "feast" ? 1 : 0) - (speciesMap[a.speciesId].special === "feast" ? 1 : 0));
+            for (let predator of predators) {
+                if (toRemove.has(predator.id)) continue;
+                let predSp = speciesMap[predator.speciesId];
+                if (!predSp.diet || predSp.diet.length === 0) continue;
+                let candidates = creatures.filter(prey => {
+                    if (prey.id === predator.id || toRemove.has(prey.id)) return false;
+                    if (!predSp.diet.includes(prey.speciesId) && !(predSp.scavenger && prey.energy < 15)) return false;
+                    if (prey.speciesId === "owl" && isUnderTree(prey.x, prey.y)) return false;
+                    if (predSp.id === "crocodile" && prey.y < 500) return false;
+                    if (predSp.aquatic && predator.y < 500) return false;
+                    if (!dayTime && predSp.nightActive === false && prey.speciesId !== "mouse") return false;
+                    let dist = Math.hypot(predator.x - prey.x, predator.y - prey.y);
+                    return dist < 60;
+                });
+                if (candidates.length === 0) continue;
+                let target = candidates.reduce((a,b) => Math.hypot(predator.x-a.x,predator.y-a.y) < Math.hypot(predator.x-b.x,predator.y-b.y) ? a : b);
+                let preySp = speciesMap[target.speciesId];
+                let gain = Math.min((preySp.baseEnergy * 0.6 + 12) * predator.genes.speed, predSp.maxEnergy - predator.energy);
+                predator.energy += gain;
+                applyToxins(predator, target);
+                if (predSp.id === "python") { predator.energy += gain * 0.6; if (predator.energy > 180) for (let o of creatures) if (Math.hypot(predator.x-o.x,predator.y-o.y) < 120) o.energy = Math.min(o.energy+7, speciesMap[o.speciesId].maxEnergy); }
+                toRemove.add(target.id);
+            }
+            for (let id of toRemove) removeCreatureById(id);
+        }
+        
+        function isUnderTree(x, y) {
+            return creatures.some(c => speciesMap[c.speciesId]?.isTree && Math.hypot(c.x - x, c.y - y) < 40);
+        }
+        
+        // ---- ДВИЖЕНИЕ, ЭНЕРГИЯ, КЛИМАТ, РЕСУРСЫ ----
+        function updateMovementAndResources() {
+            for (let i=0; i<creatures.length; i++) {
+                let c = creatures[i];
+                let sp = speciesMap[c.speciesId];
+                let zone = getZoneAt(c.x, c.y);
+                let delta = sp.energyDelta;
+                if (sp.isPlant) delta += zone.regenGrass;
+                if (sp.isTree) delta += zone.regenTree;
+                if (drought && !sp.aquatic) delta -= 0.5;
+                if (flood && sp.aquatic) delta += 0.3;
+                if (sp.amphibian && zone === ZONES.SWAMP) delta += 0.4;
+                c.energy += delta + (c.genes.speed * 0.05);
+                if (c.extra.parasite) c.energy -= 0.5;
+                if (c.extra.alpha) c.energy += 0.4;
+                if (c.energy <= 0) { removeCreatureById(c.id); i--; continue; }
+                if (c.energy > sp.maxEnergy) c.energy = sp.maxEnergy;
+                
+                // движение с учётом генов скорости
+                let angle = Math.random() * Math.PI * 2;
+                let speed = 0.8 * c.genes.speed;
+                if (sp.pack && c.extra.packCount >= 4) speed *= 1.3;
+                let dx = Math.cos(angle) * speed * (0.6+Math.random()*0.8);
+                let dy = Math.sin(angle) * speed * (0.6+Math.random()*0.8);
+                let nx = c.x + dx, ny = c.y + dy;
+                nx = Math.min(Math.max(nx, 20), canvas.width-20);
+                ny = Math.min(Math.max(ny, 20), canvas.height-20);
+                if (sp.aquatic && ny < 500) ny = 510;
+                if (!sp.aquatic && !sp.amphibian && ny > 490) ny = 480;
+                c.x = nx; c.y = ny;
+                c.extra.age++;
+            }
+        }
+        
+        // ---- КЛИМАТИЧЕСКИЕ КАТАСТРОФЫ ----
+        function updateClimateEvents() {
+            if (!drought && Math.random() < 0.001) { drought = true; droughtTimer = 300; globalEventMsg = "🏜️ ЗАСУХА!"; }
+            if (drought) { droughtTimer--; if (droughtTimer <= 0) { drought = false; globalEventMsg = ""; } }
+            if (!flood && Math.random() < 0.0008) { flood = true; floodTimer = 280; globalEventMsg = "🌊 НАВОДНЕНИЕ!"; }
+            if (flood) { floodTimer--; if (floodTimer <= 0) { flood = false; globalEventMsg = ""; } }
+            document.getElementById("globalEvent").innerHTML = globalEventMsg;
+            // смена дня/ночи
+            dayCounter++;
+            if (dayCounter > 200) { dayCounter = 0; dayTime = !dayTime; }
+        }
+        
+        // ---- РЕГЕНЕРАЦИЯ РАСТИТЕЛЬНОСТИ С УЧЁТОМ ЗОН ----
+        function regrowth() {
+            for (let zone of Object.values(ZONES)) {
+                let grassCount = creatures.filter(c => c.speciesId === "grass" && getZoneAt(c.x,c.y) === zone).length;
+                if (grassCount < 5 + zone.regenGrass * 3 && Math.random()<0.05) {
+                    let x = 50 + Math.random() * (canvas.width-100);
+                    let y = 30 + Math.random() * 460;
+                    if (getZoneAt(x,y) === zone) addCreature("grass", x, y);
+                }
+                let treeCount = creatures.filter(c => (c.speciesId === "oak" || c.speciesId === "pine") && getZoneAt(c.x,c.y) === zone).length;
+                if (treeCount < 3 && zone.regenTree > 0.3 && Math.random()<0.02) {
+                    let x = 80 + Math.random() * (canvas.width-160);
+                    let y = 40 + Math.random() * 440;
+                    if (getZoneAt(x,y) === zone) addCreature("oak", x, y);
+                }
+            }
+            if (creatures.filter(c=>c.speciesId==="insect").length < 8 && Math.random()<0.04) addCreature("insect", 100+Math.random()*(canvas.width-200), 50+Math.random()*430);
+            if (creatures.filter(c=>c.speciesId==="mouse").length < 4 && Math.random()<0.03) addCreature("mouse", 120+Math.random()*(canvas.width-240), 60+Math.random()*420);
+        }
+        
+        // ---- ОТРИСОВКА С ЗОНАМИ, ДНЕМ/НОЧЬЮ ----
+        function draw() {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            // отрисовка зон
+            let cellW = canvas.width/6, cellH = canvas.height/4;
+            for (let i=0;i<6;i++) for (let j=0;j<4;j++) {
+                let zone = zoneMap[i][j];
+                ctx.fillStyle = zone.color;
+                ctx.fillRect(i*cellW, j*cellH, cellW, cellH);
+            }
+            if (!dayTime) { ctx.fillStyle = "#00000055"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+            if (drought) { ctx.fillStyle = "#ffaa3355"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+            if (flood) { ctx.fillStyle = "#3399ff66"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+            
+            for (let cr of creatures) {
+                let sp = speciesMap[cr.speciesId];
+                let x=cr.x, y=cr.y;
+                let energyPercent = cr.energy/sp.maxEnergy;
+                ctx.beginPath(); ctx.arc(x, y, sp.isTree?28:20, 0, Math.PI*2); ctx.fillStyle="#fff5e0"; ctx.fill();
+                ctx.beginPath(); ctx.arc(x, y, sp.isTree?24:17, 0, Math.PI*2); ctx.fillStyle=sp.color; ctx.fill();
+                ctx.fillStyle="#ffd966"; ctx.fillRect(x-14,y-28,28*energyPercent,4);
+                ctx.fillStyle="#5a4a2e"; ctx.fillRect(x-14+28*energyPercent,y-28,28*(1-energyPercent),4);
+                ctx.font = `${sp.isTree?30:24}px "Segoe UI Emoji"`;
+                ctx.fillStyle="#111"; ctx.fillText(sp.emoji, x-18, y+12);
+                if (cr.extra.alpha) { ctx.fillStyle="#ffaa33"; ctx.fillText("⭐", x+15, y-15); }
+                if (cr.extra.toxicLevel > 20) { ctx.fillStyle="#800080"; ctx.fillText("☠️", x+18, y-18); }
+                if (cr.extra.parasite) { ctx.fillStyle="#660000"; ctx.fillText("🩸", x+20, y-12); }
+            }
+            ctx.font="11px monospace"; ctx.fillStyle="#f0f0e0";
+            ctx.fillText(`Время: ${dayTime?"☀️ ДЕНЬ":"🌙 НОЧЬ"} | Зоны: лес/пустыня/болото | Гены: скорость/плодовитость`, 20, canvas.height-12);
+        }
+        
+        // ---- ОСНОВНОЙ ЦИКЛ ----
+        function step() {
+            updateClimateEvents();
+            updateSocial();
+            updateMovementAndResources();
+            applySymbiosis();
+            applyParasites();
+            applyPredation();
+            regrowth();
+            for (let c of creatures) tryReproduce(c);
+            let totalEnergy = creatures.reduce((s,c)=>s+c.energy,0).toFixed(0);
+            document.getElementById('totalEnergy').innerText = totalEnergy;
+            document.getElementById('totalCreatures').innerText = creatures.length;
+            let zoneExample = getZoneAt(canvas.width/2, canvas.height/2);
+            document.getElementById('climateZone').innerHTML = zoneExample.name;
+            draw();
+        }
+        setInterval(step, 130);
+        
+        // ---- ИНТЕРФЕЙС (ВЫБОР ВИДА, DRAG&DROP) ----
+        function buildToolbar() {
+            let toolbar = document.getElementById('toolbar');
+            toolbar.innerHTML = '';
+            for (let sp of SPECIES) {
+                let card = document.createElement('div');
+                card.className = `creature-card ${selectedSpeciesId===sp.id?'selected':''}`;
+                card.innerHTML = `<span class="creature-icon">${sp.emoji}</span><span>${sp.name}</span>`;
+                card.addEventListener('click',()=>{ selectedSpeciesId=sp.id; document.querySelectorAll('.creature-card').forEach(c=>c.classList.remove('selected')); card.classList.add('selected'); });
+                toolbar.appendChild(card);
+            }
+        }
+        
+        function handleMouseDown(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width/rect.width, scaleY=canvas.height/rect.height;
+            let cx, cy;
+            if(e.touches){ cx=e.touches[0].clientX; cy=e.touches[0].clientY; e.preventDefault(); }
+            else { cx=e.clientX; cy=e.clientY; }
+            let canvasX=(cx-rect.left)*scaleX, canvasY=(cy-rect.top)*scaleY;
+            if(canvasX>=0 && canvasX<=canvas.width && canvasY>=0 && canvasY<=canvas.height){
+                isDragging=true;
+                window.dragStart={x:canvasX,y:canvasY};
+            }
+        }
+        function handleMouseUp(e) {
+            if(!isDragging) return;
+            isDragging=false;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+            let cx,cy;
+            if(e.changedTouches){ cx=e.changedTouches[0].clientX; cy=e.changedTouches[0].clientY; e.preventDefault(); }
+            else { cx=e.clientX; cy=e.clientY; }
+            let canvasX=(cx-rect.left)*scaleX, canvasY=(cy-rect.top)*scaleY;
+            if(canvasX>=0 && canvasX<=canvas.width && canvasY>=0 && canvasY<=canvas.height)
+                addCreature(selectedSpeciesId, canvasX, canvasY);
+        }
+        
+        function resetWorld() {
+            creatures = [];
+            nextId=1;
+            drought=false; flood=false; globalEventMsg="";
+            for(let i=0;i<18;i++) addCreature("grass", 50+Math.random()*(canvas.width-100), 30+Math.random()*470);
+            for(let i=0;i<6;i++) addCreature("oak", 70+Math.random()*(canvas.width-140), 40+Math.random()*450);
+            addCreature("berry",300,200); addCreature("toxic_ivy",500,150);
+            addCreature("mouse",250,180); addCreature("rabbit",350,210); addCreature("squirrel",450,160);
+            addCreature("fox",600,230); addCreature("wolf",700,260); addCreature("bear",850,190);
+            addCreature("eagle",900,110); addCreature("owl",150,250); addCreature("tiger",950,300);
+            addCreature("cobra",750,350); addCreature("python",550,400); addCreature("triton",450,450);
+            addCreature("ant",400,280); addCreature("aphid",410,290); addCreature("ladybug",480,270);
+            addCreature("parasite_tick",600,340); addCreature("crow",200,320); addCreature("tit",450,280);
+            addCreature("elephant",120,380); addCreature("giraffe",280,390);
+            for(let i=0;i<3;i++) addCreature("fish", 300+Math.random()*400, 520+Math.random()*100);
+            addCreature("salmon",500,550); addCreature("pike",700,580); addCreature("shark",900,620);
+            addCreature("dolphin",800,590); addCreature("crocodile",1050,600);
+            addCreature("insect",350,120); addCreature("frog",550,430);
+            addCreature("spider",650,200);
+        }
+        
+        function initEvents() {
+            canvas.addEventListener('mousedown', handleMouseDown);
+            window.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('touchstart', handleMouseDown, {passive:false});
+            window.addEventListener('touchend', handleMouseUp);
+            canvas.addEventListener('dragstart', e=>e.preventDefault());
+        }
+        
+        function init() {
+            buildToolbar();
+            initEvents();
+            resetWorld();
+            document.getElementById('resetBtn').addEventListener('click', resetWorld);
+        }
+        init();
+    })();
+</script>
+</body>
+</html>

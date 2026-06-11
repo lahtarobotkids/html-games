@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кража конфет у Олега Ильича - ХАРДКОР</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui {
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .ui-card {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #ff4444;
+            border-radius: 12px;
+            padding: 8px 15px;
+            color: white;
+            text-align: center;
+            min-width: 70px;
+        }
+
+        .ui-label {
+            font-size: 0.65em;
+            color: #ff8888;
+            text-transform: uppercase;
+        }
+
+        .ui-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        #suspicion-bar {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 350px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #ff0000;
+            border-radius: 10px;
+            z-index: 100;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        #suspicion-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000);
+            transition: width 0.2s;
+            width: 0%;
+        }
+
+        #suspicion-label {
+            position: fixed;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff4444;
+            font-weight: bold;
+            z-index: 100;
+            pointer-events: none;
+            font-size: 0.8em;
+        }
+
+        #message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        #status {
+            position: fixed;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 1em;
+            z-index: 100;
+            pointer-events: none;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 2px solid #ff0000;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8em;
+            z-index: 100;
+            pointer-events: none;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 20px;
+            border-radius: 15px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div class="ui-card">
+            <div class="ui-label">🍬 Украдено</div>
+            <div class="ui-value" id="candy-display">0</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">🍭 На столе</div>
+            <div class="ui-value" id="table-display">8</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">⭐ Уровень</div>
+            <div class="ui-value" id="level-display">1</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">💀 Пойман</div>
+            <div class="ui-value" id="caught-display">0</div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-label">❤️ Жизни</div>
+            <div class="ui-value" id="lives-display">3</div>
+        </div>
+    </div>
+    
+    <div id="suspicion-label">😡 ПОДОЗРЕНИЕ ОЛЕГА</div>
+    <div id="suspicion-bar">
+        <div id="suspicion-fill"></div>
+    </div>
+    
+    <div id="message"></div>
+    <div id="status">🔴 Олег следит за столом! Жди момент!</div>
+    
+    <div id="controls">
+        🎮 СТРЕЛКИ/WASD | SHIFT - красться | E - схватить | 🔴 Олег ВСЁ видит!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const ROOM = {
+            x: 60, y: 50,
+            width: canvas.width - 120,
+            height: canvas.height - 200
+        };
+        
+        // Игрок
+        let player = {
+            x: 200, y: 400,
+            width: 38, height: 52,
+            speed: 4.5,
+            stealthMode: false,
+            candy: 0,
+            level: 1,
+            caught: 0,
+            lives: 3,
+            hidden: false,
+            hideTimer: 0,
+            noiseLevel: 0,
+            lastCandyTime: 0
+        };
+        
+        // Олег Ильич - СУПЕР-БДИТЕЛЬНЫЙ
+        let oleg = {
+            x: 400, y: 300,
+            width: 55, height: 75,
+            state: 'guarding', // guarding, suspicious, searching, angry, chasing
+            lookDirection: Math.PI,
+            lookTimer: 0,
+            lookSpeed: 0.02,
+            suspicion: 0,
+            maxSuspicion: 100,
+            isBlinking: false,
+            blinkTimer: 0,
+            blinkDuration: 0,
+            walkTarget: null,
+            walkTimer: 0,
+            chaseSpeed: 3.5,
+            lastKnownPlayerX: 0,
+            lastKnownPlayerY: 0,
+            alertLevel: 0,
+            candyCheckTimer: 0,
+            rememberedCandyCount: 8,
+            checkTableTimer: 120
+        };
+        
+        // Стол
+        let table = {
+            x: 300, y: 270,
+            width: 260, height: 140
+        };
+        
+        // Укрытия
+        let hidingSpots = [];
+        
+        let candiesOnTable = [];
+        let particles = [];
+        let alertIcons = [];
+        
+        let gameOver = false;
+        let keys = {};
+        let grabCooldown = 0;
+        let canGrab = true;
+        let lastGrabTime = 0;
+        let grabPenalty = 0;
+        
+        // Создание укрытий
+        function createHidingSpots() {
+            hidingSpots = [
+                { x: ROOM.x + 40, y: ROOM.y + 40, width: 50, height: 90, type: 'Шкаф' },
+                { x: ROOM.x + ROOM.width - 140, y: ROOM.y + ROOM.height - 100, width: 100, height: 45, type: 'Диван' },
+                { x: ROOM.x + 170, y: ROOM.y + ROOM.height - 110, width: 45, height: 45, type: 'Кресло' }
+            ];
+        }
+        
+        function createCandies() {
+            candiesOnTable = [];
+            const candyEmojis = ['🍬', '🍭', '🍫', '🍪', '🍩', '🧁', '🍰', '🎂'];
+            
+            for (let i = 0; i < 8; i++) {
+                candiesOnTable.push({
+                    x: table.x + 25 + Math.random() * (table.width - 50),
+                    y: table.y + 20 + Math.random() * (table.height - 40),
+                    emoji: candyEmojis[Math.floor(Math.random() * candyEmojis.length)],
+                    size: 26 + Math.random() * 12,
+                    bobOffset: Math.random() * Math.PI * 2,
+                    collected: false,
+                    wasJustStolen: false
+                });
+            }
+            oleg.rememberedCandyCount = 8;
+            updateTableDisplay();
+        }
+        
+        function updateTableDisplay() {
+            const count = candiesOnTable.filter(c => !c.collected).length;
+            document.getElementById('table-display').textContent = count;
+        }
+        
+        function updateUI() {
+            document.getElementById('candy-display').textContent = player.candy;
+            document.getElementById('level-display').textContent = player.level;
+            document.getElementById('caught-display').textContent = player.caught;
+            document.getElementById('lives-display').textContent = player.lives;
+            updateTableDisplay();
+            document.getElementById('suspicion-fill').style.width = (oleg.suspicion / oleg.maxSuspicion * 100) + '%';
+        }
+        
+        function showMessage(text, color = '#ffd700', duration = 2000) {
+            const msg = document.getElementById('message');
+            msg.innerHTML = `<span style="color:${color}; font-size:1.8em; font-weight:bold; text-shadow:0 0 15px ${color}">${text}</span>`;
+            setTimeout(() => { msg.innerHTML = ''; }, duration);
+        }
+        
+        // ПОПЫТКА КРАЖИ - ТЕПЕРЬ ОЧЕНЬ СЛОЖНО
+        function tryGrabCandy() {
+            if (grabCooldown > 0 || grabPenalty > 0) return;
+            
+            const now = Date.now();
+            
+            // Нельзя красть слишком часто
+            if (now - lastGrabTime < 2000) {
+                document.getElementById('status').textContent = '⏳ Слишком часто! Подожди 2 секунды!';
+                return;
+            }
+            
+            const distX = Math.abs(player.x - (table.x + table.width/2));
+            const distY = Math.abs(player.y - (table.y + table.height/2));
+            
+            if (distX > table.width/2 + 45 || distY > table.height/2 + 45) {
+                document.getElementById('status').textContent = '❌ Слишком далеко от стола!';
+                return;
+            }
+            
+            // Олег ВСЕГДА замечает кражу, если смотрит на стол
+            if (olegIsWatchingTable()) {
+                // Олег видит кражу!
+                oleg.suspicion = oleg.maxSuspicion;
+                oleg.state = 'angry';
+                oleg.lastKnownPlayerX = player.x;
+                oleg.lastKnownPlayerY = player.y;
+                
+                showMessage('👀 ОЛЕГ ЗАМЕТИЛ КРАЖУ!', '#ff0000');
+                document.getElementById('status').textContent = '😱 Олег увидел! БЕГИ!';
+                
+                // Штраф - нельзя красть 3 секунды
+                grabPenalty = 180;
+                
+                return;
+            }
+            
+            // Проверка - слышит ли Олег
+            if (!player.stealthMode && oleg.suspicion > 30) {
+                oleg.suspicion += 20;
+                oleg.state = 'suspicious';
+                document.getElementById('status').textContent = '👂 Олег что-то услышал!';
+            }
+            
+            const availableCandies = candiesOnTable.filter(c => !c.collected);
+            if (availableCandies.length === 0) {
+                document.getElementById('status').textContent = '😢 Конфеты кончились!';
+                setTimeout(() => createCandies(), 3000);
+                return;
+            }
+            
+            // Найти ближайшую конфету
+            let closest = null;
+            let closestDist = Infinity;
+            for (let candy of availableCandies) {
+                const dx = player.x - candy.x;
+                const dy = player.y - candy.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < closestDist) { closestDist = dist; closest = candy; }
+            }
+            
+            if (closest && closestDist < 150) {
+                // КРАЖА!
+                closest.collected = true;
+                closest.wasJustStolen = true;
+                player.candy++;
+                lastGrabTime = now;
+                grabCooldown = 30;
+                player.lastCandyTime = now;
+                
+                // Олег замечает пропажу конфеты
+                oleg.rememberedCandyCount--;
+                oleg.checkTableTimer = Math.max(30, oleg.checkTableTimer - 40);
+                
+                // Шум от кражи
+                player.noiseLevel = player.stealthMode ? 15 : 40;
+                oleg.suspicion += player.stealthMode ? 5 : 25;
+                
+                if (oleg.suspicion > 60) oleg.state = 'suspicious';
+                if (oleg.suspicion > 85) {
+                    oleg.state = 'searching';
+                    oleg.lastKnownPlayerX = player.x;
+                    oleg.lastKnownPlayerY = player.y;
+                }
+                
+                // Эффект
+                for (let i = 0; i < 12; i++) {
+                    particles.push({
+                        x: closest.x, y: closest.y,
+                        vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4-2,
+                        life: 0.7, color: '#ffd700', size: 2+Math.random()*5
+                    });
+                }
+                
+                document.getElementById('status').textContent = `✅ +1! (${player.candy} всего) Олег подозревает!`;
+                updateUI();
+                
+                // Проверка пополнения
+                const remaining = candiesOnTable.filter(c => !c.collected).length;
+                if (remaining < 2) {
+                    setTimeout(() => {
+                        createCandies();
+                        document.getElementById('status').textContent = '🍬 Новые конфеты!';
+                    }, 2500);
+                }
+                
+                if (player.candy >= 8 * player.level) {
+                    player.level++;
+                    player.lives = Math.min(5, player.lives + 1);
+                    showMessage(`🎉 УРОВЕНЬ ${player.level}! +1 жизнь!`, '#00ff88');
+                    createCandies();
+                }
+            }
+        }
+        
+        // Олег смотрит на стол?
+        function olegIsWatchingTable() {
+            const dx = (table.x + table.width/2) - oleg.x;
+            const dy = (table.y + table.height/2) - oleg.y;
+            const angleToTable = Math.atan2(dy, dx);
+            let diff = Math.abs(angleToTable - oleg.lookDirection);
+            if (diff > Math.PI) diff = Math.PI*2 - diff;
+            
+            // Олег смотрит на стол
+            if (diff < Math.PI * 0.5) {
+                // Но он может моргать!
+                if (oleg.isBlinking && oleg.blinkDuration > 0) {
+                    return false; // Моргает - не видит!
+                }
+                return true;
+            }
+            return false;
+        }
+        
+        // Игрок в укрытии?
+        function isPlayerHidden() {
+            for (let spot of hidingSpots) {
+                const dx = Math.abs(player.x - (spot.x + spot.width/2));
+                const dy = Math.abs(player.y - (spot.y + spot.height/2));
+                if (dx < spot.width/2 + 10 && dy < spot.height/2 + 10) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Обновление Олега
+        function updateOleg() {
+            // Моргание
+            oleg.blinkTimer++;
+            if (oleg.blinkTimer > 60 + Math.random() * 80) {
+                oleg.isBlinking = true;
+                oleg.blinkDuration = 8 + Math.floor(Math.random() * 12);
+                oleg.blinkTimer = 0;
+            }
+            if (oleg.isBlinking) {
+                oleg.blinkDuration--;
+                if (oleg.blinkDuration <= 0) oleg.isBlinking = false;
+            }
+            
+            // Олег проверяет стол
+            oleg.checkTableTimer--;
+            if (oleg.checkTableTimer <= 0) {
+                oleg.checkTableTimer = 80 + Math.random() * 100;
+                const currentCount = candiesOnTable.filter(c => !c.collected).length;
+                
+                if (currentCount < oleg.rememberedCandyCount) {
+                    // Олег заметил пропажу!
+                    oleg.suspicion += 30;
+                    oleg.state = 'searching';
+                    oleg.rememberedCandyCount = currentCount;
+                    showMessage('🔍 Олег заметил пропажу конфет!', '#ff6600');
+                    document.getElementById('status').textContent = '😰 Олег проверяет стол!';
+                }
+            }
+            
+            // Сброс подозрения
+            if (oleg.suspicion > 0) {
+                oleg.suspicion -= 0.15;
+                if (oleg.suspicion < 0) oleg.suspicion = 0;
+            }
+            
+            // Поведение в зависимости от состояния
+            oleg.lookTimer++;
+            
+            switch(oleg.state) {
+                case 'guarding':
+                    // Сидит и смотрит на стол
+                    oleg.x += (table.x + table.width/2 - oleg.x) * 0.05;
+                    oleg.y += (table.y + table.height + 25 - oleg.y) * 0.05;
+                    
+                    // Меняет направление взгляда
+                    if (oleg.lookTimer > 100 + Math.random() * 150) {
+                        oleg.lookTimer = 0;
+                        oleg.lookDirection = Math.atan2(
+                            (table.y + table.height/2) - oleg.y + (Math.random()-0.5)*100,
+                            (table.x + table.width/2) - oleg.x + (Math.random()-0.5)*100
+                        );
+                    }
+                    
+                    if (oleg.suspicion > 40) oleg.state = 'suspicious';
+                    break;
+                    
+                case 'suspicious':
+                    // Чаще смотрит по сторонам
+                    if (oleg.lookTimer > 40 + Math.random() * 60) {
+                        oleg.lookTimer = 0;
+                        oleg.lookDirection = Math.random() * Math.PI * 2;
+                    }
+                    
+                    if (oleg.suspicion < 20) oleg.state = 'guarding';
+                    if (oleg.suspicion > 70) {
+                        oleg.state = 'searching';
+                        oleg.lastKnownPlayerX = player.x;
+                        oleg.lastKnownPlayerY = player.y;
+                    }
+                    break;
+                    
+                case 'searching':
+                    // Ходит и ищет
+                    if (!oleg.walkTarget || oleg.walkTimer <= 0) {
+                        oleg.walkTarget = {
+                            x: ROOM.x + 60 + Math.random() * (ROOM.width - 120),
+                            y: ROOM.y + 60 + Math.random() * (ROOM.height - 120)
+                        };
+                        oleg.walkTimer = 60 + Math.random() * 80;
+                    }
+                    
+                    const sdx = oleg.walkTarget.x - oleg.x;
+                    const sdy = oleg.walkTarget.y - oleg.y;
+                    const sdist = Math.sqrt(sdx*sdx + sdy*sdy);
+                    
+                    if (sdist > 3) {
+                        oleg.x += (sdx/sdist) * 2;
+                        oleg.y += (sdy/sdist) * 2;
+                    }
+                    oleg.lookDirection = Math.atan2(sdy, sdx);
+                    oleg.walkTimer--;
+                    
+                    if (oleg.suspicion < 30) oleg.state = 'suspicious';
+                    if (oleg.suspicion > 90) {
+                        oleg.state = 'angry';
+                        oleg.lastKnownPlayerX = player.x;
+                        oleg.lastKnownPlayerY = player.y;
+                    }
+                    break;
+                    
+                case 'angry':
+                    // Бежит к последнему известному месту игрока
+                    const adx = oleg.lastKnownPlayerX - oleg.x;
+                    const ady = oleg.lastKnownPlayerY - oleg.y;
+                    const adist = Math.sqrt(adx*adx + ady*ady);
+                    
+                    if (adist > 2) {
+                        oleg.x += (adx/adist) * oleg.chaseSpeed;
+                        oleg.y += (ady/adist) * oleg.chaseSpeed;
+                    }
+                    oleg.lookDirection = Math.atan2(ady, adx);
+                    
+                    // Если догнал игрока
+                    const pdx = player.x - oleg.x;
+                    const pdy = player.y - oleg.y;
+                    const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
+                    
+                    if (pdist < 50 && !isPlayerHidden()) {
+                        catchPlayer();
+                    }
+                    
+                    if (oleg.suspicion < 50) oleg.state = 'searching';
+                    break;
+            }
+            
+            // Ограничения
+            oleg.x = Math.max(ROOM.x + 30, Math.min(ROOM.x + ROOM.width - 30, oleg.x));
+            oleg.y = Math.max(ROOM.y + 30, Math.min(ROOM.y + ROOM.height - 30, oleg.y));
+        }
+        
+        function catchPlayer() {
+            player.caught++;
+            player.lives--;
+            player.candy = Math.max(0, player.candy - 5);
+            player.x = ROOM.x + 100;
+            player.y = ROOM.y + ROOM.height - 60;
+            oleg.suspicion = 0;
+            oleg.state = 'guarding';
+            oleg.walkTarget = null;
+            grabPenalty = 120;
+            
+            for (let i = 0; i < 50; i++) {
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12,
+                    life: 1.5, color: '#ff0000', size: 3+Math.random()*8
+                });
+            }
+            
+            if (player.lives <= 0) {
+                gameOver = true;
+                showMessage('💀 ИГРА ОКОНЧЕНА! Олег победил!', '#ff0000', 5000);
+                document.getElementById('status').textContent = '😵 Вы проиграли...';
+            } else {
+                showMessage(`😡 ПОЙМАЛ! -5 конфет! Жизней: ${player.lives}`, '#ff0000');
+                document.getElementById('status').textContent = `💀 Пойман! Осталось ${player.lives} жизней`;
+            }
+            
+            createCandies();
+            updateUI();
+        }
+        
+        function update() {
+            if (gameOver) return;
+            
+            // Движение
+            const speed = player.stealthMode ? 1.8 : player.speed;
+            
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) player.x -= speed;
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += speed;
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) player.y -= speed;
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) player.y += speed;
+            
+            player.stealthMode = keys['Shift'] || keys['shift'];
+            
+            // Проверка укрытия
+            player.hidden = isPlayerHidden();
+            player.hideTimer = player.hidden ? Math.min(60, player.hideTimer + 1) : 0;
+            
+            // Ограничения
+            player.x = Math.max(ROOM.x + 20, Math.min(ROOM.x + ROOM.width - 20, player.x));
+            player.y = Math.max(ROOM.y + 20, Math.min(ROOM.y + ROOM.height - 20, player.y));
+            
+            // Шум
+            if (!player.stealthMode && (keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight'] ||
+                keys['w'] || keys['a'] || keys['s'] || keys['d'])) {
+                player.noiseLevel = Math.min(50, player.noiseLevel + 0.5);
+            } else {
+                player.noiseLevel = Math.max(0, player.noiseLevel - 0.3);
+            }
+            
+            if (player.noiseLevel > 20 && oleg.suspicion < 80) {
+                oleg.suspicion += 0.3;
+            }
+            
+            if (grabCooldown > 0) grabCooldown--;
+            if (grabPenalty > 0) grabPenalty--;
+            
+            // Взять конфету
+            if (keys['e'] || keys['E']) {
+                if (canGrab && grabCooldown <= 0 && grabPenalty <= 0) {
+                    tryGrabCandy();
+                    canGrab = false;
+                }
+            } else {
+                canGrab = true;
+            }
+            
+            updateOleg();
+            
+            // Частицы
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.025;
+                return p.life > 0;
+            });
+            
+            // Статус
+            let statusText = '';
+            if (player.hidden) {
+                statusText = '🫣 В укрытии! Олег не видит!';
+            } else if (oleg.state === 'angry') {
+                statusText = '🏃 БЕГИ! Олег ищет тебя!';
+            } else if (oleg.state === 'searching') {
+                statusText = '🔍 Олег патрулирует комнату...';
+            } else if (oleg.isBlinking) {
+                statusText = '😑 Олег моргает! Хватай конфеты!';
+            } else if (grabPenalty > 0) {
+                statusText = `⏳ Жди ${Math.ceil(grabPenalty/60)} сек...`;
+            } else if (oleg.suspicion > 50) {
+                statusText = '⚠️ Олег что-то подозревает!';
+            } else {
+                statusText = '🔴 Олег следит за столом! Жди момент!';
+            }
+            document.getElementById('status').textContent = statusText;
+            
+            updateUI();
+            draw();
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Фон
+            ctx.fillStyle = '#0d0d0d';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Комната
+            ctx.fillStyle = '#c4956a';
+            ctx.fillRect(ROOM.x, ROOM.y, ROOM.width, ROOM.height);
+            ctx.fillStyle = '#b0855a';
+            ctx.fillRect(ROOM.x + 8, ROOM.y + 8, ROOM.width - 16, ROOM.height - 16);
+            
+            // Укрытия
+            hidingSpots.forEach(spot => {
+                ctx.fillStyle = spot.type === 'Шкаф' ? '#6B3A2E' : spot.type === 'Диван' ? '#5C3A1E' : '#7B5B3A';
+                ctx.fillRect(spot.x, spot.y, spot.width, spot.height);
+                
+                if (isPlayerHidden() && player.hidden) {
+                    const spotDx = Math.abs(player.x - (spot.x + spot.width/2));
+                    const spotDy = Math.abs(player.y - (spot.y + spot.height/2));
+                    if (spotDx < spot.width/2 + 10 && spotDy < spot.height/2 + 10) {
+                        ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(spot.x - 3, spot.y - 3, spot.width + 6, spot.height + 6);
+                    }
+                }
+            });
+            
+            // Стол
+            ctx.fillStyle = '#654321';
+            ctx.fillRect(table.x + 20, table.y + table.height, 8, 55);
+            ctx.fillRect(table.x + table.width - 28, table.y + table.height, 8, 55);
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(table.x, table.y + table.height - 8, table.width, 8);
+            ctx.fillStyle = '#cc3333';
+            ctx.fillRect(table.x - 6, table.y + table.height - 16, table.width + 12, 20);
+            
+            // Конфеты
+            candiesOnTable.forEach(candy => {
+                if (candy.collected) return;
+                const bobY = Math.sin(Date.now()*0.004 + candy.bobOffset) * 4;
+                ctx.fillStyle = 'rgba(255,215,0,0.25)';
+                ctx.beginPath();
+                ctx.arc(candy.x, candy.y+bobY, candy.size+4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.font = `${candy.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(candy.emoji, candy.x, candy.y+bobY);
+            });
+            
+            // Олег
+            ctx.save();
+            ctx.translate(oleg.x, oleg.y);
+            
+            // Тело
+            const bodyColor = oleg.state === 'angry' ? '#ff3333' : 
+                             oleg.state === 'searching' ? '#ff8833' : '#4488cc';
+            ctx.fillStyle = bodyColor;
+            ctx.fillRect(-oleg.width/2, 0, oleg.width, oleg.height);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-oleg.width/2, oleg.height/4, oleg.width, oleg.height/2);
+            
+            // Голова
+            ctx.fillStyle = '#ffcc99';
+            ctx.beginPath();
+            ctx.arc(0, -oleg.height/8, oleg.width/2.3, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Глаза
+            if (!oleg.isBlinking) {
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-7, -oleg.height/8, 6, 0, Math.PI*2);
+                ctx.arc(7, -oleg.height/8, 6, 0, Math.PI*2);
+                ctx.fill();
+                const px = Math.cos(oleg.lookDirection)*2;
+                const py = Math.sin(oleg.lookDirection)*2;
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-7+px, -oleg.height/8+py, 3, 0, Math.PI*2);
+                ctx.arc(7+px, -oleg.height/8+py, 3, 0, Math.PI*2);
+                ctx.fill();
+            } else {
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-11, -oleg.height/8);
+                ctx.lineTo(-3, -oleg.height/8);
+                ctx.moveTo(3, -oleg.height/8);
+                ctx.lineTo(11, -oleg.height/8);
+                ctx.stroke();
+            }
+            
+            // Очки
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-7, -oleg.height/8, 8, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(7, -oleg.height/8, 8, 0, Math.PI*2);
+            ctx.stroke();
+            
+            // Состояние
+            const icons = { 'guarding': '👀', 'suspicious': '🤔', 'searching': '🔍', 'angry': '😡' };
+            ctx.font = '22px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(icons[oleg.state] || '👀', 0, -oleg.height/2 - 10);
+            
+            // Если моргает - индикатор
+            if (oleg.isBlinking) {
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '14px Arial';
+                ctx.fillText('😑', 15, -oleg.height/2 - 10);
+            }
+            
+            ctx.restore();
+            
+            // Игрок
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            let alpha = 1;
+            if (player.stealthMode) alpha = 0.6;
+            if (player.hidden) alpha = 0.3;
+            ctx.globalAlpha = alpha;
+            
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-player.width/2, 0, player.width, player.height);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(-player.width/2, player.height/5, player.width, player.height*0.6);
+            
+            ctx.fillStyle = '#ffcc99';
+            ctx.beginPath();
+            ctx.arc(0, -player.height/4, player.width/3, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-9, -player.height/4, 18, player.height/8);
+            
+            // Мешок
+            if (player.candy > 0) {
+                ctx.fillStyle = '#654321';
+                ctx.beginPath();
+                ctx.arc(14, player.height/2, 11, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#ffd700';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(player.candy, 14, player.height/2+3);
+            }
+            
+            // Индикатор шума
+            if (player.noiseLevel > 15) {
+                const noiseAlpha = player.noiseLevel / 50;
+                ctx.fillStyle = `rgba(255,0,0,${noiseAlpha})`;
+                for (let i = 0; i < 3; i++) {
+                    const nx = (Math.random()-0.5)*30;
+                    const ny = (Math.random()-0.5)*30;
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+            
+            ctx.globalAlpha = 1;
+            ctx.restore();
+            
+            // Частицы
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+            
+            // Зона стола
+            const dxTable = Math.abs(player.x - (table.x + table.width/2));
+            const dyTable = Math.abs(player.y - (table.y + table.height/2));
+            const nearTable = dxTable < table.width/2 + 45 && dyTable < table.height/2 + 45;
+            
+            if (nearTable && candiesOnTable.filter(c=>!c.collected).length > 0 && grabCooldown <= 0 && grabPenalty <= 0) {
+                if (oleg.isBlinking) {
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.7)';
+                    ctx.fillStyle = 'rgba(0, 255, 0, 0.15)';
+                    ctx.fillRect(table.x-15, table.y-15, table.width+30, table.height+100);
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 4]);
+                    ctx.strokeRect(table.x-15, table.y-15, table.width+30, table.height+100);
+                    ctx.setLineDash([]);
+                    
+                    const alpha = 0.8 + Math.sin(Date.now()*0.008)*0.2;
+                    ctx.fillStyle = `rgba(0,255,0,${alpha})`;
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ОЛЕГ МОРГАЕТ! ЖМИ E!', table.x+table.width/2, table.y-25);
+                } else if (oleg.suspicion < 30) {
+                    ctx.strokeStyle = 'rgba(255,215,0,0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([10,5]);
+                    ctx.strokeRect(table.x-15, table.y-15, table.width+30, table.height+100);
+                    ctx.setLineDash([]);
+                }
+            }
+        }
+        
+        // Управление
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) {
+                e.preventDefault();
+            }
+            
+            if (e.key === 'e' || e.key === 'E') {
+                e.preventDefault();
+                if (canGrab && grabCooldown <= 0 && grabPenalty <= 0) {
+                    tryGrabCandy();
+                    canGrab = false;
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            if (e.key === 'e' || e.key === 'E') canGrab = true;
+        });
+        
+        // Рестарт
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                if (gameOver) {
+                    gameOver = false;
+                    player.lives = 3;
+                    player.candy = 0;
+                    player.caught = 0;
+                    player.level = 1;
+                    player.x = 200;
+                    player.y = 400;
+                    oleg.suspicion = 0;
+                    oleg.state = 'guarding';
+                    createCandies();
+                    updateUI();
+                    showMessage('🔄 Новая игра! Будь осторожнее!', '#00ff88');
+                }
+            }
+        });
+        
+        setInterval(update, 1000/60);
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        createHidingSpots();
+        createCandies();
+        updateUI();
+        document.getElementById('status').textContent = '🔴 Олег следит за столом! Жди момент!';
+    </script>
+</body>
+</html>

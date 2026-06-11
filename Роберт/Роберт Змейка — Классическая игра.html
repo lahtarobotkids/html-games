@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Змейка — Классическая игра</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        .game-container {
+            text-align: center;
+        }
+        canvas {
+            border: 3px solid #e94560;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+            background-color: #16213e;
+            display: block;
+            margin: 0 auto;
+        }
+        .score {
+            color: #e94560;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+        .game-over {
+            color: #ffffff;
+            font-size: 22px;
+            margin-top: 15px;
+            visibility: hidden;
+        }
+        .game-over.visible {
+            visibility: visible;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .instructions {
+            color: #aaa;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">СЧЁТ: <span id="scoreDisplay">0</span></div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="game-over" id="gameOverMessage">
+            ИГРА ОКОНЧЕНА! Нажмите ПРОБЕЛ для рестарта
+        </div>
+        <div class="instructions">Стрелки / WASD — управление | ПРОБЕЛ — рестарт</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+
+        // Размер одной клетки и количество клеток по осям
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize; // 20x20 клеток
+
+        let snake, food, direction, nextDirection, score, gameRunning, gameSpeed;
+
+        // Инициализация / сброс игры
+        function initGame() {
+            // Змейка начинается с 5 сегментов в центре поля
+            snake = [
+                { x: 10, y: 10 },
+                { x: 9, y: 10 },
+                { x: 8, y: 10 },
+                { x: 7, y: 10 },
+                { x: 6, y: 10 }
+            ];
+            direction = { x: 1, y: 0 };   // Движение вправо
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            gameRunning = true;
+            gameSpeed = 100;               // миллисекунд на шаг
+            gameOverMessage.classList.remove('visible');
+            scoreDisplay.textContent = score;
+            placeFood();
+        }
+
+        // Размещаем еду в случайной свободной клетке
+        function placeFood() {
+            // Собираем все занятые клетки
+            const occupied = new Set(snake.map(seg => `${seg.x},${seg.y}`));
+            
+            // Если змейка заполнила всё поле — игрок победил
+            if (occupied.size === tileCount * tileCount) {
+                gameRunning = false;
+                gameOverMessage.textContent = 'ПОБЕДА! Вы заполнили всё поле! Нажмите ПРОБЕЛ';
+                gameOverMessage.classList.add('visible');
+                return;
+            }
+
+            let freeCells = [];
+            for (let x = 0; x < tileCount; x++) {
+                for (let y = 0; y < tileCount; y++) {
+                    if (!occupied.has(`${x},${y}`)) {
+                        freeCells.push({ x, y });
+                    }
+                }
+            }
+
+            // Случайный выбор из свободных клеток
+            const randomCell = freeCells[Math.floor(Math.random() * freeCells.length)];
+            food = randomCell;
+        }
+
+        // Основной игровой цикл
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            // Обновляем направление (нельзя развернуться на 180 градусов)
+            if (
+                (nextDirection.x !== -direction.x || nextDirection.y !== -direction.y) &&
+                (nextDirection.x !== 0 || nextDirection.y !== 0)
+            ) {
+                direction = { x: nextDirection.x, y: nextDirection.y };
+            }
+
+            // Вычисляем новую голову
+            const head = snake[0];
+            const newHead = {
+                x: head.x + direction.x,
+                y: head.y + direction.y
+            };
+
+            // Проверка столкновения со стенами
+            if (newHead.x < 0 || newHead.x >= tileCount || newHead.y < 0 || newHead.y >= tileCount) {
+                endGame();
+                return;
+            }
+
+            // Проверка столкновения с собственным телом (кроме хвоста, который сдвинется)
+            for (let i = 0; i < snake.length - 1; i++) {
+                if (snake[i].x === newHead.x && snake[i].y === newHead.y) {
+                    endGame();
+                    return;
+                }
+            }
+
+            // Добавляем новую голову
+            snake.unshift(newHead);
+
+            // Проверяем, съедена ли еда
+            if (newHead.x === food.x && newHead.y === food.y) {
+                score++;
+                scoreDisplay.textContent = score;
+                placeFood();
+                // Если еду не удалось разместить (победа), останавливаем
+                if (!gameRunning) {
+                    draw(); // отрисовываем финальное состояние
+                    return;
+                }
+                // Небольшое ускорение каждые 5 очков (минимум 50 мс)
+                if (score % 5 === 0 && gameSpeed > 50) {
+                    gameSpeed -= 5;
+                }
+            } else {
+                // Убираем хвост, если еда не съедена
+                snake.pop();
+            }
+
+            draw();
+            setTimeout(gameLoop, gameSpeed);
+        }
+
+        function endGame() {
+            gameRunning = false;
+            gameOverMessage.classList.add('visible');
+            draw(); // отрисовываем финальное положение
+        }
+
+        // Отрисовка всего на canvas
+        function draw() {
+            // Фон
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Сетка (опционально, для красоты)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i < tileCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * gridSize, 0);
+                ctx.lineTo(i * gridSize, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * gridSize);
+                ctx.lineTo(canvas.width, i * gridSize);
+                ctx.stroke();
+            }
+
+            // Еда — красный мерцающий квадрат
+            if (food) {
+                const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 0.8; // мерцание
+                ctx.fillStyle = `rgba(233, 69, 96, ${pulse})`;
+                ctx.shadowColor = '#e94560';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(food.x * gridSize + 2, food.y * gridSize + 2, gridSize - 4, gridSize - 4);
+                ctx.shadowBlur = 0; // сброс тени
+            }
+
+            // Змейка
+            snake.forEach((segment, index) => {
+                if (index === 0) {
+                    // Голова — ярко-зелёная
+                    ctx.fillStyle = '#00ff88';
+                    ctx.shadowColor = '#00ff88';
+                    ctx.shadowBlur = 12;
+                } else {
+                    // Тело — градиент от зелёного к тёмному
+                    const gradient = ctx.createLinearGradient(
+                        segment.x * gridSize, segment.y * gridSize,
+                        (segment.x + 1) * gridSize, (segment.y + 1) * gridSize
+                    );
+                    gradient.addColorStop(0, '#0aff99');
+                    gradient.addColorStop(1, '#0a8f5c');
+                    ctx.fillStyle = gradient;
+                    ctx.shadowColor = '#0aff99';
+                    ctx.shadowBlur = 5;
+                }
+                ctx.fillRect(segment.x * gridSize + 1, segment.y * gridSize + 1, gridSize - 2, gridSize - 2);
+                ctx.shadowBlur = 0;
+
+                // Глаза на голове
+                if (index === 0) {
+                    ctx.fillStyle = '#ffffff';
+                    const eyeSize = 3;
+                    let eyeX1, eyeY1, eyeX2, eyeY2;
+                    const cx = segment.x * gridSize + gridSize / 2;
+                    const cy = segment.y * gridSize + gridSize / 2;
+
+                    if (direction.x === 1) { // вправо
+                        eyeX1 = cx + 2; eyeY1 = cy - 3;
+                        eyeX2 = cx + 2; eyeY2 = cy + 3;
+                    } else if (direction.x === -1) { // влево
+                        eyeX1 = cx - 3; eyeY1 = cy - 3;
+                        eyeX2 = cx - 3; eyeY2 = cy + 3;
+                    } else if (direction.y === -1) { // вверх
+                        eyeX1 = cx - 3; eyeY1 = cy - 3;
+                        eyeX2 = cx + 3; eyeY2 = cy - 3;
+                    } else if (direction.y === 1) { // вниз
+                        eyeX1 = cx - 3; eyeY1 = cy + 2;
+                        eyeX2 = cx + 3; eyeY2 = cy + 2;
+                    } else {
+                        eyeX1 = cx - 3; eyeY1 = cy - 3;
+                        eyeX2 = cx + 3; eyeY2 = cy - 3;
+                    }
+                    ctx.beginPath();
+                    ctx.arc(eyeX1, eyeY1, eyeSize, 0, Math.PI * 2);
+                    ctx.arc(eyeX2, eyeY2, eyeSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Зрачки
+                    ctx.fillStyle = '#000000';
+                    ctx.beginPath();
+                    ctx.arc(eyeX1, eyeY1, 1.5, 0, Math.PI * 2);
+                    ctx.arc(eyeX2, eyeY2, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        // Управление с клавиатуры
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+
+            // Рестарт по пробелу
+            if (key === ' ') {
+                e.preventDefault();
+                initGame();
+                setTimeout(gameLoop, gameSpeed);
+                return;
+            }
+
+            // Направления
+            switch (key) {
+                case 'arrowup':
+                case 'w':
+                    e.preventDefault();
+                    nextDirection = { x: 0, y: -1 };
+                    break;
+                case 'arrowdown':
+                case 's':
+                    e.preventDefault();
+                    nextDirection = { x: 0, y: 1 };
+                    break;
+                case 'arrowleft':
+                case 'a':
+                    e.preventDefault();
+                    nextDirection = { x: -1, y: 0 };
+                    break;
+                case 'arrowright':
+                case 'd':
+                    e.preventDefault();
+                    nextDirection = { x: 1, y: 0 };
+                    break;
+            }
+        });
+
+        // Запуск игры
+        initGame();
+        setTimeout(gameLoop, gameSpeed);
+    </script>
+</body>
+</html>

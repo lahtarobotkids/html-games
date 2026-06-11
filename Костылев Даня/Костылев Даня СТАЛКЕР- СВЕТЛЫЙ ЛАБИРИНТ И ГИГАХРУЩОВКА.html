@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>☢️ СТАЛКЕР: СВЕТЛЫЙ ЛАБИРИНТ И ГИГАХРУЩОВКА</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #aaa;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+      touch-action: none;
+      user-select: none;
+    }
+    canvas { display: block; }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+      background: rgba(240,240,220,0.9);
+      padding: 10px 25px;
+      border-radius: 30px;
+      border: 2px solid #999;
+      color: #222;
+      font-weight: bold;
+      font-size: 1rem;
+      text-shadow: none;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      z-index: 10;
+      pointer-events: none;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 90vw;
+    }
+    .health-bar {
+      width: 100px;
+      height: 12px;
+      background: #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #999;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .health-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff3333, #ff8800);
+      transition: width 0.2s;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 24px; height: 24px;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(0,0,0,0.9);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+    #message {
+      position: absolute;
+      top: 30%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff4400;
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-align: center;
+      text-shadow: 0 0 10px #fff;
+      pointer-events: none;
+      z-index: 20;
+      display: none;
+    }
+    #restartBtn {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #eee;
+      border: 2px solid #888;
+      color: #222;
+      font-weight: bold;
+      font-size: 1.2rem;
+      padding: 12px 30px;
+      border-radius: 30px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      z-index: 15;
+      display: none;
+    }
+    #restartBtn:hover { background: #fff; box-shadow: 0 0 25px rgba(0,0,0,0.5); }
+    #mobileControls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      gap: 6px;
+      z-index: 10;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .mbtn {
+      width: 50px; height: 50px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.8);
+      border: 2px solid #999;
+      color: #333;
+      font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    @media (max-width: 768px) { #mobileControls { display: flex; } }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <span>❤️ <div class="health-bar"><div class="health-fill" id="healthFill" style="width:100%"></div></div></span>
+    <span>🔫 <span id="ammoDisplay">30</span>/<span id="maxAmmoDisplay">30</span></span>
+    <span>💎 Артефакты: <span id="artifactDisplay">0</span>/10</span>
+    <span>💀 Убито: <span id="killDisplay">0</span></span>
+    <span>🐛 Босс: <span id="bossHpDisplay">--</span>%</span>
+  </div>
+  <div id="crosshair"></div>
+  <div id="message"></div>
+  <button id="restartBtn" onclick="restartGame()">🔄 В НОВЫЙ РЕЙД</button>
+  <div id="mobileControls">
+    <div class="mbtn" data-key="ArrowUp">⬆️</div>
+    <div class="mbtn" data-key="ArrowLeft">⬅️</div>
+    <div class="mbtn" data-key="ArrowDown">⬇️</div>
+    <div class="mbtn" data-key="ArrowRight">➡️</div>
+    <div class="mbtn" data-key="shoot" style="background:#ffcccc;border-color:#aa4444;">💥</div>
+    <div class="mbtn" data-key="reload">🔄</div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // ==================== НАСТРОЙКИ ====================
+    const WORLD_SIZE = 80;
+    const LABYRINTH_CELLS = 19;
+    const CELL_SIZE = WORLD_SIZE / LABYRINTH_CELLS;
+    const WALL_HEIGHT = 3.2;
+    const WALL_THICKNESS = 0.6;
+    
+    const scene = new THREE.Scene();
+    // СВЕТЛЫЙ ФОН
+    scene.background = new THREE.Color(0xdddddd);
+    // Убираем туман (или делаем очень слабым и светлым)
+    scene.fog = new THREE.Fog(0xdddddd, 60, 150);
+    
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 200);
+    camera.position.set(0, 2.5, 20);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+    
+    // ==================== СОСТОЯНИЕ ИГРЫ ====================
+    const player = {
+      hp: 100,
+      maxHp: 100,
+      ammo: 30,
+      maxAmmo: 30,
+      reloading: false,
+      reloadTimer: 0,
+      reloadTime: 1.8,
+      invincible: 0,
+      shootCooldown: 0,
+      artifacts: 0,
+      requiredArtifacts: 10,
+      kills: 0
+    };
+    
+    let gameOver = false;
+    let gameWin = false;
+    let bossActive = false;
+    let bossSpawned = false;
+    
+    const bullets = [];
+    const enemies = [];
+    const artifacts = [];
+    const particles = [];
+    let boss = null;
+    
+    let mazeWalls = [];
+    let freeCells = [];
+    
+    const keys = {};
+    let mouseDown = false;
+    let yaw = 0, pitch = 0;
+    const mouseSensitivity = 0.002;
+    let isPointerLocked = false;
+    
+    // ==================== HUD ====================
+    const healthFill = document.getElementById('healthFill');
+    const ammoDisplay = document.getElementById('ammoDisplay');
+    const maxAmmoDisplay = document.getElementById('maxAmmoDisplay');
+    const artifactDisplay = document.getElementById('artifactDisplay');
+    const killDisplay = document.getElementById('killDisplay');
+    const bossHpDisplay = document.getElementById('bossHpDisplay');
+    const messageEl = document.getElementById('message');
+    const restartBtn = document.getElementById('restartBtn');
+    
+    function updateHUD() {
+      healthFill.style.width = `${(player.hp / player.maxHp) * 100}%`;
+      ammoDisplay.textContent = player.ammo;
+      maxAmmoDisplay.textContent = player.maxAmmo;
+      artifactDisplay.textContent = player.artifacts;
+      killDisplay.textContent = player.kills;
+      if (bossActive && boss) {
+        bossHpDisplay.textContent = `${Math.max(0, Math.floor((boss.userData.hp / boss.userData.maxHp) * 100))}`;
+      } else {
+        bossHpDisplay.textContent = '--';
+      }
+    }
+    
+    function showMessage(text, color = '#ff4400') {
+      messageEl.style.display = 'block';
+      messageEl.textContent = text;
+      messageEl.style.color = color;
+      setTimeout(() => {
+        if (messageEl.textContent === text) messageEl.style.display = 'none';
+      }, 2000);
+    }
+    
+    // ==================== ЯРКОЕ ОСВЕЩЕНИЕ ====================
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    sunLight.position.set(40, 60, 40);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 200;
+    sunLight.shadow.camera.left = -70;
+    sunLight.shadow.camera.right = 70;
+    sunLight.shadow.camera.top = 70;
+    sunLight.shadow.camera.bottom = -70;
+    scene.add(sunLight);
+    
+    // ==================== ЗЕМЛЯ (светлая) ====================
+    const groundGeom = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8, metalness: 0.1 });
+    const ground = new THREE.Mesh(groundGeom, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    
+    // ==================== ГЕНЕРАТОР ЛАБИРИНТА ====================
+    function generateMaze() {
+      const maze = Array(LABYRINTH_CELLS).fill().map(() => 
+        Array(LABYRINTH_CELLS).fill().map(() => ({ top: true, right: true, visited: false }))
+      );
+      
+      const stack = [];
+      const startX = Math.floor(LABYRINTH_CELLS / 2);
+      const startY = Math.floor(LABYRINTH_CELLS / 2);
+      maze[startY][startX].visited = true;
+      stack.push({ x: startX, y: startY });
+      
+      const directions = [
+        { dx: 0, dy: -1, wall: 'top', opposite: 'top' },
+        { dx: 1, dy: 0, wall: 'right', opposite: 'right' },
+        { dx: 0, dy: 1, wall: 'top', opposite: 'top' },
+        { dx: -1, dy: 0, wall: 'right', opposite: 'right' }
+      ];
+      
+      while (stack.length > 0) {
+        const current = stack[stack.length - 1];
+        const unvisited = [];
+        
+        for (const dir of directions) {
+          const nx = current.x + dir.dx;
+          const ny = current.y + dir.dy;
+          if (nx >= 0 && nx < LABYRINTH_CELLS && ny >= 0 && ny < LABYRINTH_CELLS && !maze[ny][nx].visited) {
+            unvisited.push({ nx, ny, dir });
+          }
+        }
+        
+        if (unvisited.length > 0) {
+          const chosen = unvisited[Math.floor(Math.random() * unvisited.length)];
+          const { nx, ny, dir } = chosen;
+          
+          if (dir.dx === 0 && dir.dy === -1) maze[ny][nx].top = false;
+          else if (dir.dx === 1 && dir.dy === 0) maze[current.y][current.x].right = false;
+          else if (dir.dx === 0 && dir.dy === 1) maze[current.y][current.x].top = false;
+          else if (dir.dx === -1 && dir.dy === 0) maze[ny][nx].right = false;
+          
+          maze[ny][nx].visited = true;
+          stack.push({ x: nx, y: ny });
+        } else {
+          stack.pop();
+        }
+      }
+      
+      return maze;
+    }
+    
+    function buildMazeWalls(maze) {
+      mazeWalls.forEach(w => scene.remove(w.mesh));
+      mazeWalls = [];
+      freeCells = [];
+      
+      const offset = -WORLD_SIZE/2 + CELL_SIZE/2;
+      // СВЕТЛЫЕ СТЕНЫ
+      const wallMat = new THREE.MeshStandardMaterial({ 
+        color: 0xbbbbbb, 
+        roughness: 0.6, 
+        metalness: 0.2,
+      });
+      
+      for (let y = 0; y < LABYRINTH_CELLS; y++) {
+        for (let x = 0; x < LABYRINTH_CELLS; x++) {
+          if (maze[y][x].top) {
+            const wallGeom = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, WALL_THICKNESS);
+            const wall = new THREE.Mesh(wallGeom, wallMat);
+            wall.position.set(offset + x * CELL_SIZE, WALL_HEIGHT/2, offset + y * CELL_SIZE - CELL_SIZE/2);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+            mazeWalls.push({ mesh: wall, box: new THREE.Box3().setFromObject(wall) });
+          }
+          if (maze[y][x].right) {
+            const wallGeom = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, CELL_SIZE);
+            const wall = new THREE.Mesh(wallGeom, wallMat);
+            wall.position.set(offset + x * CELL_SIZE + CELL_SIZE/2, WALL_HEIGHT/2, offset + y * CELL_SIZE);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+            mazeWalls.push({ mesh: wall, box: new THREE.Box3().setFromObject(wall) });
+          }
+        }
+      }
+      
+      for (let y = 0; y < LABYRINTH_CELLS; y++) {
+        for (let x = 0; x < LABYRINTH_CELLS; x++) {
+          freeCells.push({ x: offset + x * CELL_SIZE, z: offset + y * CELL_SIZE, y: 0.6 });
+        }
+      }
+    }
+    
+    let currentMaze = generateMaze();
+    buildMazeWalls(currentMaze);
+    
+    // ==================== ОРУЖИЕ (светлое) ====================
+    const gunGroup = new THREE.Group();
+    gunGroup.position.set(0.5, -0.4, -0.7);
+    camera.add(gunGroup);
+    
+    const gunBodyGeom = new THREE.BoxGeometry(0.1, 0.18, 0.6);
+    const gunMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.4, metalness: 0.8 });
+    gunGroup.add(new THREE.Mesh(gunBodyGeom, gunMat));
+    
+    const barrelGeom = new THREE.CylinderGeometry(0.04, 0.05, 0.5, 8);
+    const barrel = new THREE.Mesh(barrelGeom, gunMat);
+    barrel.rotation.x = Math.PI/2;
+    barrel.position.set(0, 0.05, -0.5);
+    gunGroup.add(barrel);
+    
+    // ==================== ВРАГИ ====================
+    function createEnemy(x, z) {
+      const group = new THREE.Group();
+      const scale = 0.7 + Math.random() * 0.5;
+      
+      const bodyGeom = new THREE.SphereGeometry(0.8 * scale, 12, 10);
+      bodyGeom.scale(1, 0.6, 1.2);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6a7a4a, roughness: 0.5 });
+      const body = new THREE.Mesh(bodyGeom, bodyMat);
+      body.castShadow = true;
+      group.add(body);
+      
+      const eyeGeom = new THREE.SphereGeometry(0.2 * scale, 6, 6);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      group.add(new THREE.Mesh(eyeGeom, eyeMat)).position.set(-0.35*scale, 0.25*scale, 0.7*scale);
+      group.add(new THREE.Mesh(eyeGeom, eyeMat)).position.set(0.35*scale, 0.25*scale, 0.7*scale);
+      
+      for (let s = -1; s <= 1; s += 2) {
+        const whiskerGeom = new THREE.CylinderGeometry(0.03*scale, 0.06*scale, 1.8*scale, 6);
+        const whiskerMat = new THREE.MeshStandardMaterial({ color: 0x88aa88 });
+        const whisker = new THREE.Mesh(whiskerGeom, whiskerMat);
+        whisker.position.set(s*0.25*scale, 0.05*scale, 0.85*scale);
+        whisker.rotation.z = s * 0.6;
+        whisker.rotation.x = -0.4;
+        group.add(whisker);
+      }
+      
+      group.position.set(x, 0.6, z);
+      group.userData = { hp: 20 + Math.floor(Math.random()*25), maxHp: 45, speed: 0.03+Math.random()*0.04, damage: 7+Math.floor(Math.random()*7), attackCooldown: 0 };
+      scene.add(group);
+      return group;
+    }
+    
+    function createBoss(x, z) {
+      const group = new THREE.Group();
+      const bodyGeom = new THREE.SphereGeometry(4.5, 20, 16);
+      bodyGeom.scale(1, 0.7, 1.1);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5a5a4a, roughness: 0.5, metalness: 0.3 });
+      const body = new THREE.Mesh(bodyGeom, bodyMat);
+      body.castShadow = true;
+      group.add(body);
+      
+      const eyeGeom = new THREE.SphereGeometry(0.7, 8, 8);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      group.add(new THREE.Mesh(eyeGeom, eyeMat)).position.set(-1.5, 0.8, 3.5);
+      group.add(new THREE.Mesh(eyeGeom, eyeMat)).position.set(1.5, 0.8, 3.5);
+      
+      for (let s = -1; s <= 1; s += 2) {
+        const whiskerGeom = new THREE.CylinderGeometry(0.15, 0.3, 10, 6);
+        const whiskerMat = new THREE.MeshStandardMaterial({ color: 0x889988 });
+        const whisker = new THREE.Mesh(whiskerGeom, whiskerMat);
+        whisker.position.set(s*1.8, 0.4, 3.2);
+        whisker.rotation.z = s * 0.4;
+        whisker.rotation.x = -0.25;
+        group.add(whisker);
+      }
+      
+      group.position.set(x, 1.5, z);
+      group.userData = { hp: 400, maxHp: 400, speed: 0.04, damage: 30, attackCooldown: 0, specialCooldown: 0, entered: true };
+      scene.add(group);
+      return group;
+    }
+    
+    function spawnEnemy() {
+      if (enemies.length >= 6 || freeCells.length === 0) return;
+      const cell = freeCells[Math.floor(Math.random() * freeCells.length)];
+      enemies.push(createEnemy(cell.x, cell.z));
+    }
+    
+    function spawnBoss() {
+      if (bossSpawned || freeCells.length === 0) return;
+      const cell = freeCells[Math.floor(Math.random() * freeCells.length)];
+      boss = createBoss(cell.x, cell.z);
+      bossActive = true;
+      bossSpawned = true;
+      enemies.forEach(e => scene.remove(e));
+      enemies.length = 0;
+      showMessage('⚠️ ГИГАХРУЩОВКА ПРОБУДИЛАСЬ! ⚠️', '#ff0000');
+    }
+    
+    function createArtifact(x, z) {
+      const group = new THREE.Group();
+      const coreGeom = new THREE.SphereGeometry(0.35, 8, 8);
+      const coreMat = new THREE.MeshStandardMaterial({ color: 0x00cc66, roughness: 0.2, emissive: 0x004422, emissiveIntensity: 0.6 });
+      group.add(new THREE.Mesh(coreGeom, coreMat));
+      const ringGeom = new THREE.TorusGeometry(0.45, 0.1, 8, 16);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x66ff66 });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.rotation.x = Math.PI/2;
+      group.add(ring);
+      group.position.set(x, 0.6, z);
+      group.userData = { collected: false };
+      scene.add(group);
+      return group;
+    }
+    
+    function spawnArtifacts(count = 10) {
+      for (let i = 0; i < count; i++) {
+        if (freeCells.length === 0) break;
+        const cell = freeCells[Math.floor(Math.random() * freeCells.length)];
+        artifacts.push(createArtifact(cell.x, cell.z));
+      }
+    }
+    spawnArtifacts(10);
+    
+    // ==================== КОЛЛИЗИИ ====================
+    function checkWallCollision(position, radius = 0.7) {
+      for (const wall of mazeWalls) {
+        const box = wall.box;
+        if (position.x + radius > box.min.x && position.x - radius < box.max.x &&
+            position.z + radius > box.min.z && position.z - radius < box.max.z) {
+          return true;
+        }
+      }
+      return false;
+    }
+    
+    function resolvePlayerCollision(newPos) {
+      const radius = 0.7;
+      if (!checkWallCollision(newPos, radius)) return newPos;
+      const testX = new THREE.Vector3(newPos.x, newPos.y, camera.position.z);
+      const testZ = new THREE.Vector3(camera.position.x, newPos.y, newPos.z);
+      if (!checkWallCollision(testX, radius)) return testX;
+      if (!checkWallCollision(testZ, radius)) return testZ;
+      return camera.position.clone();
+    }
+    
+    // ==================== ДЕЙСТВИЯ ====================
+    function shoot() {
+      if (player.ammo <= 0 || player.reloading || player.shootCooldown > 0) return;
+      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      const origin = camera.position.clone().add(direction.clone().multiplyScalar(1.8));
+      const bullet = new THREE.Mesh(new THREE.SphereGeometry(0.1, 4, 4), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+      bullet.position.copy(origin);
+      bullet.userData = { velocity: direction.clone().multiplyScalar(1.3), life: 80, damage: 22 };
+      scene.add(bullet);
+      bullets.push(bullet);
+      player.ammo--;
+      player.shootCooldown = 0.16;
+      updateHUD();
+    }
+    
+    function reload() {
+      if (player.reloading || player.ammo === player.maxAmmo) return;
+      player.reloading = true;
+      player.reloadTimer = player.reloadTime;
+      showMessage('ПЕРЕЗАРЯДКА', '#444');
+    }
+    
+    function damagePlayer(amount) {
+      if (player.invincible > 0) return;
+      player.hp -= amount;
+      player.invincible = 0.8;
+      if (player.hp <= 0) {
+        player.hp = 0;
+        gameOver = true;
+        showMessage('☠️ СТАЛКЕР ПОГИБ ☠️', '#ff0000');
+        restartBtn.style.display = 'block';
+      }
+      updateHUD();
+    }
+    
+    function collectArtifact(artifact) {
+      if (artifact.userData.collected) return;
+      artifact.userData.collected = true;
+      scene.remove(artifact);
+      player.artifacts++;
+      player.hp = Math.min(player.maxHp, player.hp + 25);
+      showMessage(`💎 АРТЕФАКТ ${player.artifacts}/10 +25 HP`, '#006600');
+      
+      if (player.artifacts >= player.requiredArtifacts && !bossSpawned) {
+        spawnBoss();
+      } else if (freeCells.length > 0) {
+        const cell = freeCells[Math.floor(Math.random() * freeCells.length)];
+        artifacts.push(createArtifact(cell.x, cell.z));
+      }
+      updateHUD();
+    }
+    
+    window.restartGame = function() {
+      player.hp = player.maxHp;
+      player.ammo = player.maxAmmo;
+      player.reloading = false;
+      player.reloadTimer = 0;
+      player.invincible = 0;
+      player.shootCooldown = 0;
+      player.artifacts = 0;
+      player.kills = 0;
+      gameOver = false;
+      gameWin = false;
+      bossActive = false;
+      bossSpawned = false;
+      
+      bullets.forEach(b => scene.remove(b)); bullets.length = 0;
+      enemies.forEach(e => scene.remove(e)); enemies.length = 0;
+      particles.forEach(p => scene.remove(p)); particles.length = 0;
+      artifacts.forEach(a => scene.remove(a)); artifacts.length = 0;
+      if (boss) { scene.remove(boss); boss = null; }
+      
+      currentMaze = generateMaze();
+      buildMazeWalls(currentMaze);
+      spawnArtifacts(10);
+      for (let i = 0; i < 4; i++) spawnEnemy();
+      
+      camera.position.set(0, 2.5, 0);
+      yaw = 0; pitch = 0;
+      messageEl.style.display = 'none';
+      restartBtn.style.display = 'none';
+      updateHUD();
+    };
+    
+    // ==================== ИГРОВОЙ ЦИКЛ ====================
+    const clock = new THREE.Clock();
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      
+      if (!gameOver && !gameWin) {
+        if (player.reloading) {
+          player.reloadTimer -= dt;
+          if (player.reloadTimer <= 0) { player.ammo = player.maxAmmo; player.reloading = false; }
+        }
+        if (player.shootCooldown > 0) player.shootCooldown -= dt;
+        if (player.invincible > 0) player.invincible -= dt;
+        
+        const speed = 6.5 * dt;
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
+        let moveDir = new THREE.Vector3(0, 0, 0);
+        if (keys['KeyW'] || keys['ArrowUp']) moveDir.add(forward);
+        if (keys['KeyS'] || keys['ArrowDown']) moveDir.sub(forward);
+        if (keys['KeyA'] || keys['ArrowLeft']) moveDir.sub(right);
+        if (keys['KeyD'] || keys['ArrowRight']) moveDir.add(right);
+        if (moveDir.length() > 0) {
+          moveDir.normalize().multiplyScalar(speed);
+          camera.position.copy(resolvePlayerCollision(camera.position.clone().add(moveDir)));
+        }
+        camera.position.x = Math.max(-WORLD_SIZE/2+1, Math.min(WORLD_SIZE/2-1, camera.position.x));
+        camera.position.z = Math.max(-WORLD_SIZE/2+1, Math.min(WORLD_SIZE/2-1, camera.position.z));
+        camera.position.y = 2.5;
+        
+        artifacts.forEach(a => { if (!a.userData.collected && camera.position.distanceTo(a.position) < 2.2) collectArtifact(a); });
+        
+        // Пули и коллизии
+        for (let i = bullets.length-1; i >= 0; i--) {
+          const b = bullets[i];
+          b.position.add(b.userData.velocity);
+          b.userData.life--;
+          let hitWall = false;
+          for (const wall of mazeWalls) { if (wall.box.containsPoint(b.position)) { hitWall = true; break; } }
+          if (hitWall || b.userData.life <= 0 || b.position.y < 0) { scene.remove(b); bullets.splice(i,1); continue; }
+          
+          let hit = false;
+          for (let j = enemies.length-1; j >= 0; j--) {
+            if (b.position.distanceTo(enemies[j].position) < 1.2) {
+              enemies[j].userData.hp -= b.userData.damage;
+              if (enemies[j].userData.hp <= 0) { scene.remove(enemies[j]); enemies.splice(j,1); player.kills++; }
+              hit = true; break;
+            }
+          }
+          if (!hit && bossActive && boss && b.position.distanceTo(boss.position) < 5) {
+            boss.userData.hp -= b.userData.damage;
+            if (boss.userData.hp <= 0) { scene.remove(boss); boss = null; bossActive = false; gameWin = true; showMessage('🏆 ГИГАХРУЩОВКА УНИЧТОЖЕНА! 🏆', '#ff8800'); restartBtn.style.display = 'block'; }
+            hit = true;
+          }
+          if (hit) { scene.remove(b); bullets.splice(i,1); }
+        }
+        
+        enemies.forEach(e => {
+          const dx = camera.position.x - e.position.x, dz = camera.position.z - e.position.z, dist = Math.sqrt(dx*dx+dz*dz);
+          if (dist > 1.5) { e.position.x += (dx/dist)*e.userData.speed; e.position.z += (dz/dist)*e.userData.speed; }
+          e.lookAt(camera.position.x, e.position.y, camera.position.z);
+          if (dist < 2.2 && e.userData.attackCooldown <= 0) { damagePlayer(e.userData.damage); e.userData.attackCooldown = 1.4; }
+          if (e.userData.attackCooldown > 0) e.userData.attackCooldown -= dt;
+        });
+        
+        if (bossActive && boss) {
+          const dx = camera.position.x - boss.position.x, dz = camera.position.z - boss.position.z, dist = Math.sqrt(dx*dx+dz*dz);
+          if (dist > 4) { boss.position.x += (dx/dist)*boss.userData.speed; boss.position.z += (dz/dist)*boss.userData.speed; }
+          boss.lookAt(camera.position.x, boss.position.y, camera.position.z);
+          if (dist < 6 && boss.userData.attackCooldown <= 0) { damagePlayer(boss.userData.damage); boss.userData.attackCooldown = 2.0; }
+          if (boss.userData.attackCooldown > 0) boss.userData.attackCooldown -= dt;
+        }
+        
+        if (!bossActive && enemies.length < 6 && Math.random() < 0.025) spawnEnemy();
+        
+        updateHUD();
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    // ==================== УПРАВЛЕНИЕ ====================
+    window.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyR') reload(); e.preventDefault(); });
+    window.addEventListener('keyup', e => { keys[e.code] = false; e.preventDefault(); });
+    renderer.domElement.addEventListener('click', () => { if (!isPointerLocked) renderer.domElement.requestPointerLock(); });
+    document.addEventListener('pointerlockchange', () => { isPointerLocked = document.pointerLockElement === renderer.domElement; });
+    document.addEventListener('mousemove', e => {
+      if (!isPointerLocked) return;
+      yaw -= e.movementX * mouseSensitivity;
+      pitch -= e.movementY * mouseSensitivity;
+      pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
+      camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+    });
+    renderer.domElement.addEventListener('mousedown', e => { if (e.button === 0 && isPointerLocked) { mouseDown = true; shoot(); } });
+    renderer.domElement.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+    setInterval(() => { if (mouseDown && isPointerLocked && !gameOver && !gameWin) shoot(); }, 140);
+    
+    document.querySelectorAll('.mbtn').forEach(btn => {
+      btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const key = btn.dataset.key;
+        if (key === 'shoot') { mouseDown = true; shoot(); }
+        else if (key === 'reload') reload();
+        else keys[key] = true;
+      });
+      btn.addEventListener('touchend', e => {
+        e.preventDefault();
+        const key = btn.dataset.key;
+        if (key === 'shoot') mouseDown = false;
+        else if (key !== 'reload') keys[key] = false;
+      });
+    });
+    
+    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    
+    for (let i = 0; i < 4; i++) spawnEnemy();
+    updateHUD();
+    animate();
+    console.log('☢️ СТАЛКЕР: СВЕТЛЫЙ ЛАБИРИНТ — собери 10 артефактов для босса!');
+  </script>
+</body>
+</html>
