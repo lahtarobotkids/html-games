@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Смешарики Кликер</title>
+    <style>
+        :root {
+            --bg: #f7e7c4;
+            --card: #fff5e6;
+            --btn: #ff9800;
+            --btn-hover: #f57c00;
+            --upgrade: #4caf50;
+            --upgrade-hover: #388e3c;
+            --text: #4e342e;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Comic Sans MS', 'Arial Rounded', sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        .game-container {
+            background: var(--card);
+            border-radius: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 25px 25px 20px;
+            max-width: 430px;
+            width: 95%;
+            text-align: center;
+            position: relative;
+        }
+
+        /* Ёжик-помощник в левом верхнем углу */
+        .helper-btn {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: #a5d6a7;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 1.1em;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #66bb6a;
+            transition: 0.1s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            z-index: 5;
+        }
+        .helper-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #66bb6a;
+        }
+        .helper-btn.disabled-helper {
+            background: #ccc;
+            box-shadow: 0 3px 0 #999;
+            cursor: pointer;
+        }
+        .helper-indicator {
+            font-size: 1.2em;
+        }
+
+        h1 {
+            color: #e65100;
+            margin: 0 0 15px;
+            font-size: 2em;
+            text-shadow: 2px 2px 0 #ffcc80;
+        }
+
+        .candies {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #bf360c;
+            background: #ffe0b2;
+            border-radius: 20px;
+            padding: 6px 18px;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+
+        .level-info {
+            font-size: 1.3em;
+            margin: 8px 0;
+            color: var(--text);
+        }
+
+        .character-preview {
+            font-size: 5em;
+            margin: 10px 0;
+            transition: transform 0.1s ease;
+            cursor: pointer;
+            display: inline-block;
+            filter: drop-shadow(0 8px 8px rgba(0,0,0,0.3));
+        }
+
+        .click-btn {
+            background: var(--btn);
+            border: none;
+            color: white;
+            font-size: 1.6em;
+            font-weight: bold;
+            padding: 12px 35px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #e65100;
+            transition: all 0.05s ease;
+            margin: 12px 0;
+            width: 100%;
+        }
+        .click-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #e65100;
+            background: var(--btn-hover);
+        }
+
+        /* Блоки улучшений */
+        .upgrade-section {
+            background: #e8f5e9;
+            border-radius: 20px;
+            padding: 12px;
+            margin: 10px 0;
+        }
+        .upgrade-btn {
+            background: var(--upgrade);
+            border: none;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            padding: 10px 25px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #2e7d32;
+            transition: all 0.05s ease;
+            width: 100%;
+            margin-top: 6px;
+        }
+        .upgrade-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #2e7d32;
+        }
+        .upgrade-btn:disabled {
+            background: #bdbdbd;
+            box-shadow: 0 4px 0 #9e9e9e;
+            cursor: not-allowed;
+        }
+
+        .progress-text {
+            font-size: 0.9em;
+            color: #5d4037;
+            margin: 2px 0;
+        }
+        .upgrade-cost {
+            font-weight: bold;
+            color: #1b5e20;
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- Ёжик-помощник -->
+        <button id="helperButton" class="helper-btn disabled-helper">
+            <span>🦔</span> <span id="helperText">Купить (500🍬)</span>
+            <span id="helperCheck" class="helper-indicator"></span>
+        </button>
+
+        <h1>🍬 Смешарики Кликер</h1>
+        <div class="candies">🍬 <span id="candyCounter">0</span> фантиков</div>
+        <div class="level-info">
+            Уровень <span id="levelNumber">1</span>/100
+        </div>
+        <div id="characterDisplay" class="character-preview">🐷💩</div>
+        <div class="level-info" id="levelName">Грязная Нюша</div>
+        <button id="clickButton" class="click-btn">🍬 Клик!</button>
+
+        <!-- Основное улучшение уровня (смена облика) -->
+        <div class="upgrade-section">
+            <div class="progress-text">Следующий облик:</div>
+            <div id="nextLevelPreview" class="level-info">🐷🧼 Нюша с мылом</div>
+            <div class="upgrade-cost">Стоимость: 🍬 <span id="upgradeCost">40</span></div>
+            <button id="upgradeButton" class="upgrade-btn">⭐ Улучшить</button>
+        </div>
+
+        <!-- Улучшение силы клика -->
+        <div class="upgrade-section">
+            <div class="progress-text">⚡ Улучшение клика (сейчас +<span id="clickPowerDisplay">0</span>)</div>
+            <div class="upgrade-cost">Стоимость: 🍬 <span id="clickUpgradeCost">100</span></div>
+            <button id="clickUpgradeButton" class="upgrade-btn">🔨 Улучшить клик</button>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // ---------- 100 уникальных скинов ----------
+            const levels = [
+                { name: "Грязная Нюша", emoji: "🐷💩" }, { name: "Нюша с мылом", emoji: "🐷🧼" },
+                { name: "Чистая Нюша", emoji: "🐷✨" }, { name: "Нюша с бантиком", emoji: "🐷🎀" },
+                { name: "Нюша с цветком", emoji: "🐷🌸" }, { name: "Нюша с зеркальцем", emoji: "🐷🪞" },
+                { name: "Нюша-модница", emoji: "🐷👗" }, { name: "Нюша с короной", emoji: "🐷👑" },
+                { name: "Золотая Нюша", emoji: "🐷🥇" }, { name: "Алмазная Нюша", emoji: "🐷💎" },
+                { name: "Космическая Нюша", emoji: "🐷🚀" }, { name: "Крош", emoji: "🐰" },
+                { name: "Крош с морковкой", emoji: "🐰🥕" }, { name: "Крош в кепке", emoji: "🐰🧢" },
+                { name: "Крош с рюкзаком", emoji: "🐰🎒" }, { name: "Крош-спортсмен", emoji: "🐰⚽" },
+                { name: "Крош-ниндзя", emoji: "🐰🥷" }, { name: "Золотой Крош", emoji: "🐰🥇" },
+                { name: "Алмазный Крош", emoji: "🐰💎" }, { name: "Крош-супергерой", emoji: "🐰🦸" },
+                { name: "Крош-пират", emoji: "🐰🏴‍☠️" }, { name: "Крош-робот", emoji: "🐰🤖" },
+                { name: "Ёжик", emoji: "🦔" }, { name: "Ёжик с кактусом", emoji: "🦔🌵" },
+                { name: "Ёжик в очках", emoji: "🦔👓" }, { name: "Ёжик с зонтом", emoji: "🦔☂️" },
+                { name: "Ёжик с фонариком", emoji: "🦔🔦" }, { name: "Ёжик-путешественник", emoji: "🦔🧳" },
+                { name: "Золотой Ёжик", emoji: "🦔🥇" }, { name: "Алмазный Ёжик", emoji: "🦔💎" },
+                { name: "Ёжик-волшебник", emoji: "🦔🧙" }, { name: "Ёжик-рыцарь", emoji: "🦔⚔️" },
+                { name: "Ёжик-киборг", emoji: "🦔🤖" }, { name: "Бараш", emoji: "🐏" },
+                { name: "Бараш-поэт", emoji: "🐏📜" }, { name: "Бараш с лирой", emoji: "🐏🎵" },
+                { name: "Грустный Бараш", emoji: "🐏😢" }, { name: "Вдохновлённый Бараш", emoji: "🐏✨" },
+                { name: "Бараш-романтик", emoji: "🐏💖" }, { name: "Золотой Бараш", emoji: "🐏🥇" },
+                { name: "Алмазный Бараш", emoji: "🐏💎" }, { name: "Бараш-ангел", emoji: "🐏😇" },
+                { name: "Бараш-призрак", emoji: "🐏👻" }, { name: "Бараш-маг", emoji: "🐏🔮" },
+                { name: "Копатыч", emoji: "🐻" }, { name: "Копатыч с лопатой", emoji: "🐻🔧" },
+                { name: "Копатыч с ведром", emoji: "🐻🪣" }, { name: "Копатыч-садовник", emoji: "🐻🌱" },
+                { name: "Копатыч с тыквой", emoji: "🐻🎃" }, { name: "Усталый Копатыч", emoji: "🐻😴" },
+                { name: "Золотой Копатыч", emoji: "🐻🥇" }, { name: "Алмазный Копатыч", emoji: "🐻💎" },
+                { name: "Копатыч-фермер-гигант", emoji: "🐻🏋️" }, { name: "Копатыч-медведь-воин", emoji: "🐻⚔️" },
+                { name: "Копатыч-киборг", emoji: "🐻🤖" }, { name: "Копатыч-пчеловод", emoji: "🐻🍯" },
+                { name: "Лосяш", emoji: "🦌" }, { name: "Лосяш-учёный", emoji: "🦌🔬" },
+                { name: "Лосяш с колбой", emoji: "🦌🧪" }, { name: "Лосяш с книгой", emoji: "🦌📚" },
+                { name: "Лосяш-астроном", emoji: "🦌🔭" }, { name: "Лосяш-изобретатель", emoji: "🦌⚙️" },
+                { name: "Золотой Лосяш", emoji: "🦌🥇" }, { name: "Алмазный Лосяш", emoji: "🦌💎" },
+                { name: "Лосяш-профессор", emoji: "🦌🎓" }, { name: "Лосяш-космонавт", emoji: "🦌🚀" },
+                { name: "Лосяш-гений", emoji: "🦌🧠" }, { name: "Совунья", emoji: "🦉" },
+                { name: "Совунья-повар", emoji: "🦉🍳" }, { name: "Совунья с кастрюлей", emoji: "🦉🥘" },
+                { name: "Совунья с метлой", emoji: "🦉🧹" }, { name: "Совунья-спортсменка", emoji: "🦉🏃‍♀️" },
+                { name: "Совунья-врач", emoji: "🦉💊" }, { name: "Золотая Совунья", emoji: "🦉🥇" },
+                { name: "Алмазная Совунья", emoji: "🦉💎" }, { name: "Совунья-шпион", emoji: "🦉🕵️‍♀️" },
+                { name: "Совунья-супергероиня", emoji: "🦉🦸‍♀️" }, { name: "Совунья-фея", emoji: "🦉🧚‍♀️" },
+                { name: "Кар-Карыч", emoji: "🐦" }, { name: "Кар-Карыч-артист", emoji: "🐦🎭" },
+                { name: "Кар-Карыч с гитарой", emoji: "🐦🎸" }, { name: "Кар-Карыч-путешественник", emoji: "🐦🌍" },
+                { name: "Кар-Карыч в цилиндре", emoji: "🐦🎩" }, { name: "Кар-Карыч-фокусник", emoji: "🐦🪄" },
+                { name: "Золотой Кар-Карыч", emoji: "🐦🥇" }, { name: "Алмазный Кар-Карыч", emoji: "🐦💎" },
+                { name: "Кар-Карыч-пилот", emoji: "🐦✈️" }, { name: "Кар-Карыч-детектив", emoji: "🐦🔍" },
+                { name: "Кар-Карыч-вампир", emoji: "🐦🧛" }, { name: "Пин", emoji: "🐧" },
+                { name: "Пин-механик", emoji: "🐧🔧" }, { name: "Пин с гаечным ключом", emoji: "🐧🔩" },
+                { name: "Пин с пропеллером", emoji: "🐧🌀" }, { name: "Пин-пилот", emoji: "🐧👨‍✈️" },
+                { name: "Пин-изобретатель", emoji: "🐧💡" }, { name: "Золотой Пин", emoji: "🐧🥇" },
+                { name: "Алмазный Пин", emoji: "🐧💎" }, { name: "Пин-робот", emoji: "🐧🤖" },
+                { name: "Пин-рыцарь", emoji: "🐧⚔️" }, { name: "Копатыч с алмазной лопатой", emoji: "🐻💎🪠" }
+            ];
+
+            const MAX_LEVEL = 100;
+            let candies = 0;
+            let currentLevel = 1;
+            let clickPower = 0;          // бонус к клику
+            let autoHelperUnlocked = false;
+            let autoHelperActive = false;
+            let autoInterval = null;
+
+            // DOM-элементы
+            const candySpan = document.getElementById('candyCounter');
+            const levelNumberSpan = document.getElementById('levelNumber');
+            const characterDisplay = document.getElementById('characterDisplay');
+            const levelNameDiv = document.getElementById('levelName');
+            const nextLevelPreview = document.getElementById('nextLevelPreview');
+            const upgradeCostSpan = document.getElementById('upgradeCost');
+            const upgradeButton = document.getElementById('upgradeButton');
+            const clickButton = document.getElementById('clickButton');
+            const clickPowerDisplay = document.getElementById('clickPowerDisplay');
+            const clickUpgradeCostSpan = document.getElementById('clickUpgradeCost');
+            const clickUpgradeButton = document.getElementById('clickUpgradeButton');
+            const helperButton = document.getElementById('helperButton');
+            const helperText = document.getElementById('helperText');
+            const helperCheck = document.getElementById('helperCheck');
+
+            function getLevelData(level) {
+                return levels[level - 1];
+            }
+
+            function getLevelUpgradeCost() {
+                if (currentLevel >= MAX_LEVEL) return Infinity;
+                return 10 * (currentLevel + 1) ** 2;
+            }
+
+            function getClickUpgradeCost() {
+                return 100 * (clickPower + 1);
+            }
+
+            function stopAutoHelper() {
+                if (autoInterval) {
+                    clearInterval(autoInterval);
+                    autoInterval = null;
+                }
+            }
+
+            function startAutoHelper() {
+                if (autoHelperActive && autoHelperUnlocked) {
+                    stopAutoHelper();
+                    autoInterval = setInterval(() => {
+                        candies += 1;
+                        updateUI();
+                    }, 1000);
+                }
+            }
+
+            function updateUI() {
+                candySpan.textContent = candies;
+                levelNumberSpan.textContent = currentLevel;
+                const currentData = getLevelData(currentLevel);
+                characterDisplay.textContent = currentData.emoji;
+                levelNameDiv.textContent = currentData.name;
+
+                // Основной upgrade
+                if (currentLevel >= MAX_LEVEL) {
+                    nextLevelPreview.innerHTML = '🏆 Максимальный уровень!';
+                    upgradeCostSpan.textContent = '—';
+                    upgradeButton.disabled = true;
+                } else {
+                    const nextData = getLevelData(currentLevel + 1);
+                    nextLevelPreview.innerHTML = `${nextData.emoji} ${nextData.name}`;
+                    const cost = getLevelUpgradeCost();
+                    upgradeCostSpan.textContent = cost;
+                    upgradeButton.disabled = (candies < cost);
+                }
+
+                // Улучшение клика
+                clickPowerDisplay.textContent = clickPower;
+                const clickCost = getClickUpgradeCost();
+                clickUpgradeCostSpan.textContent = clickCost;
+                clickUpgradeButton.disabled = (candies < clickCost);
+
+                // Ёжик-помощник
+                if (!autoHelperUnlocked) {
+                    helperButton.classList.add('disabled-helper');
+                    helperText.textContent = 'Купить (500🍬)';
+                    helperCheck.textContent = '';
+                    helperButton.disabled = (candies < 500);
+                } else {
+                    helperButton.classList.remove('disabled-helper');
+                    helperButton.disabled = false;
+                    if (autoHelperActive) {
+                        helperText.textContent = 'Ёжик работает';
+                        helperCheck.textContent = '✅';
+                    } else {
+                        helperText.textContent = 'Ёжик отдыхает';
+                        helperCheck.textContent = '❌';
+                    }
+                }
+            }
+
+            function addCandies(amount) {
+                candies += amount;
+                updateUI();
+                candySpan.style.transform = 'scale(1.2)';
+                setTimeout(() => { candySpan.style.transform = 'scale(1)'; }, 100);
+            }
+
+            // Обработчики
+            clickButton.addEventListener('click', () => {
+                addCandies(currentLevel + clickPower);
+                characterDisplay.style.transform = 'scale(1.15)';
+                setTimeout(() => { characterDisplay.style.transform = 'scale(1)'; }, 80);
+            });
+
+            characterDisplay.addEventListener('click', () => {
+                addCandies(currentLevel + clickPower);
+                characterDisplay.style.transform = 'scale(1.15)';
+                setTimeout(() => { characterDisplay.style.transform = 'scale(1)'; }, 80);
+            });
+
+            upgradeButton.addEventListener('click', () => {
+                if (currentLevel >= MAX_LEVEL) return;
+                const cost = getLevelUpgradeCost();
+                if (candies >= cost) {
+                    candies -= cost;
+                    currentLevel++;
+                    updateUI();
+                    characterDisplay.style.transform = 'scale(1.3) rotate(5deg)';
+                    setTimeout(() => { characterDisplay.style.transform = 'scale(1)'; }, 150);
+                }
+            });
+
+            clickUpgradeButton.addEventListener('click', () => {
+                const cost = getClickUpgradeCost();
+                if (candies >= cost) {
+                    candies -= cost;
+                    clickPower++;
+                    updateUI();
+                }
+            });
+
+            helperButton.addEventListener('click', () => {
+                if (!autoHelperUnlocked) {
+                    // Покупка ёжика
+                    if (candies >= 500) {
+                        candies -= 500;
+                        autoHelperUnlocked = true;
+                        autoHelperActive = false; // по умолчанию выключен
+                        updateUI();
+                    }
+                } else {
+                    // Переключение вкл/выкл
+                    autoHelperActive = !autoHelperActive;
+                    if (autoHelperActive) {
+                        startAutoHelper();
+                    } else {
+                        stopAutoHelper();
+                    }
+                    updateUI();
+                }
+            });
+
+            // Инициализация
+            updateUI();
+        })();
+    </script>
+</body>
+</html>

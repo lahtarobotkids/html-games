@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Экосистема 5.0 — Полная симуляция</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { overflow:hidden; font-family:'Segoe UI',sans-serif; background:#0a1f0a; color:#e0e0c0; }
+        #game-container { width:100vw; height:100vh; position:relative; }
+        canvas { display:block; }
+        #top-bar {
+            position:absolute; top:16px; left:50%; transform:translateX(-50%);
+            display:flex; gap:12px; align-items:center;
+            background:#1a2a1acc; backdrop-filter:blur(8px);
+            padding:8px 20px; border-radius:60px; border:1px solid #3a5a3a; z-index:20;
+            box-shadow:0 4px 20px rgba(0,0,0,0.6); flex-wrap:wrap; justify-content:center;
+            font-size:0.85rem;
+        }
+        #top-bar button {
+            background:#3a5a3a; border:none; color:#e0e0c0;
+            padding:5px 16px; border-radius:30px; cursor:pointer; font-weight:bold;
+            transition:0.15s;
+        }
+        #top-bar button:hover { background:#4a6a4a; }
+        #top-bar button.active { background:#f5d742; color:#1a2a1a; }
+        #top-bar .info-text { display:flex; gap:16px; align-items:center; color:#8aaa8a; }
+        #top-bar .info-text span { margin:0 4px; }
+
+        #info-panel {
+            position:absolute; top:80px; right:16px;
+            width:360px; max-height:calc(100vh - 160px);
+            background:#1a2a1ad9; backdrop-filter:blur(10px);
+            border-radius:20px; padding:16px;
+            border:1px solid #3a5a3a; z-index:15;
+            box-shadow:0 8px 30px rgba(0,0,0,0.7);
+            overflow-y:auto; display:none;
+        }
+        #info-panel.visible { display:block; }
+        #info-panel h3 { color:#f5d742; margin-bottom:10px; }
+        .creature-list { max-height:120px; overflow-y:auto; margin-bottom:8px; font-size:0.85rem; }
+        .creature-list-item { padding:4px 10px; border-radius:8px; cursor:pointer; display:flex; justify-content:space-between; }
+        .creature-list-item:hover { background:#2a4a2a; }
+        .creature-list-item.selected { background:#4a6a3a; border-left:3px solid #f5d742; }
+        .burrow-list { max-height:80px; overflow-y:auto; font-size:0.8rem; margin-top:6px; background:#0f1f14; border-radius:8px; padding:4px; }
+        .burrow-list-item { padding:2px 8px; display:flex; justify-content:space-between; cursor:pointer; }
+        .burrow-list-item:hover { background:#2a3a2a; }
+        .detail-area { background:#0f1f14; border-radius:12px; padding:10px; font-size:0.78rem; line-height:1.5; margin-top:8px; }
+        .prop-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; }
+        .prop-grid .label { color:#8aaa8a; }
+        .prop-grid .value { color:#f0f0c0; }
+
+        #rules-panel {
+            position:absolute; top:80px; left:50%; transform:translateX(-50%);
+            width:600px; max-height:calc(100vh - 160px);
+            background:#1a2a1ad9; backdrop-filter:blur(10px);
+            border-radius:20px; padding:20px 24px;
+            border:1px solid #3a5a3a; z-index:15;
+            box-shadow:0 8px 30px rgba(0,0,0,0.7);
+            overflow-y:auto; display:none;
+        }
+        #rules-panel.visible { display:block; }
+        #rules-panel h3 { color:#f5d742; margin-bottom:12px; }
+        #rules-panel .rules-text { font-size:0.85rem; line-height:1.6; color:#c0d0b0; }
+        #rules-panel .highlight { color:#f5d742; }
+
+        #cards-panel {
+            position:absolute; bottom:100px; left:50%; transform:translateX(-50%);
+            display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+            background:#1a2a1acc; backdrop-filter:blur(8px);
+            padding:10px 18px; border-radius:60px;
+            border:1px solid #3a5a3a; z-index:12;
+            box-shadow:0 4px 20px rgba(0,0,0,0.5);
+        }
+        .card-btn {
+            background:#2a3a2a; border:2px solid #3a5a3a;
+            color:#b0c0b0; padding:6px 14px;
+            border-radius:30px; cursor:pointer; font-weight:bold; font-size:0.8rem;
+            transition:0.15s; font-family:inherit;
+        }
+        .card-btn:hover { background:#3a5a3a; border-color:#5a7a5a; }
+        .card-btn.active { background:#f5d742; color:#1a2a1a; border-color:#f5d742; box-shadow:0 0 20px #f5d74266; transform:scale(1.05); }
+        .card-btn .hint { font-size:0.6rem; opacity:0.6; display:block; }
+        #card-status {
+            position:absolute; bottom:72px; left:50%; transform:translateX(-50%);
+            color:#8aaa8a; font-size:0.75rem; z-index:11;
+            background:#1a2a1acc; padding:4px 16px; border-radius:20px;
+            backdrop-filter:blur(4px);
+        }
+
+        #controls {
+            position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+            display:flex; gap:14px; align-items:center;
+            background:#1a2a1acc; backdrop-filter:blur(6px);
+            padding:8px 20px; border-radius:60px;
+            border:1px solid #3a5a3a; z-index:10;
+        }
+        #controls button {
+            background:#3a5a3a; border:none; color:#e0e0c0;
+            padding:4px 16px; border-radius:30px;
+            cursor:pointer; font-weight:bold; font-size:0.8rem;
+        }
+        #controls button:active { transform:scale(0.95); background:#4a6a4a; }
+        #controls .stat { font-size:0.8rem; color:#8aaa8a; }
+        ::-webkit-scrollbar { width:5px; }
+        ::-webkit-scrollbar-track { background:#1a2a1a; border-radius:10px; }
+        ::-webkit-scrollbar-thumb { background:#4a6a3a; border-radius:10px; }
+        @media (max-width:768px) {
+            #info-panel { width:280px; right:8px; top:72px; }
+            #rules-panel { width:90%; }
+            #cards-panel { gap:4px; padding:8px 12px; bottom:80px; }
+            .card-btn { font-size:0.7rem; padding:4px 10px; }
+            #top-bar { font-size:0.7rem; padding:6px 12px; gap:6px; }
+            #controls { gap:8px; padding:6px 14px; bottom:12px; }
+        }
+    </style>
+</head>
+<body>
+<div id="game-container">
+    <div id="top-bar">
+        <button id="btnRules">📜 Правила</button>
+        <button id="btnInfo">📋 Инфо</button>
+        <div class="info-text">
+            <span>🌍 <span id="totalCount">0</span></span>
+            <span>📅 <span id="seasonDisplay">🌼 Весна</span></span>
+            <span id="timeIndicator">☀️</span>
+            <span>🕳️ Нор: <span id="burrowCount">0</span></span>
+            <span>⚠️ <span id="alertDisplay"></span></span>
+        </div>
+        <button id="resetBtn" style="background:#5a3a2a;">🌀 Сброс</button>
+    </div>
+
+    <div id="info-panel">
+        <h3>📋 Информация</h3>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+            <select id="addSpeciesSelect" style="background:#1a2a1a;color:#e0e0c0;border:1px solid #3a5a3a;border-radius:20px;padding:4px 12px;flex:1;"></select>
+            <button id="addCreatureBtn" style="background:#4a7a4a;border:none;padding:4px 14px;border-radius:30px;color:white;cursor:pointer;">➕</button>
+        </div>
+        <div style="font-weight:bold;color:#8aaa8a;font-size:0.85rem;">Все существа:</div>
+        <div id="creatureList" class="creature-list"></div>
+        <div style="font-weight:bold;color:#8aaa8a;font-size:0.85rem;margin-top:6px;">🕳️ Норы:</div>
+        <div id="burrowList" class="burrow-list"></div>
+        <div id="detailArea" class="detail-area"><div style="color:#8aaa8a;">Кликните на существо или нору</div></div>
+    </div>
+
+    <div id="rules-panel">
+        <h3>📜 Правила экосистемы 5.0</h3>
+        <div class="rules-text">
+            <p><span class="highlight">🌿 Основы:</span> Мир разделён на сушу и море. Животные имеют гены, эволюционируют. Сезоны, погода, эпидемии влияют на выживание.</p>
+            <p><span class="highlight">🚶 Миграции:</span> Животные движутся к ресурсным пятнам (зелёные участки) при нехватке еды.</p>
+            <p><span class="highlight">🦠 Болезни:</span> Случайные эпидемии, иммунитет от генов и карт.</p>
+            <p><span class="highlight">🍽️ Эволюция диеты:</span> Предпочтения меняются в зависимости от съеденной пищи.</p>
+            <p><span class="highlight">🌦️ Погода:</span> Штормы, засухи, дожди влияют на растения и животных.</p>
+            <p><span class="highlight">🐺 Социальная иерархия:</span> Волки в стаях, альфа-самцы, борьба за территорию.</p>
+            <p><span class="highlight">🤝 Симбиоз и паразитизм:</span> Муравьи и тля симбиоз, клещи паразитируют.</p>
+            <p><span class="highlight">📈 Ресурсные пятна:</span> Плодородные участки привлекают травоядных.</p>
+            <p><span class="highlight">👵 Старение и перенаселение:</span> Старые особи умирают, при перенаселении падает энергия.</p>
+            <p><span class="highlight">🌊 Водные течения:</span> Рыбы перемещаются по течению.</p>
+            <p><span class="highlight">💞 Выбор партнёра:</span> Самки выбирают самцов с лучшими генами.</p>
+            <p><span class="highlight">🎴 Карты:</span> Улучшают параметры. Новые: "Миграция", "Симбиоз", "Паразит".</p>
+        </div>
+    </div>
+
+    <div id="cards-panel">
+        <button class="card-btn" data-card="burrow">🕳️ Норное</button>
+        <button class="card-btn" data-card="big">🐘 Большое</button>
+        <button class="card-btn" data-card="fast">💨 Быстрое</button>
+        <button class="card-btn" data-card="poison">☠️ Ядовитое</button>
+        <button class="card-btn" data-card="honey">🍯 Медовое</button>
+        <button class="card-btn" data-card="camo">🌿 Камуфляж</button>
+        <button class="card-btn" data-card="fins">🏊 Плавники</button>
+        <button class="card-btn" data-card="echolocation">🎶 Эхолокация</button>
+        <button class="card-btn" data-card="gills">🫧 Жабры</button>
+        <button class="card-btn" data-card="wings">🪶 Крылья</button>
+        <button class="card-btn" data-card="territory">🗺️ Территория</button>
+        <button class="card-btn" data-card="immunity">💉 Иммунитет</button>
+        <button class="card-btn" data-card="migration">🧭 Миграция</button>
+        <button class="card-btn" data-card="symbiosis">🤝 Симбиоз</button>
+        <button class="card-btn" data-card="parasite">🪱 Паразит</button>
+    </div>
+    <div id="card-status">💡 Выберите карту, затем кликните на животное в 3D</div>
+
+    <div id="controls">
+        <button id="nextDayBtn">⏭️ День</button>
+        <span class="stat">Шаг <span id="stepCounter">0</span>/30</span>
+        <button id="autoToggle" style="background:#2a4a3a;">▶️ Авто</button>
+    </div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ========================================================================
+//  КОНФИГУРАЦИЯ 3D
+// ========================================================================
+const container = document.getElementById('game-container');
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a3a1a);
+scene.fog = new THREE.Fog(0x1a3a1a, 80, 160);
+
+const camera = new THREE.PerspectiveCamera(40, W/H, 0.1, 300);
+camera.position.set(40, 35, 55);
+camera.lookAt(0,0,0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.domElement.style.display = 'block';
+container.prepend(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(W, H);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.left = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.prepend(labelRenderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2.2;
+controls.target.set(0,0,0);
+controls.minDistance = 15;
+controls.maxDistance = 120;
+
+// Освещение
+const ambient = new THREE.AmbientLight(0x404060, 0.5);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
+sun.position.set(40, 60, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 1024;
+sun.shadow.mapSize.height = 1024;
+const d = 60;
+sun.shadow.camera.left = -d;
+sun.shadow.camera.right = d;
+sun.shadow.camera.top = d;
+sun.shadow.camera.bottom = -d;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 120;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x446688, 0.3);
+fill.position.set(-30,20,-30);
+scene.add(fill);
+const hemi = new THREE.HemisphereLight(0x88bbaa, 0x223322, 0.5);
+scene.add(hemi);
+
+// Террейн
+const TS = 70;
+const terrainGeo = new THREE.PlaneGeometry(TS, TS, 20, 20);
+const terrainMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, vertexColors: true });
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+terrain.rotation.x = -Math.PI/2;
+terrain.receiveShadow = true;
+scene.add(terrain);
+
+// Ресурсные пятна – создаём карту плодородия (для визуализации и логики)
+const resourceMap = [];
+for (let i=0; i<TS*10; i++) {
+    let x = (Math.random()-0.5)*TS*0.8;
+    let z = (Math.random()-0.5)*TS*0.8;
+    let radius = 1 + Math.random()*3;
+    let value = 0.6 + Math.random()*0.4;
+    resourceMap.push({x,z,radius,value});
+}
+
+// Функция получения плодородия в точке
+function getResourceValue(x,z) {
+    let maxVal = 0.2;
+    for (let p of resourceMap) {
+        let dist = Math.hypot(x-p.x, z-p.z);
+        if (dist < p.radius) {
+            let val = p.value * (1 - dist/p.radius);
+            if (val > maxVal) maxVal = val;
+        }
+    }
+    return Math.min(1, maxVal);
+}
+
+// Визуализация пятен (полупрозрачные круги на земле)
+for (let p of resourceMap) {
+    let circleGeo = new THREE.CircleGeometry(p.radius, 16);
+    let circleMat = new THREE.MeshLambertMaterial({ color: 0x88ff88, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+    let circle = new THREE.Mesh(circleGeo, circleMat);
+    circle.rotation.x = -Math.PI/2;
+    circle.position.set(p.x, 0.02, p.z);
+    scene.add(circle);
+}
+
+// Вода
+const waterGeo = new THREE.PlaneGeometry(TS, TS);
+const waterMat = new THREE.MeshLambertMaterial({ color:0x1a6a9a, transparent:true, opacity:0.25, side:THREE.DoubleSide });
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.rotation.x = -Math.PI/2;
+water.position.y = 0.05;
+scene.add(water);
+
+// ========================================================================
+//  СПИСОК ВИДОВ
+// ========================================================================
+const SPECIES = [
+    { id:'grass', name:'Трава', emoji:'🌾', baseEnergy:12, maxEnergy:35, trophic:0, plant:true, diet:[], color:0x4caf50 },
+    { id:'oak', name:'Дуб', emoji:'🌳', baseEnergy:75, maxEnergy:180, trophic:0, tree:true, diet:[], color:0x5a8c3c },
+    { id:'berry', name:'Ягодник', emoji:'🍓', baseEnergy:22, maxEnergy:55, trophic:0, plant:true, color:0xdd7755 },
+    { id:'algae', name:'Водоросль', emoji:'🌿', baseEnergy:10, maxEnergy:30, trophic:0, plant:true, aquatic:true, color:0x3a8a3a },
+    { id:'mouse', name:'Мышь', emoji:'🐭', baseEnergy:28, maxEnergy:65, trophic:1, diet:['grass','berry'], fertility:1.2, canBurrow:true, color:0xb0a07c },
+    { id:'rabbit', name:'Заяц', emoji:'🐇', baseEnergy:50, maxEnergy:105, trophic:1, diet:['grass','berry'], color:0xc2a15b },
+    { id:'deer', name:'Олень', emoji:'🦌', baseEnergy:100, maxEnergy:210, trophic:1, diet:['grass','oak','berry'], color:0x9e8b6e },
+    { id:'fish', name:'Рыба', emoji:'🐟', baseEnergy:30, maxEnergy:70, trophic:1, diet:['algae','grass'], aquatic:true, color:0x3f7e9c },
+    { id:'salmon', name:'Лосось', emoji:'🐟', baseEnergy:45, maxEnergy:95, trophic:1, diet:['algae','insect'], aquatic:true, color:0xe8956a },
+    { id:'fox', name:'Лиса', emoji:'🦊', baseEnergy:65, maxEnergy:135, trophic:2, diet:['mouse','rabbit'], nocturnal:true, color:0xe07a3a },
+    { id:'wolf', name:'Волк', emoji:'🐺', baseEnergy:80, maxEnergy:160, trophic:2, diet:['rabbit','deer','fox'], pack:true, nocturnal:true, color:0x9c7a4a },
+    { id:'bear', name:'Медведь', emoji:'🐻', baseEnergy:115, maxEnergy:240, trophic:2, diet:['berry','rabbit','deer','honey','fish','salmon'], color:0x8b5a2b },
+    { id:'pike', name:'Щука', emoji:'🐟', baseEnergy:65, maxEnergy:135, trophic:2, diet:['salmon','fish'], aquatic:true, color:0x5f9e6e },
+    { id:'dolphin', name:'Дельфин', emoji:'🐬', baseEnergy:80, maxEnergy:165, trophic:2, diet:['salmon','pike'], aquatic:true, social:true, color:0x4aa3c2 },
+    { id:'tiger', name:'Тигр', emoji:'🐅', baseEnergy:95, maxEnergy:195, trophic:3, diet:['wolf','deer','bear'], color:0xe67e22 },
+    { id:'cobra', name:'Кобра', emoji:'🐍', baseEnergy:80, maxEnergy:165, trophic:3, diet:['tiger','wolf','rabbit'], venom:25, nocturnal:true, color:0x5d8c48 },
+    { id:'python', name:'Питон', emoji:'🐍', baseEnergy:100, maxEnergy:210, trophic:3, diet:['rabbit','fox','tiger'], feast:true, color:0x5f8a4c },
+    { id:'shark', name:'Акула', emoji:'🦈', baseEnergy:90, maxEnergy:185, trophic:3, diet:['pike','salmon','dolphin'], aquatic:true, color:0x3c6e8f },
+    { id:'crocodile', name:'Крокодил', emoji:'🐊', baseEnergy:105, maxEnergy:215, trophic:3, diet:['shark','dolphin','tiger','wolf','rabbit','pike'], amphibian:true, color:0x6b8c42 },
+    { id:'vulture', name:'Гриф', emoji:'🦅', baseEnergy:45, maxEnergy:90, trophic:2, diet:['scavenger','rabbit','fish'], scavenger:true, flying:true, color:0x4a4a4a },
+    { id:'bee', name:'Пчела', emoji:'🐝', baseEnergy:15, maxEnergy:35, trophic:1, diet:['berry','grass'], canSting:true, producesHoney:true, color:0xf5c542 },
+    { id:'mole', name:'Крот', emoji:'🐭', baseEnergy:40, maxEnergy:80, trophic:1, diet:['insect','grass'], underground:true, canBurrow:true, color:0x6b4a2e },
+    { id:'rat', name:'Крыса', emoji:'🐀', baseEnergy:35, maxEnergy:75, trophic:1, diet:['grass','berry','insect'], canBurrow:true, color:0x8a7a6a },
+    { id:'triton', name:'Тритон', emoji:'🦎', baseEnergy:55, maxEnergy:115, trophic:2, diet:['insect','fish'], amphibian:true, color:0x7aa56e },
+    { id:'eagle', name:'Орёл', emoji:'🦅', baseEnergy:80, maxEnergy:165, trophic:2, diet:['rabbit','squirrel','fish','salmon'], flying:true, color:0xb8860b },
+    { id:'owl', name:'Сова', emoji:'🦉', baseEnergy:65, maxEnergy:135, trophic:2, diet:['mouse','rabbit'], flying:true, nocturnal:true, color:0xb78f50 },
+    { id:'hawk', name:'Ястреб', emoji:'🦅', baseEnergy:70, maxEnergy:145, trophic:2, diet:['mouse','rabbit','squirrel'], flying:true, color:0x8b7a3a },
+    { id:'albatross', name:'Альбатрос', emoji:'🐦', baseEnergy:60, maxEnergy:125, trophic:2, diet:['fish','salmon'], flying:true, aquatic:true, color:0xcccccc },
+    { id:'bat', name:'Летучая мышь', emoji:'🦇', baseEnergy:40, maxEnergy:85, trophic:2, diet:['insect','mouse'], flying:true, nocturnal:true, color:0x2a2a2a }
+];
+const speciesMap = Object.fromEntries(SPECIES.map(s=>[s.id,s]));
+
+// ========================================================================
+//  ГЛОБАЛЬНЫЕ ПАРАМЕТРЫ
+// ========================================================================
+let creatures = [];
+let nextId = 1;
+let selectedId = null;
+let day = 0;
+let step = 0;
+const MAX_STEPS = 30;
+let isNight = false;
+let selectedCardType = null;
+let autoMode = false;
+let autoTimer = null;
+
+let creatureMeshes = new Map();
+let burrowMeshes = new Map();
+let wasteObjects = [];
+let burrows = [];
+let hives = [];
+let burrowNextId = 1;
+
+// ---- ДОПОЛНИТЕЛЬНЫЕ ГЛОБАЛЬНЫЕ ПАРАМЕТРЫ ----
+let season = 0; // 0-весна,1-лето,2-осень,3-зима
+let seasonNames = ['🌼 Весна','☀️ Лето','🍂 Осень','❄️ Зима'];
+let weather = 0; // 0-ясно,1-дождь,2-шторм,3-засуха
+let weatherTimer = 0;
+let epidemicActive = false;
+let epidemicTimer = 0;
+let epidemicLevel = 0;
+let territories = [];
+let algaeCount = 0; // для симбиоза
+
+// ========================================================================
+//  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ========================================================================
+function isInWater(z) { return z > 0; }
+function getSeasonFactor() {
+    if (season===0) return { plantGrowth:1.0, fertility:1.0, herbivore:1.0 };
+    if (season===1) return { plantGrowth:1.4, fertility:1.2, herbivore:1.1 };
+    if (season===2) return { plantGrowth:0.7, fertility:0.8, herbivore:0.9 };
+    if (season===3) return { plantGrowth:0.3, fertility:0.5, herbivore:0.6 };
+}
+
+// ---- ГЕНЕТИКА (добавлены новые гены) ----
+function getRandomGenes(speciesId) {
+    let sp=speciesMap[speciesId];
+    let pref={};
+    if(sp.diet && sp.diet.length>0 && !sp.scavenger) sp.diet.forEach(d=>pref[d]=0.5+Math.random()*0.5);
+    let size=0.7+Math.random()*0.6;
+    let sex= (sp.plant || sp.scavenger) ? null : (Math.random()<0.5);
+    return {
+        speed:0.7+Math.random()*1.3,
+        fertility:0.6+Math.random()*1.4,
+        resistance:0.4+Math.random()*1.0,
+        metabolism:0.7+Math.random()*1.2,
+        preference: pref,
+        size: size,
+        sex: sex,
+        defense: { speed:0.5+Math.random()*0.8, toxicity:0, camouflage:0.2+Math.random()*0.6 },
+        dietFlexibility:0.5+Math.random()*1.0,
+        aggression:0.3+Math.random()*0.7,
+        honeyPreference:0.3+Math.random()*0.7,
+        aquaticSpeed:0.5+Math.random()*0.8,
+        echolocation:0.2+Math.random()*0.6,
+        gills:0.2+Math.random()*0.6,
+        flyingHeight:1.0+Math.random()*3.0,
+        migration:0.3+Math.random()*0.7,
+        socialLearning:0.2+Math.random()*0.6,
+        immunity:0.3+Math.random()*0.7,
+        symbiosis:0.1+Math.random()*0.5,
+        parasite:0.1+Math.random()*0.3
+    };
+}
+function mutateGenes(g, speciesId) {
+    let ng={...g, preference:{...g.preference}, defense:{...g.defense}};
+    if(Math.random()<0.07) ng.speed += (Math.random()-0.5)*0.25;
+    if(Math.random()<0.07) ng.fertility += (Math.random()-0.5)*0.25;
+    if(Math.random()<0.07) ng.resistance += (Math.random()-0.5)*0.2;
+    if(Math.random()<0.07) ng.metabolism += (Math.random()-0.5)*0.2;
+    if(Math.random()<0.05) ng.size += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.06) ng.dietFlexibility += (Math.random()-0.5)*0.2;
+    if(Math.random()<0.06) ng.defense.speed += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.04) ng.defense.toxicity += (Math.random()-0.5)*0.1;
+    if(Math.random()<0.06) ng.defense.camouflage += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.aggression += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.honeyPreference += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.aquaticSpeed += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.echolocation += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.gills += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.flyingHeight += (Math.random()-0.5)*0.5;
+    if(Math.random()<0.05) ng.migration += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.socialLearning += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.immunity += (Math.random()-0.5)*0.15;
+    if(Math.random()<0.05) ng.symbiosis += (Math.random()-0.5)*0.1;
+    if(Math.random()<0.05) ng.parasite += (Math.random()-0.5)*0.1;
+    ng.speed=Math.min(2.4,Math.max(0.4,ng.speed));
+    ng.fertility=Math.min(2.2,Math.max(0.3,ng.fertility));
+    ng.resistance=Math.min(1.3,Math.max(0.2,ng.resistance));
+    ng.metabolism=Math.min(1.8,Math.max(0.5,ng.metabolism));
+    ng.size=Math.min(2.0,Math.max(0.5,ng.size));
+    ng.dietFlexibility=Math.min(1.8,Math.max(0.3,ng.dietFlexibility));
+    ng.defense.speed=Math.min(1.5,Math.max(0.3,ng.defense.speed));
+    ng.defense.toxicity=Math.min(1.0,Math.max(0,ng.defense.toxicity));
+    ng.defense.camouflage=Math.min(1.2,Math.max(0.1,ng.defense.camouflage));
+    ng.aggression=Math.min(1.2,Math.max(0.1,ng.aggression));
+    ng.honeyPreference=Math.min(1.2,Math.max(0.1,ng.honeyPreference));
+    ng.aquaticSpeed=Math.min(1.5,Math.max(0.2,ng.aquaticSpeed));
+    ng.echolocation=Math.min(1.2,Math.max(0.1,ng.echolocation));
+    ng.gills=Math.min(1.2,Math.max(0.1,ng.gills));
+    ng.flyingHeight=Math.min(6.0,Math.max(0.5,ng.flyingHeight));
+    ng.migration=Math.min(1.2,Math.max(0.1,ng.migration));
+    ng.socialLearning=Math.min(1.2,Math.max(0.1,ng.socialLearning));
+    ng.immunity=Math.min(1.2,Math.max(0.1,ng.immunity));
+    ng.symbiosis=Math.min(1.0,Math.max(0,ng.symbiosis));
+    ng.parasite=Math.min(0.8,Math.max(0,ng.parasite));
+    return ng;
+}
+
+// ---- СОЗДАНИЕ СУЩЕСТВ ----
+function addCreature(speciesId, x, z, parentGenes=null, age=0) {
+    let sp=speciesMap[speciesId]; if(!sp) return null;
+    let limit=TS/2-2;
+    let cx=Math.min(Math.max(x, -limit), limit);
+    let cz=Math.min(Math.max(z, -limit), limit);
+    if(sp.aquatic && cz <= 0) cz = 2 + Math.random()*5;
+    if(!sp.aquatic && !sp.amphibian && cz > 0) cz = -2 - Math.random()*5;
+    let genes=parentGenes?mutateGenes(parentGenes, speciesId):getRandomGenes(speciesId);
+    let height = sp.flying ? genes.flyingHeight * (0.8 + Math.random()*0.4) : 0;
+    let newC={
+        id:nextId++, speciesId, x:cx, z:cz,
+        height: height,
+        energy:sp.baseEnergy*(0.7+genes.fertility*0.3)*(0.8+genes.size*0.2),
+        genes:genes, age:age||0,
+        extra:{ cooldown:0, packCount:1, toxicLevel:0, alpha:false, hunger:50, burrowId:null, underground:sp.underground||false, cards:[], infected:false, immuneTimer:0, partner:null, symbiosisPartner:null }
+    };
+    creatures.push(newC);
+    createMeshForCreature(newC);
+    return newC;
+}
+
+function removeCreatureById(id) {
+    let idx=creatures.findIndex(c=>c.id===id);
+    if(idx!==-1){
+        let c=creatures[idx];
+        if(c.extra.burrowId) {
+            let bIdx = burrows.findIndex(b=>b.id===c.extra.burrowId);
+            if(bIdx!==-1) {
+                let burr = burrows[bIdx];
+                let mesh = burrowMeshes.get(burr.id);
+                if(mesh) { scene.remove(mesh); burrowMeshes.delete(burr.id); }
+                burrows.splice(bIdx,1);
+            }
+        }
+        let mesh=creatureMeshes.get(id);
+        if(mesh) { scene.remove(mesh); creatureMeshes.delete(id); }
+        creatures.splice(idx,1);
+    }
+}
+
+// ---- 3D МЕШИ ----
+function createMeshForCreature(c) {
+    let sp=speciesMap[c.speciesId];
+    let group=new THREE.Group();
+    let size=c.genes.size||1;
+    let radius=0.5*size;
+    if(sp.tree) radius=1.2*size;
+    let color=sp.color||0x888888;
+    if(c.extra.cards && c.extra.cards.includes('poison')) color=0xaa44aa;
+    if(sp.aquatic) color = 0x3a7a9a;
+    if(sp.flying) color = 0x8a7a4a;
+    if(c.extra.infected) color = 0x880000;
+    let geo=new THREE.SphereGeometry(radius, 8, 8);
+    let mat=new THREE.MeshLambertMaterial({color:color});
+    let mesh=new THREE.Mesh(geo, mat);
+    mesh.castShadow=true; mesh.receiveShadow=true;
+    mesh.userData.creatureId = c.id;
+    group.add(mesh);
+    let div=document.createElement('div');
+    div.textContent=sp.emoji + (c.extra.infected?'🦠':'');
+    div.style.fontSize='18px';
+    div.style.textShadow='0 0 6px #000';
+    div.style.fontWeight='bold';
+    let label=new CSS2DObject(div);
+    label.position.set(0, radius+0.5, 0);
+    group.add(label);
+    let barGeo=new THREE.BoxGeometry(1.0*size, 0.12*size, 0.08);
+    let barMat=new THREE.MeshLambertMaterial({color:0xffd966});
+    let bar=new THREE.Mesh(barGeo, barMat);
+    bar.position.set(0, radius+0.9, 0);
+    group.add(bar);
+    group.userData.bar=bar;
+    if(c.extra.cards && c.extra.cards.length>0) {
+        let cardDiv=document.createElement('div');
+        cardDiv.textContent = c.extra.cards.map(cd=>{
+            const map={burrow:'🕳️',big:'🐘',fast:'💨',poison:'☠️',honey:'🍯',camo:'🌿',fins:'🏊',echolocation:'🎶',gills:'🫧',wings:'🪶',territory:'🗺️',immunity:'💉',migration:'🧭',symbiosis:'🤝',parasite:'🪱'};
+            return map[cd]||'';
+        }).join('');
+        cardDiv.style.fontSize='12px';
+        cardDiv.style.background='#000000aa';
+        cardDiv.style.borderRadius='10px';
+        cardDiv.style.padding='0 6px';
+        let cardLabel=new CSS2DObject(cardDiv);
+        cardLabel.position.set(0, -radius-0.5, 0);
+        group.add(cardLabel);
+        group.userData.cardLabel=cardLabel;
+    }
+    if(sp.flying) {
+        let shadowGeo = new THREE.CircleGeometry(radius*0.6, 8);
+        let shadowMat = new THREE.MeshLambertMaterial({ color:0x000000, transparent:true, opacity:0.3, side:THREE.DoubleSide });
+        let shadow = new THREE.Mesh(shadowGeo, shadowMat);
+        shadow.rotation.x = -Math.PI/2;
+        shadow.position.y = -c.height || -0.1;
+        shadow.userData.isShadow = true;
+        group.add(shadow);
+    }
+    group.position.set(c.x, c.height||0, c.z);
+    scene.add(group);
+    creatureMeshes.set(c.id, group);
+    return group;
+}
+
+function createBurrowMesh(burrow) {
+    let group = new THREE.Group();
+    let hillGeo = new THREE.ConeGeometry(0.8, 0.3, 8);
+    let hillMat = new THREE.MeshLambertMaterial({ color:0x6b4a2e });
+    let hill = new THREE.Mesh(hillGeo, hillMat);
+    hill.position.y = 0.15;
+    hill.castShadow = true;
+    group.add(hill);
+    let holeGeo = new THREE.CircleGeometry(0.25, 8);
+    let holeMat = new THREE.MeshLambertMaterial({ color:0x1a0a00, side:THREE.DoubleSide });
+    let hole = new THREE.Mesh(holeGeo, holeMat);
+    hole.rotation.x = -Math.PI/2;
+    hole.position.y = 0.01;
+    group.add(hole);
+    let div = document.createElement('div');
+    div.textContent = '🕳️';
+    div.style.fontSize = '14px';
+    div.style.textShadow = '0 0 4px #000';
+    let label = new CSS2DObject(div);
+    label.position.set(0, 0.6, 0);
+    group.add(label);
+    group.position.set(burrow.x, 0, burrow.z);
+    scene.add(group);
+    burrowMeshes.set(burrow.id, group);
+    return group;
+}
+
+function updateMeshFromCreature(c) {
+    let group=creatureMeshes.get(c.id);
+    if(!group) return;
+    let sp=speciesMap[c.speciesId];
+    let size=c.genes.size||1;
+    let radius=0.5*size;
+    if(sp.tree) radius=1.2*size;
+    let mesh=group.children[0];
+    if(mesh && mesh.isMesh) {
+        mesh.geometry.dispose();
+        mesh.geometry = new THREE.SphereGeometry(radius, 8, 8);
+        let color=sp.color||0x888888;
+        if(c.extra.cards && c.extra.cards.includes('poison')) color=0xaa44aa;
+        if(sp.aquatic) color = 0x3a7a9a;
+        if(sp.flying) color = 0x8a7a4a;
+        if(c.extra.infected) color = 0x880000;
+        mesh.material.color.setHex(color);
+    }
+    let label=group.children[1];
+    if(label) { label.element.textContent = sp.emoji + (c.extra.infected?'🦠':''); }
+    let bar=group.userData.bar;
+    if(bar) {
+        bar.geometry.dispose();
+        bar.geometry = new THREE.BoxGeometry(1.0*size, 0.12*size, 0.08);
+        bar.position.set(0, radius+0.9, 0);
+    }
+    let shadow = group.children.find(child => child.userData && child.userData.isShadow);
+    if(shadow) shadow.position.y = -(c.height||0) - 0.1;
+    group.position.set(c.x, c.height||0, c.z);
+}
+
+function updateMeshes() {
+    for(let c of creatures) {
+        let group=creatureMeshes.get(c.id);
+        if(!group) continue;
+        group.position.set(c.x, c.height||0, c.z);
+        let sp=speciesMap[c.speciesId];
+        let e=Math.max(0.05, c.energy/sp.maxEnergy);
+        let bar=group.userData.bar;
+        if(bar) {
+            bar.scale.x = e;
+            bar.material.color.setHex(e>0.3?0xffd966:0xff5555);
+        }
+        let shadow = group.children.find(child => child.userData && child.userData.isShadow);
+        if(shadow) shadow.position.y = -(c.height||0) - 0.1;
+    }
+}
+
+// ========================================================================
+//  НОРЫ
+// ========================================================================
+function tryBuildBurrow(c) {
+    let sp=speciesMap[c.speciesId];
+    let canBuild = (c.extra.cards && c.extra.cards.includes('burrow')) || sp.canBurrow;
+    if(!canBuild) return false;
+    if(c.extra.burrowId) return false;
+    if(c.energy < sp.baseEnergy * 0.6) return false;
+    if(Math.random() > 0.02) return false;
+    let burrow = { id:burrowNextId++, x:c.x, z:c.z, ownerId:c.id, strength:20 };
+    burrows.push(burrow);
+    c.extra.burrowId = burrow.id;
+    createBurrowMesh(burrow);
+    return true;
+}
+
+function updateBurrows() {
+    for (let i=burrows.length-1; i>=0; i--) {
+        let b = burrows[i];
+        let owner = creatures.find(c => c.id === b.ownerId);
+        if (!owner) {
+            let mesh = burrowMeshes.get(b.id);
+            if (mesh) { scene.remove(mesh); burrowMeshes.delete(b.id); }
+            burrows.splice(i,1);
+        } else {
+            b.x = owner.x;
+            b.z = owner.z;
+            let mesh = burrowMeshes.get(b.id);
+            if (mesh) mesh.position.set(b.x, 0, b.z);
+        }
+    }
+    document.getElementById('burrowCount').textContent = burrows.length;
+    let listDiv = document.getElementById('burrowList');
+    let html = '';
+    for (let b of burrows) {
+        let owner = creatures.find(c => c.id === b.ownerId);
+        let ownerName = owner ? speciesMap[owner.speciesId].emoji + ' ' + speciesMap[owner.speciesId].name : 'без хозяина';
+        html += `<div class="burrow-list-item" data-id="${b.id}"><span>🕳️ ${ownerName}</span><span>(${b.x.toFixed(1)}, ${b.z.toFixed(1)})</span></div>`;
+    }
+    listDiv.innerHTML = html;
+    listDiv.querySelectorAll('.burrow-list-item').forEach(el => {
+        el.addEventListener('click', function() {
+            let bid = parseInt(this.dataset.id);
+            let burr = burrows.find(b => b.id === bid);
+            if (burr) {
+                let owner = creatures.find(c => c.id === burr.ownerId);
+                if (owner) { selectedId = owner.id; updateUI(); }
+            }
+        });
+    });
+}
+
+// ========================================================================
+//  ТЕРРИТОРИИ
+// ========================================================================
+function updateTerritories() {
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (sp.trophic>=2 && c.extra.cards && c.extra.cards.includes('territory') && c.energy > sp.maxEnergy*0.5) {
+            let existing = territories.find(t => t.ownerId === c.id);
+            if (!existing) {
+                territories.push({ x:c.x, z:c.z, radius:5+ c.genes.size*2, ownerId:c.id, strength:20 });
+            } else {
+                existing.x = c.x; existing.z = c.z;
+                existing.strength = Math.min(30, existing.strength + 0.2);
+            }
+        }
+    }
+    for (let i=territories.length-1; i>=0; i--) {
+        let t = territories[i];
+        let owner = creatures.find(c => c.id === t.ownerId);
+        if (!owner || owner.energy < speciesMap[owner.speciesId].maxEnergy*0.3) {
+            t.strength -= 0.5;
+            if (t.strength <= 0) territories.splice(i,1);
+        }
+    }
+}
+
+// ========================================================================
+//  ЭПИДЕМИЯ
+// ========================================================================
+function updateEpidemic() {
+    if (!epidemicActive && Math.random() < 0.0005) {
+        epidemicActive = true;
+        epidemicTimer = 300;
+        epidemicLevel = 0.1 + Math.random()*0.3;
+        document.getElementById('alertDisplay').textContent = '🦠 Эпидемия!';
+    }
+    if (epidemicActive) {
+        epidemicTimer--;
+        for (let c of creatures) {
+            if (c.extra.infected) {
+                let neighbors = creatures.filter(n => n.id!==c.id && !n.extra.infected && Math.hypot(n.x-c.x, n.z-c.z) < 4);
+                for (let n of neighbors) {
+                    let chance = 0.02 * (1 - n.genes.immunity) * epidemicLevel;
+                    if (Math.random() < chance) {
+                        n.extra.infected = true;
+                        n.extra.immuneTimer = 0;
+                    }
+                }
+            }
+        }
+        for (let c of creatures) {
+            if (c.extra.infected) {
+                c.energy -= 0.3 * (1 - c.genes.immunity*0.7);
+                c.extra.immuneTimer++;
+                if (c.energy <= 0) removeCreatureById(c.id);
+                if (c.extra.immuneTimer > 100 && Math.random() < c.genes.immunity*0.1) {
+                    c.extra.infected = false;
+                    c.extra.immuneTimer = 0;
+                }
+            }
+        }
+        if (epidemicTimer <= 0) {
+            epidemicActive = false;
+            epidemicLevel = 0;
+            document.getElementById('alertDisplay').textContent = '';
+            for (let c of creatures) c.extra.infected = false;
+        }
+    }
+}
+
+// ========================================================================
+//  МИГРАЦИЯ И РЕСУРСНЫЕ ПЯТНА
+// ========================================================================
+function applyMigration() {
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (sp.plant || sp.scavenger || sp.flying) continue;
+        // Проверяем наличие ресурсов вокруг
+        let resource = getResourceValue(c.x, c.z);
+        let threshold = 0.5 - c.genes.migration * 0.3;
+        if (resource < threshold || c.energy < sp.maxEnergy*0.4) {
+            // Ищем лучшее пятно в радиусе
+            let bestX=c.x, bestZ=c.z, bestVal=resource;
+            for (let attempt=0; attempt<10; attempt++) {
+                let angle = Math.random()*Math.PI*2;
+                let dist = 5 + Math.random()*15;
+                let nx = c.x + Math.cos(angle)*dist;
+                let nz = c.z + Math.sin(angle)*dist;
+                let limit=TS/2-3;
+                if (Math.abs(nx)>limit || Math.abs(nz)>limit) continue;
+                let val = getResourceValue(nx, nz);
+                if (val > bestVal) {
+                    bestVal = val; bestX = nx; bestZ = nz;
+                }
+            }
+            // Движение к лучшей точке
+            let dx = bestX - c.x;
+            let dz = bestZ - c.z;
+            let dist = Math.hypot(dx,dz);
+            if (dist > 1) {
+                let speed = 0.3 * c.genes.speed * (0.5 + c.genes.migration*0.5);
+                c.x += (dx/dist) * speed;
+                c.z += (dz/dist) * speed;
+                let limit=TS/2-2;
+                c.x=Math.min(Math.max(c.x,-limit),limit);
+                c.z=Math.min(Math.max(c.z,-limit),limit);
+                if(sp.aquatic && c.z <= 0) c.z = 1 + Math.random()*2;
+                if(!sp.aquatic && !sp.amphibian && c.z > 0) c.z = -1 - Math.random()*2;
+            }
+        }
+    }
+}
+
+// ========================================================================
+//  ЭВОЛЮЦИЯ ДИЕТЫ
+// ========================================================================
+function evolveDiet(c, foodSpeciesId) {
+    // При поедании определённой пищи увеличиваем предпочтение к ней
+    if (c.genes.preference[foodSpeciesId] !== undefined) {
+        c.genes.preference[foodSpeciesId] = Math.min(1.5, c.genes.preference[foodSpeciesId] + 0.05);
+        // Уменьшаем другие предпочтения (диверсификация)
+        for (let key in c.genes.preference) {
+            if (key !== foodSpeciesId) {
+                c.genes.preference[key] = Math.max(0.1, c.genes.preference[key] - 0.01);
+            }
+        }
+    }
+}
+
+// ========================================================================
+//  СИМБИОЗ И ПАРАЗИТИЗМ
+// ========================================================================
+function applySymbiosisAndParasitism() {
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (sp.plant) continue;
+        // Симбиоз: муравьи и тля
+        if (c.speciesId === 'ant') {
+            let aphid = creatures.find(a => a.speciesId === 'aphid' && Math.hypot(a.x-c.x, a.z-c.z) < 3);
+            if (aphid) {
+                c.energy += 0.2;
+                aphid.energy += 0.2;
+                if (c.extra.cards && c.extra.cards.includes('symbiosis')) c.energy += 0.3;
+            }
+        }
+        // Паразитизм: клещи
+        if (c.speciesId === 'parasite_tick') {
+            let host = creatures.find(h => h.id!==c.id && !speciesMap[h.speciesId].plant && Math.hypot(h.x-c.x, h.z-c.z) < 2);
+            if (host) {
+                let drain = 0.5 + (c.genes.parasite||0)*0.5;
+                host.energy -= drain;
+                c.energy += drain;
+                if (host.energy <= 0) removeCreatureById(host.id);
+            }
+        }
+    }
+}
+
+// ========================================================================
+//  СТАИ И АЛЬФА
+// ========================================================================
+function updateSocialHierarchy() {
+    let wolves = creatures.filter(c => c.speciesId === 'wolf');
+    for (let w of wolves) {
+        let nearby = wolves.filter(o => o.id!==w.id && Math.hypot(w.x-o.x, w.z-o.z) < 8);
+        w.extra.packCount = nearby.length + 1;
+        if (w.extra.packCount >= 4) w.energy += 0.15;
+        if (nearby.length > 0) {
+            let alpha = nearby.reduce((a,b) => a.energy > b.energy ? a : b);
+            alpha.extra.alpha = true;
+            alpha.energy += 0.2;
+        }
+    }
+}
+
+// ========================================================================
+//  ВОДНЫЕ ТЕЧЕНИЯ
+// ========================================================================
+function applyWaterCurrent() {
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (sp.aquatic) {
+            // Течение направлено в положительную сторону Z (вглубь моря) с периодическими изменениями
+            let currentStrength = 0.1 + 0.1 * Math.sin(day * 0.01);
+            c.z += currentStrength;
+            // Ограничение
+            let limit=TS/2-2;
+            c.z=Math.min(Math.max(c.z,-limit),limit);
+            if (c.z < 0) c.z = 1; // не выходит на сушу
+        }
+    }
+}
+
+// ========================================================================
+//  РАЗМНОЖЕНИЕ С ВЫБОРОМ ПАРТНЁРА
+// ========================================================================
+function tryReproduce(c) {
+    let sp=speciesMap[c.speciesId];
+    if(!sp.fertility && sp.id!=='mouse') return false;
+    if(c.genes.sex===null) return false;
+    if(c.energy < sp.baseEnergy*1.1) return false;
+    if(c.extra.cooldown>0){ c.extra.cooldown--; return false; }
+    // Поиск партнёра: самка выбирает самца с лучшими генами
+    let candidates = creatures.filter(o => {
+        if(o.id===c.id) return false;
+        if(o.speciesId!==c.speciesId) return false;
+        if(o.genes.sex===c.genes.sex) return false;
+        if(o.energy < sp.baseEnergy*0.8) return false;
+        if(Math.hypot(c.x-o.x, c.z-o.z) > 7) return false;
+        return true;
+    });
+    if(candidates.length===0) return false;
+    // Если это самка (sex=false), выбираем лучшего самца
+    let partner;
+    if (c.genes.sex === false) {
+        // самка выбирает по размеру, энергии и иммунитету
+        partner = candidates.reduce((a,b) => {
+            let scoreA = a.genes.size*0.3 + a.energy/sp.maxEnergy*0.4 + a.genes.immunity*0.3;
+            let scoreB = b.genes.size*0.3 + b.energy/sp.maxEnergy*0.4 + b.genes.immunity*0.3;
+            return scoreA > scoreB ? a : b;
+        });
+    } else {
+        // самец — берём любого подходящего (если он не один)
+        partner = candidates[0];
+    }
+    if(!partner) return false;
+    if(Math.random()>0.025) return false;
+    // Создаём потомство с усреднёнными генами
+    let childGenes={...c.genes, preference:{...c.genes.preference}, defense:{...c.genes.defense}};
+    for(let key of ['speed','fertility','resistance','metabolism','size','aggression','aquaticSpeed','echolocation','gills','flyingHeight','migration','socialLearning','immunity','symbiosis','parasite']) {
+        childGenes[key]=(c.genes[key]+partner.genes[key])/2;
+    }
+    childGenes.sex=Math.random()<0.5;
+    let offX=(c.x+partner.x)/2+(Math.random()-0.5)*2;
+    let offZ=(c.z+partner.z)/2+(Math.random()-0.5)*2;
+    addCreature(c.speciesId, offX, offZ, childGenes,0);
+    c.energy-=8; partner.energy-=8;
+    c.extra.cooldown=30; partner.extra.cooldown=30;
+    return true;
+}
+
+// ========================================================================
+//  СТАРЕНИЕ И ПЕРЕНАСЕЛЕНИЕ
+// ========================================================================
+function applyAgingAndOverpopulation() {
+    let total = creatures.length;
+    let limit = 150; // максимальная ёмкость
+    let overcrowd = Math.max(0, (total - limit) / limit);
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (c.age > 600) {
+            // старение: увеличиваем смертность
+            let deathChance = (c.age - 600) / 200;
+            if (Math.random() < deathChance * 0.02) {
+                c.energy -= 2;
+                if (c.energy <= 0) removeCreatureById(c.id);
+                continue;
+            }
+        }
+        // Перенаселение: снижаем прирост энергии
+        if (overcrowd > 0.2) {
+            c.energy -= 0.1 * overcrowd;
+            if (c.energy <= 0) removeCreatureById(c.id);
+        }
+    }
+}
+
+// ========================================================================
+//  ПОГОДА И СЕЗОНЫ
+// ========================================================================
+function updateWeatherAndSeasons() {
+    if (day % 30 === 0 && day>0) {
+        season = (season + 1) % 4;
+        document.getElementById('seasonDisplay').textContent = seasonNames[season];
+    }
+    if (weatherTimer > 0) {
+        weatherTimer--;
+        if (weatherTimer === 0) weather = 0;
+    } else {
+        if (Math.random() < 0.002) {
+            let r = Math.random();
+            if (r < 0.33) weather = 1;
+            else if (r < 0.66) weather = 2;
+            else weather = 3;
+            weatherTimer = 150 + Math.random()*100;
+            let wNames = ['', '🌧️ Дождь', '🌪️ Шторм', '☀️ Засуха'];
+            document.getElementById('alertDisplay').textContent = wNames[weather];
+        }
+    }
+    let sf = getSeasonFactor();
+    for (let c of creatures) {
+        let sp = speciesMap[c.speciesId];
+        if (sp.plant) {
+            let growth = sf.plantGrowth;
+            if (weather === 3) growth *= 0.5;
+            if (weather === 1) growth *= 1.2;
+            c.energy += growth * 0.02;
+        }
+    }
+    if (weather === 2) {
+        for (let c of creatures) {
+            let sp = speciesMap[c.speciesId];
+            if (!sp.plant && !sp.aquatic && !sp.flying) {
+                c.energy -= 0.5;
+                if (c.energy <= 0) removeCreatureById(c.id);
+            }
+        }
+    }
+}
+
+// ========================================================================
+//  ОСНОВНАЯ СИМУЛЯЦИЯ
+// ========================================================================
+function doStep() {
+    step++;
+    if(step>MAX_STEPS) {
+        step=0; day++;
+        isNight=!isNight;
+        document.getElementById('timeIndicator').textContent = isNight?'🌙':'☀️';
+        updateWeatherAndSeasons();
+        for(let c of creatures) {
+            let sp=speciesMap[c.speciesId];
+            if(!sp.plant) {
+                c.extra.hunger = Math.min(100, (c.extra.hunger||50)+2);
+                if(c.energy > sp.maxEnergy*0.7) c.genes.aggression = Math.min(1.2, c.genes.aggression+0.02);
+                else c.genes.aggression = Math.max(0.1, c.genes.aggression-0.01);
+            }
+        }
+        if(Math.random()<0.005 && hives.length<3) {
+            hives.push({x:(Math.random()-0.5)*TS*0.7, z:-(Math.random())*TS*0.3, honey:30});
+        }
+    }
+    // Энергия и движение
+    for(let c of creatures) {
+        let sp=speciesMap[c.speciesId];
+        let sf = getSeasonFactor();
+        let delta = sp.plant ? 0.3 * sf.plantGrowth : -0.08 * (0.8+0.4*(1/c.genes.size)) * sf.herbivore;
+        let inWater = isInWater(c.z);
+        let inBurrow = c.extra.burrowId !== null;
+        if(inBurrow) delta += 0.15;
+        if(sp.aquatic && !inWater) delta -= 0.3;
+        if(!sp.aquatic && !sp.amphibian && inWater) delta -= 0.2;
+        if(sp.amphibian) { if(inWater) delta += 0.1; }
+        if(c.extra.cards && c.extra.cards.includes('gills') && inWater) delta += 0.15;
+        if(isNight && !sp.nocturnal && !sp.plant) delta -= 0.1;
+        if(weather === 2 && !sp.plant && !sp.aquatic && !sp.flying) delta -= 0.2;
+        if(weather === 3 && sp.plant) delta -= 0.2;
+        c.energy += delta + c.genes.metabolism*0.02;
+        c.age++;
+        if(c.energy<=0) { removeCreatureById(c.id); continue; }
+        if(c.energy>sp.maxEnergy) c.energy=sp.maxEnergy;
+        // Движение
+        let speed = 0.4 * c.genes.speed;
+        if(inWater && sp.aquatic) speed *= (0.8 + 0.4*c.genes.aquaticSpeed);
+        if(c.extra.cards && c.extra.cards.includes('fins') && inWater) speed *= 1.3;
+        if(sp.flying) {
+            speed *= 1.2;
+            let heightTarget = c.genes.flyingHeight * (0.5 + Math.random()*0.5);
+            c.height += (heightTarget - c.height) * 0.02 + (Math.random()-0.5)*0.2;
+            c.height = Math.min(6, Math.max(0.5, c.height));
+        }
+        let angle=Math.random()*Math.PI*2;
+        let dx=Math.cos(angle)*speed*(0.5+Math.random()*0.8);
+        let dz=Math.sin(angle)*speed*(0.5+Math.random()*0.8);
+        let limit=TS/2-2;
+        let nx=c.x+dx, nz=c.z+dz;
+        if(sp.aquatic && nz <= 0) nz = 1 + Math.random()*2;
+        if(!sp.aquatic && !sp.amphibian && nz > 0) nz = -1 - Math.random()*2;
+        c.x=Math.min(Math.max(nx,-limit),limit);
+        c.z=Math.min(Math.max(nz,-limit),limit);
+    }
+    // Строительство нор
+    for(let c of creatures) tryBuildBurrow(c);
+    updateBurrows();
+    // Миграция
+    applyMigration();
+    // Социальная иерархия
+    updateSocialHierarchy();
+    // Симбиоз и паразитизм
+    applySymbiosisAndParasitism();
+    // Эволюция диеты (в процессе охоты/еды)
+    // (будет выполняться при поедании)
+    // Территории
+    updateTerritories();
+    // Эпидемия
+    updateEpidemic();
+    // Водные течения
+    applyWaterCurrent();
+    // Старение и перенаселение
+    applyAgingAndOverpopulation();
+
+    // Охота (хищники)
+    for(let pred of creatures.filter(c=>speciesMap[c.speciesId].trophic>=2 && !speciesMap[c.speciesId].plant)) {
+        let sp=speciesMap[pred.speciesId];
+        if(sp.scavenger) {
+            let waste=wasteObjects.find(w=>Math.hypot(pred.x-w.x, pred.z-w.z)<5);
+            if(waste) { pred.energy=Math.min(pred.energy+8, sp.maxEnergy); waste.dead=true; continue; }
+        }
+        let candidates=creatures.filter(prey=>{
+            if(prey.id===pred.id) return false;
+            if(!pred.genes.preference[prey.speciesId]) return false;
+            if(!sp.flying && prey.extra.burrowId !== null) return false;
+            let dist=Math.hypot(pred.x-prey.x, pred.z-prey.z);
+            let range = 7 + (pred.genes.echolocation||0)*3;
+            if(pred.extra.cards && pred.extra.cards.includes('echolocation')) range *= 1.5;
+            if(sp.flying && speciesMap[prey.speciesId].flying) return false;
+            if(!sp.flying && speciesMap[prey.speciesId].flying) return false;
+            let onTerritory = territories.some(t => Math.hypot(prey.x-t.x, prey.z-t.z) < t.radius && t.ownerId !== pred.id);
+            if(onTerritory) return false;
+            return dist < range;
+        });
+        if(candidates.length===0) continue;
+        let target=candidates.reduce((a,b)=>Math.hypot(pred.x-a.x,pred.z-a.z)<Math.hypot(pred.x-b.x,pred.z-b.z)?a:b);
+        let preySp=speciesMap[target.speciesId];
+        let gain=Math.min(preySp.baseEnergy*0.3+5, sp.maxEnergy-pred.energy);
+        pred.energy+=gain;
+        // Эволюция диеты: увеличиваем предпочтение к съеденному виду
+        evolveDiet(pred, target.speciesId);
+        if(sp.flying) { pred.height = Math.max(0.5, pred.height - 1.0); }
+        if(Math.random()<0.2) wasteObjects.push({x:pred.x+(Math.random()-0.5)*2, z:pred.z+(Math.random()-0.5)*2, energy:3});
+        removeCreatureById(target.id);
+    }
+    // Травоядные едят растения (и эволюционируют диету)
+    for(let herb of creatures.filter(c=>speciesMap[c.speciesId].trophic===1 && !speciesMap[c.speciesId].plant)) {
+        let plant=creatures.find(p=>speciesMap[p.speciesId].plant && Math.hypot(herb.x-p.x, herb.z-p.z)<3.5);
+        if(plant) {
+            let gain=Math.min(7, speciesMap[herb.speciesId].maxEnergy-herb.energy);
+            herb.energy+=gain;
+            plant.energy-=5;
+            if(plant.energy<=0) removeCreatureById(plant.id);
+            // Эволюция диеты
+            evolveDiet(herb, plant.speciesId);
+        }
+    }
+    // Размножение (с выбором партнёра)
+    for(let c of creatures) tryReproduce(c);
+    wasteObjects=wasteObjects.filter(w=>!w.dead);
+    updateMeshes();
+    updateUI();
+}
+
+// ========================================================================
+//  КАРТЫ СПОСОБНОСТЕЙ (добавлены новые)
+// ========================================================================
+const cardDefs = {
+    burrow: { label:'🕳️ Норное', effect: (c)=>{} },
+    big: { label:'🐘 Большое', effect: (c)=>{ c.genes.size = Math.min(2.0, c.genes.size+0.4); } },
+    fast: { label:'💨 Быстрое', effect: (c)=>{ c.genes.speed = Math.min(2.4, c.genes.speed+0.3); } },
+    poison: { label:'☠️ Ядовитое', effect: (c)=>{ c.genes.defense.toxicity = Math.min(1.0, c.genes.defense.toxicity+0.2); } },
+    honey: { label:'🍯 Медовое', effect: (c)=>{ c.genes.honeyPreference = Math.min(1.2, c.genes.honeyPreference+0.3); } },
+    camo: { label:'🌿 Камуфляж', effect: (c)=>{ c.genes.defense.camouflage = Math.min(1.2, c.genes.defense.camouflage+0.2); } },
+    fins: { label:'🏊 Плавники', effect: (c)=>{ c.genes.aquaticSpeed = Math.min(1.5, (c.genes.aquaticSpeed||0.5)+0.3); } },
+    echolocation: { label:'🎶 Эхолокация', effect: (c)=>{ c.genes.echolocation = Math.min(1.2, (c.genes.echolocation||0.3)+0.3); } },
+    gills: { label:'🫧 Жабры', effect: (c)=>{ c.genes.gills = Math.min(1.2, (c.genes.gills||0.3)+0.3); } },
+    wings: { label:'🪶 Крылья', effect: (c)=>{ if(!speciesMap[c.speciesId].flying) return; c.genes.flyingHeight = Math.min(6.0, (c.genes.flyingHeight||1.5)+0.8); } },
+    territory: { label:'🗺️ Территория', effect: (c)=>{} },
+    immunity: { label:'💉 Иммунитет', effect: (c)=>{ c.genes.immunity = Math.min(1.2, c.genes.immunity+0.3); } },
+    migration: { label:'🧭 Миграция', effect: (c)=>{ c.genes.migration = Math.min(1.2, c.genes.migration+0.3); } },
+    symbiosis: { label:'🤝 Симбиоз', effect: (c)=>{ c.genes.symbiosis = Math.min(1.0, c.genes.symbiosis+0.2); } },
+    parasite: { label:'🪱 Паразит', effect: (c)=>{ c.genes.parasite = Math.min(0.8, c.genes.parasite+0.2); } }
+};
+
+document.querySelectorAll('.card-btn').forEach(btn=>{
+    btn.addEventListener('click', function(){
+        let card=this.dataset.card;
+        if(selectedCardType===card) {
+            selectedCardType=null;
+            this.classList.remove('active');
+            document.getElementById('card-status').textContent = '💡 Выберите карту, затем кликните на животное в 3D';
+        } else {
+            document.querySelectorAll('.card-btn').forEach(b=>b.classList.remove('active'));
+            selectedCardType=card;
+            this.classList.add('active');
+            let label = cardDefs[card]?.label || card;
+            document.getElementById('card-status').textContent = `🎯 Выбрана карта "${label}". Кликните на животное в 3D.`;
+        }
+    });
+});
+
+// ========================================================================
+//  ВЫБОР В 3D
+// ========================================================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (event) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    let meshes = [];
+    for (let [id, group] of creatureMeshes) {
+        group.children.forEach(child => {
+            if(child.isMesh && !child.userData.isShadow) {
+                child.userData.creatureId = id;
+                meshes.push(child);
+            }
+        });
+    }
+    for (let [id, group] of burrowMeshes) {
+        group.children.forEach(child => {
+            if(child.isMesh) {
+                child.userData.burrowId = id;
+                meshes.push(child);
+            }
+        });
+    }
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+        let hit = intersects[0].object;
+        let creatureId = hit.userData.creatureId;
+        let burrowId = hit.userData.burrowId;
+        if (creatureId !== undefined) {
+            let creature = creatures.find(c=>c.id===creatureId);
+            if (!creature) return;
+            if (selectedCardType) {
+                let card = cardDefs[selectedCardType];
+                if (card) {
+                    if (creature.extra.cards && creature.extra.cards.includes(selectedCardType)) {
+                        document.getElementById('card-status').textContent = `⚠️ Уже есть карта "${card.label}"`;
+                        return;
+                    }
+                    if (selectedCardType === 'wings' && !speciesMap[creature.speciesId].flying) {
+                        document.getElementById('card-status').textContent = '❌ Только для летающих!';
+                        return;
+                    }
+                    card.effect(creature);
+                    if (!creature.extra.cards) creature.extra.cards = [];
+                    creature.extra.cards.push(selectedCardType);
+                    updateMeshFromCreature(creature);
+                    document.querySelectorAll('.card-btn').forEach(b=>b.classList.remove('active'));
+                    document.getElementById('card-status').textContent = `✅ Карта "${card.label}" применена!`;
+                    selectedCardType = null;
+                    updateUI();
+                }
+            } else {
+                selectedId = creature.id;
+                updateUI();
+            }
+        } else if (burrowId !== undefined) {
+            let burr = burrows.find(b => b.id === burrowId);
+            if (burr) {
+                let owner = creatures.find(c => c.id === burr.ownerId);
+                if (owner) { selectedId = owner.id; updateUI(); }
+            }
+        }
+    }
+});
+
+// ========================================================================
+//  UI
+// ========================================================================
+function updateUI() {
+    document.getElementById('totalCount').textContent = creatures.length;
+    document.getElementById('stepCounter').textContent = step;
+    document.getElementById('seasonDisplay').textContent = seasonNames[season];
+    document.getElementById('timeIndicator').textContent = isNight?'🌙':'☀️';
+    document.getElementById('burrowCount').textContent = burrows.length;
+
+    let listDiv=document.getElementById('creatureList');
+    let html='';
+    for(let c of creatures) {
+        let sp=speciesMap[c.speciesId];
+        let sel = c.id===selectedId ? 'selected' : '';
+        let cards = (c.extra.cards||[]).length>0 ? ' 🎴' : '';
+        let waterIcon = isInWater(c.z) ? '🌊' : '🌿';
+        let flyingIcon = sp.flying ? '🪶' : '';
+        let burrowIcon = c.extra.burrowId ? '🕳️' : '';
+        let infected = c.extra.infected ? '🦠' : '';
+        html+=`<div class="creature-list-item ${sel}" data-id="${c.id}">
+            <span>${waterIcon}${flyingIcon}${burrowIcon}${infected} ${sp.emoji} ${sp.name}${cards}</span>
+            <span>${Math.round(c.energy)}/${sp.maxEnergy}</span>
+        </div>`;
+    }
+    listDiv.innerHTML=html;
+    listDiv.querySelectorAll('.creature-list-item').forEach(el=>{
+        el.addEventListener('click', function(){
+            selectedId=parseInt(this.dataset.id);
+            showDetail(selectedId);
+            updateUI();
+        });
+    });
+    updateBurrows();
+    if(selectedId!==null) showDetail(selectedId);
+}
+
+function showDetail(id) {
+    let c=creatures.find(cr=>cr.id===id);
+    let detailDiv=document.getElementById('detailArea');
+    if(!c) { detailDiv.innerHTML='<div style="color:#8aaa8a;">Существо не найдено</div>'; return; }
+    let sp=speciesMap[c.speciesId];
+    let genes=c.genes;
+    let cards = (c.extra.cards||[]).map(cd=>cardDefs[cd]?.label||cd).join(', ') || 'нет';
+    let waterStatus = isInWater(c.z) ? '🌊 Вода' : '🌿 Суша';
+    let heightInfo = sp.flying ? `Высота: ${c.height.toFixed(2)}` : '';
+    let burrowStatus = c.extra.burrowId ? '🕳️ В норе' : '—';
+    let infectedStatus = c.extra.infected ? '🦠 Заражён' : '✅ Здоров';
+    let html=`
+        <div style="font-weight:bold;font-size:1rem;">${sp.emoji} ${sp.name} (ID:${c.id})</div>
+        <div class="prop-grid">
+            <span class="label">Энергия</span><span class="value">${Math.round(c.energy)}/${sp.maxEnergy}</span>
+            <span class="label">Голод</span><span class="value">${Math.round(c.extra.hunger||50)}</span>
+            <span class="label">Размер</span><span class="value">${genes.size.toFixed(2)}</span>
+            <span class="label">Скорость</span><span class="value">${genes.speed.toFixed(2)}</span>
+            <span class="label">Агрессия</span><span class="value">${genes.aggression.toFixed(2)}</span>
+            <span class="label">Защита</span><span class="value">${genes.defense.speed.toFixed(2)}</span>
+            <span class="label">Ядовитость</span><span class="value">${genes.defense.toxicity.toFixed(2)}</span>
+            <span class="label">Камуфляж</span><span class="value">${genes.defense.camouflage.toFixed(2)}</span>
+            <span class="label">Водная скорость</span><span class="value">${genes.aquaticSpeed?.toFixed(2)||'0.5'}</span>
+            <span class="label">Эхолокация</span><span class="value">${genes.echolocation?.toFixed(2)||'0.3'}</span>
+            <span class="label">Жабры</span><span class="value">${genes.gills?.toFixed(2)||'0.3'}</span>
+            ${sp.flying ? `<span class="label">Высота полёта</span><span class="value">${genes.flyingHeight?.toFixed(2)||'1.0'}</span>` : ''}
+            <span class="label">Миграция</span><span class="value">${genes.migration?.toFixed(2)||'0.5'}</span>
+            <span class="label">Социальное обучение</span><span class="value">${genes.socialLearning?.toFixed(2)||'0.3'}</span>
+            <span class="label">Иммунитет</span><span class="value">${genes.immunity?.toFixed(2)||'0.5'}</span>
+            <span class="label">Симбиоз</span><span class="value">${genes.symbiosis?.toFixed(2)||'0.2'}</span>
+            <span class="label">Паразит</span><span class="value">${genes.parasite?.toFixed(2)||'0.1'}</span>
+            <span class="label">Среда</span><span class="value">${waterStatus}</span>
+            <span class="label">Нора</span><span class="value">${burrowStatus}</span>
+            <span class="label">Здоровье</span><span class="value">${infectedStatus}</span>
+            <span class="label">Диета</span><span class="value">${Object.keys(genes.preference).join(', ')}</span>
+            <span class="label">Пол</span><span class="value">${genes.sex===true?'♂':genes.sex===false?'♀':'—'}</span>
+            ${heightInfo ? `<span class="label">Текущая высота</span><span class="value">${heightInfo}</span>` : ''}
+        </div>
+        <div style="margin-top:6px;color:#8aaa8a;font-size:0.8rem;">🎴 Карты: ${cards}</div>
+    `;
+    detailDiv.innerHTML=html;
+}
+
+// ========================================================================
+//  УПРАВЛЕНИЕ
+// ========================================================================
+document.getElementById('addCreatureBtn').addEventListener('click', function() {
+    let select=document.getElementById('addSpeciesSelect');
+    let spId=select.value;
+    if(!spId) return;
+    let x=(Math.random()-0.5)*TS*0.6;
+    let z=(Math.random()-0.5)*TS*0.6;
+    addCreature(spId, x, z);
+    updateUI();
+});
+
+let select=document.getElementById('addSpeciesSelect');
+for(let sp of SPECIES) {
+    let opt=document.createElement('option');
+    opt.value=sp.id;
+    opt.textContent=`${sp.emoji} ${sp.name}`;
+    select.appendChild(opt);
+}
+
+document.getElementById('nextDayBtn').addEventListener('click', function() {
+    while(step<MAX_STEPS) doStep();
+    updateUI();
+});
+
+document.getElementById('resetBtn').addEventListener('click', function() {
+    for(let [id, group] of creatureMeshes) scene.remove(group);
+    creatureMeshes.clear();
+    for(let [id, group] of burrowMeshes) scene.remove(group);
+    burrowMeshes.clear();
+    creatures=[]; burrows=[]; burrowNextId=1;
+    territories=[]; wasteObjects=[]; hives=[];
+    nextId=1; selectedId=null; day=0; step=0; isNight=false;
+    season=0; weather=0; weatherTimer=0;
+    epidemicActive=false; epidemicTimer=0; epidemicLevel=0;
+    selectedCardType=null;
+    document.querySelectorAll('.card-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('card-status').textContent = '💡 Выберите карту, затем кликните на животное в 3D';
+    document.getElementById('alertDisplay').textContent = '';
+
+    // Начальная популяция
+    for(let i=0;i<14;i++) addCreature('grass', (Math.random()-0.5)*TS*0.5, -2-Math.random()*TS*0.4);
+    for(let i=0;i<4;i++) addCreature('oak', (Math.random()-0.5)*TS*0.5, -3-Math.random()*TS*0.4);
+    addCreature('mouse', 3, -5); addCreature('rabbit', -4, -8); addCreature('deer', 7, -4);
+    addCreature('wolf', -7, -6); addCreature('fox', 0, -9); addCreature('bear', 10, -10);
+    addCreature('tiger', 12, -8); addCreature('cobra', -10, -4); addCreature('python', 5, -12);
+    addCreature('vulture', 0, -12); addCreature('bee', 4, -3);
+    addCreature('mole', -5, -8); addCreature('rat', 8, -5);
+    for(let i=0;i<6;i++) addCreature('algae', (Math.random()-0.5)*TS*0.5, 3+Math.random()*TS*0.4);
+    addCreature('fish', 3, 5); addCreature('salmon', -3, 8);
+    addCreature('pike', 6, 10); addCreature('dolphin', -6, 12);
+    addCreature('shark', 9, 15); addCreature('crocodile', -8, 6);
+    addCreature('triton', 2, 2);
+    addCreature('eagle', 0, -3); addCreature('owl', -8, -5); addCreature('hawk', 6, -7);
+    addCreature('albatross', -4, 6); addCreature('bat', 10, -10);
+    // Добавляем симбионтов
+    addCreature('ant', 5, -4);
+    addCreature('aphid', 6, -3);
+    addCreature('parasite_tick', -3, -7);
+    createHive(-2, -6);
+    updateMeshes(); updateUI();
+});
+
+function createHive(x, z) { hives.push({x, z, honey:30}); }
+
+document.getElementById('btnInfo').addEventListener('click', function() {
+    let panel=document.getElementById('info-panel');
+    panel.classList.toggle('visible');
+    document.getElementById('rules-panel').classList.remove('visible');
+    this.classList.toggle('active');
+    document.getElementById('btnRules').classList.remove('active');
+});
+
+document.getElementById('btnRules').addEventListener('click', function() {
+    let panel=document.getElementById('rules-panel');
+    panel.classList.toggle('visible');
+    document.getElementById('info-panel').classList.remove('visible');
+    this.classList.toggle('active');
+    document.getElementById('btnInfo').classList.remove('active');
+});
+
+document.getElementById('autoToggle').addEventListener('click', function() {
+    autoMode = !autoMode;
+    this.textContent = autoMode ? '⏸️ Стоп' : '▶️ Авто';
+    if(autoMode) {
+        autoTimer = setInterval(() => {
+            if(step < MAX_STEPS) doStep();
+            else {
+                while(step<MAX_STEPS) doStep();
+                updateUI();
+            }
+        }, 2000);
+    } else {
+        if(autoTimer) { clearInterval(autoTimer); autoTimer=null; }
+    }
+});
+
+// ========================================================================
+//  АНИМАЦИЯ
+// ========================================================================
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    let intensity = isNight ? 0.15 : 1.0;
+    sun.intensity = intensity * 1.2;
+    ambient.intensity = isNight ? 0.2 : 0.5;
+    scene.background.setHex(isNight ? 0x0a1a2a : 0x1a3a1a);
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    labelRenderer.setSize(w, h);
+});
+
+document.getElementById('resetBtn').click();
+console.log('🌍 Экосистема 5.0 запущена! Все механики активны.');
+</script>
+</body>
+</html>

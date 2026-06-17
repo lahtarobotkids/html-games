@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Побег Кроша</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { overflow: hidden; background: #1a1a2e; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 22px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #timer {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.5);
+            padding: 8px 18px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.3);
+            pointer-events: none;
+            z-index: 10;
+            font-variant-numeric: tabular-nums;
+            transition: opacity 0.3s;
+        }
+        #timer.warning-active {
+            border-color: #ff0000;
+            color: #ff4444;
+            animation: pulse-timer 0.5s infinite alternate;
+        }
+        @keyframes pulse-timer {
+            from { opacity: 1; transform: scale(1); }
+            to   { opacity: 0.7; transform: scale(1.05); }
+        }
+
+        #warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            color: #ff0000;
+            font-weight: 900;
+            text-shadow: 0 0 40px #ff0000, 0 0 80px #ff0000;
+            display: none;
+            pointer-events: none;
+            z-index: 20;
+            animation: pulse 0.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: translate(-50%, -50%) scale(1); }
+            to   { transform: translate(-50%, -50%) scale(1.2); }
+        }
+
+        #message {
+            position: absolute;
+            bottom: 80px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #fff;
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(0,0,0,0.9);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #progress {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 18px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid #fff;
+            border-radius: 20px;
+            overflow: hidden;
+            z-index: 10;
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.1s;
+        }
+        #controls-hint {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #aaa;
+            font-size: 16px;
+            background: rgba(0,0,0,0.5);
+            padding: 6px 18px;
+            border-radius: 20px;
+            pointer-events: none;
+            z-index: 10;
+            white-space: nowrap;
+        }
+        #restart-btn {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 16px 48px;
+            font-size: 28px;
+            font-weight: bold;
+            background: #ffaa00;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 40px;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: 0 0 30px rgba(255, 170, 0, 0.6);
+            display: none;
+            transition: transform 0.2s;
+        }
+        #restart-btn:hover {
+            transform: scale(1.05);
+            background: #ffbb22;
+        }
+        #restart-hint {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffaa00;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #000;
+            display: none;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">🏠 Домик Совуньи</div>
+    <div id="timer">⏱ 11.0</div>
+    <div id="warning">⚠</div>
+    <div id="message"></div>
+    <div id="progress"><div id="progress-bar" style="width:0%"></div></div>
+    <div id="controls-hint">ПРОБЕЛ — бежать, отпустить — сесть</div>
+    <button id="restart-btn">🔁 Играть снова</button>
+    <div id="restart-hint">Нажмите R для рестарта</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ----- Инициализация сцены -----
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x2c3e50);
+        scene.fog = new THREE.Fog(0x2c3e50, 18, 35);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(8, 6, 10);
+        camera.lookAt(0, 0.5, 5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.prepend(renderer.domElement);
+
+        // ----- Освещение -----
+        const ambient = new THREE.AmbientLight(0x404060, 0.6);
+        scene.add(ambient);
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        const d = 12;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 25;
+        scene.add(dirLight);
+
+        const backLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+        backLight.position.set(-3, 2, -5);
+        scene.add(backLight);
+
+        // ----- Комната (длина 19 единиц) -----
+        const roomWidth = 10;
+        const roomDepth = 19;
+        const wallHeight = 3.5;
+        const zStart = -1;
+        const zEnd = 18;
+
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.7, metalness: 0.1 });
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomWidth, roomDepth), floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.set(0, 0, (zStart + zEnd) / 2);
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5deb3, roughness: 0.6 });
+        function addWall(w, h, pos, rotY = 0) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.2), wallMat);
+            wall.position.set(pos.x, pos.y, pos.z);
+            wall.rotation.y = rotY;
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+            return wall;
+        }
+
+        addWall(roomWidth, wallHeight, new THREE.Vector3(0, wallHeight/2, -1), 0);
+        addWall(roomWidth, wallHeight, new THREE.Vector3(0, wallHeight/2, 18), 0);
+        addWall(roomDepth, wallHeight, new THREE.Vector3(-roomWidth/2, wallHeight/2, (zStart+zEnd)/2), Math.PI/2);
+        addWall(roomDepth, wallHeight, new THREE.Vector3(roomWidth/2, wallHeight/2, (zStart+zEnd)/2), Math.PI/2);
+
+        const ceilMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
+        const ceil = new THREE.Mesh(new THREE.PlaneGeometry(roomWidth, roomDepth), ceilMat);
+        ceil.rotation.x = Math.PI / 2;
+        ceil.position.set(0, wallHeight, (zStart+zEnd)/2);
+        scene.add(ceil);
+
+        // ----- Дверь -----
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.8 });
+        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 0.15), doorMat);
+        doorFrame.position.set(0, 1.2, 17.95);
+        doorFrame.castShadow = true;
+        scene.add(doorFrame);
+
+        const doorPanelMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.6 });
+        const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.1), doorPanelMat);
+        doorPanel.position.set(0, 1.2, 18.05);
+        doorPanel.castShadow = true;
+        scene.add(doorPanel);
+
+        const handleMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 0.8, roughness: 0.2 });
+        const handle = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), handleMat);
+        handle.position.set(0.4, 1.2, 18.1);
+        scene.add(handle);
+
+        // ----- Стол и стул -----
+        const tableMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
+        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 1.0), tableMat);
+        tableTop.position.set(0, 0.8, 1.0);
+        tableTop.castShadow = true;
+        tableTop.receiveShadow = true;
+        scene.add(tableTop);
+
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+        const legPositions = [[-0.7, 0.3, 0.6], [0.7, 0.3, 0.6], [-0.7, 0.3, 1.4], [0.7, 0.3, 1.4]];
+        legPositions.forEach(pos => {
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 6), legMat);
+            leg.position.set(pos[0], pos[1], pos[2]);
+            leg.castShadow = true;
+            scene.add(leg);
+        });
+
+        const chairMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.6), chairMat);
+        seat.position.set(0, 0.45, 0.3);
+        seat.castShadow = true;
+        seat.receiveShadow = true;
+        scene.add(seat);
+
+        const chairLegMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+        const chairLegPos = [[-0.25, 0.08, 0.0], [0.25, 0.08, 0.0], [-0.25, 0.08, 0.6], [0.25, 0.08, 0.6]];
+        chairLegPos.forEach(pos => {
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 6), chairLegMat);
+            leg.position.set(pos[0], pos[1], pos[2]);
+            leg.castShadow = true;
+            scene.add(leg);
+        });
+
+        const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.05), chairMat);
+        backrest.position.set(0, 0.7, -0.1);
+        backrest.castShadow = true;
+        scene.add(backrest);
+
+        // ----- Крош (всегда смотрит вперёд) -----
+        const kroshGroup = new THREE.Group();
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.4 });
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), bodyMat);
+        body.position.set(0, 0.3, 0);
+        body.castShadow = true;
+        kroshGroup.add(body);
+
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.3 });
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), headMat);
+        head.position.set(0, 0.65, 0);
+        head.castShadow = true;
+        kroshGroup.add(head);
+
+        const earMat = new THREE.MeshStandardMaterial({ color: 0xff8800 });
+        const earGeo = new THREE.ConeGeometry(0.08, 0.25, 8);
+        const earL = new THREE.Mesh(earGeo, earMat);
+        earL.position.set(-0.15, 0.85, 0);
+        earL.rotation.z = -0.3;
+        earL.rotation.x = 0.1;
+        kroshGroup.add(earL);
+        const earR = new THREE.Mesh(earGeo, earMat);
+        earR.position.set(0.15, 0.85, 0);
+        earR.rotation.z = 0.3;
+        earR.rotation.x = -0.1;
+        kroshGroup.add(earR);
+
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const pupilMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+        const eyeGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const pupilGeo = new THREE.SphereGeometry(0.03, 8, 8);
+
+        const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeL.position.set(-0.1, 0.7, 0.2);
+        kroshGroup.add(eyeL);
+        const pupilL = new THREE.Mesh(pupilGeo, pupilMat);
+        pupilL.position.set(-0.1, 0.7, 0.26);
+        kroshGroup.add(pupilL);
+
+        const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeR.position.set(0.1, 0.7, 0.2);
+        kroshGroup.add(eyeR);
+        const pupilR = new THREE.Mesh(pupilGeo, pupilMat);
+        pupilR.position.set(0.1, 0.7, 0.26);
+        kroshGroup.add(pupilR);
+
+        const noseMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.06, 6), noseMat);
+        nose.position.set(0, 0.65, 0.26);
+        nose.rotation.x = 0.2;
+        kroshGroup.add(nose);
+
+        const armMat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+        const armGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.25, 6);
+        const armL = new THREE.Mesh(armGeo, armMat);
+        armL.position.set(-0.35, 0.35, 0);
+        armL.rotation.z = 0.4;
+        armL.rotation.x = 0.2;
+        kroshGroup.add(armL);
+        const armR = new THREE.Mesh(armGeo, armMat);
+        armR.position.set(0.35, 0.35, 0);
+        armR.rotation.z = -0.4;
+        armR.rotation.x = -0.2;
+        kroshGroup.add(armR);
+
+        const leg2Mat = new THREE.MeshStandardMaterial({ color: 0xff8800 });
+        const legGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.15, 6);
+        const legL = new THREE.Mesh(legGeo, leg2Mat);
+        legL.position.set(-0.12, 0.08, 0.1);
+        kroshGroup.add(legL);
+        const legR = new THREE.Mesh(legGeo, leg2Mat);
+        legR.position.set(0.12, 0.08, 0.1);
+        kroshGroup.add(legR);
+
+        kroshGroup.position.set(0, 0.4, 0.3);
+        kroshGroup.rotation.y = 0;
+        scene.add(kroshGroup);
+
+        // ----- Совунья -----
+        const sovGroup = new THREE.Group();
+        const bodySov = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 12), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
+        bodySov.position.set(0, 0.25, 0);
+        sovGroup.add(bodySov);
+        const headSov = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 12), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
+        headSov.position.set(0, 0.5, 0);
+        sovGroup.add(headSov);
+        const eyeSovMat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+        const eyeSovL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeSovMat);
+        eyeSovL.position.set(-0.1, 0.52, 0.15);
+        sovGroup.add(eyeSovL);
+        const eyeSovR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeSovMat);
+        eyeSovR.position.set(0.1, 0.52, 0.15);
+        sovGroup.add(eyeSovR);
+        const beak = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.06, 6), new THREE.MeshStandardMaterial({ color: 0xff6600 }));
+        beak.position.set(0, 0.48, 0.2);
+        beak.rotation.x = 0.3;
+        sovGroup.add(beak);
+
+        // Шапочка
+        const hatMat = new THREE.MeshStandardMaterial({ color: 0xff3333, roughness: 0.3 });
+        const hat = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.2, 8), hatMat);
+        hat.position.set(0, 0.7, 0.05);
+        hat.rotation.x = 0.1;
+        sovGroup.add(hat);
+        const pomponMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const pompon = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), pomponMat);
+        pompon.position.set(0, 0.85, 0.1);
+        sovGroup.add(pompon);
+
+        sovGroup.position.set(-2.5, 0.4, 1.8);
+        sovGroup.rotation.y = -Math.PI / 2;
+        scene.add(sovGroup);
+
+        // ----- Сковородка -----
+        const panGroup = new THREE.Group();
+        const handlePanMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
+        const handlePan = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 6), handlePanMat);
+        handlePan.rotation.z = Math.PI / 2;
+        handlePan.position.set(0.15, 0, 0);
+        panGroup.add(handlePan);
+        const panMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7, roughness: 0.3 });
+        const panBase = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 12), panMat);
+        panBase.position.set(0, 0, 0.03);
+        panBase.rotation.x = 0;
+        panGroup.add(panBase);
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.6 });
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 8, 12), rimMat);
+        rim.position.set(0, 0, 0.06);
+        rim.rotation.x = Math.PI / 2;
+        panGroup.add(rim);
+
+        panGroup.visible = false;
+        panGroup.position.set(-2.0, 1.0, 2.0);
+        panGroup.rotation.x = -0.3;
+        panGroup.rotation.z = 0.2;
+        scene.add(panGroup);
+
+        // ----- Полки и картинки -----
+        function createShelf(zPos, yPos, count, items) {
+            const shelfMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
+            const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.3), shelfMat);
+            shelf.position.set(0, yPos, zPos);
+            shelf.castShadow = true;
+            shelf.receiveShadow = true;
+            scene.add(shelf);
+
+            const spacing = 0.5;
+            const startX = - (count - 1) * spacing / 2;
+            for (let i = 0; i < count; i++) {
+                const x = startX + i * spacing;
+                const item = items[i % items.length];
+                if (item === 'jar') {
+                    const jarGroup = new THREE.Group();
+                    const jarMat = new THREE.MeshStandardMaterial({ color: 0xcc4444, roughness: 0.3 });
+                    const jarBody = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 8), jarMat);
+                    jarBody.position.y = 0.075;
+                    jarGroup.add(jarBody);
+                    const lidMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.5 });
+                    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 8), lidMat);
+                    lid.position.y = 0.16;
+                    jarGroup.add(lid);
+                    const labelMat = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0xff8800 : 0x44aa44 });
+                    const label = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.01), labelMat);
+                    label.position.set(0, 0.08, 0.08);
+                    jarGroup.add(label);
+                    jarGroup.position.set(x, yPos + 0.08, zPos + 0.2);
+                    scene.add(jarGroup);
+                } else if (item === 'picture') {
+                    const picGroup = new THREE.Group();
+                    const frameMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+                    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.02), frameMat);
+                    frame.position.z = 0.01;
+                    picGroup.add(frame);
+                    const imgMat = new THREE.MeshStandardMaterial({ color: 0x4488ff });
+                    const img = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.01), imgMat);
+                    img.position.z = 0.02;
+                    picGroup.add(img);
+                    picGroup.position.set(x, yPos + 0.1, zPos + 0.18);
+                    picGroup.rotation.y = 0.2;
+                    scene.add(picGroup);
+                }
+            }
+        }
+
+        createShelf(-0.95, 0.8, 4, ['jar', 'picture', 'jar', 'picture']);
+        createShelf(-0.95, 1.6, 3, ['picture', 'jar', 'picture']);
+        createShelf(-0.95, 2.4, 2, ['jar', 'jar']);
+
+        function addPictureOnWall(pos, rotY, color = 0xffaa44) {
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.02), frameMat);
+            frame.position.set(pos.x, pos.y, pos.z);
+            frame.rotation.y = rotY;
+            frame.castShadow = true;
+            scene.add(frame);
+            const imgMat = new THREE.MeshStandardMaterial({ color: color });
+            const img = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.01), imgMat);
+            img.position.set(pos.x, pos.y, pos.z + (rotY === 0 ? 0.02 : -0.02));
+            img.rotation.y = rotY;
+            scene.add(img);
+        }
+
+        addPictureOnWall(new THREE.Vector3(-5, 1.2, 2), 0, 0x44aa88);
+        addPictureOnWall(new THREE.Vector3(-5, 1.2, 6), 0, 0xaa44aa);
+        addPictureOnWall(new THREE.Vector3(-5, 1.2, 10), 0, 0x88aaff);
+        addPictureOnWall(new THREE.Vector3(5, 1.2, 3), Math.PI, 0xff8844);
+        addPictureOnWall(new THREE.Vector3(5, 1.2, 7), Math.PI, 0x44ff88);
+        addPictureOnWall(new THREE.Vector3(5, 1.2, 11), Math.PI, 0xff44aa);
+
+        // ----- Переменные игры -----
+        const STATE = {
+            TITLE: 'title',
+            PLAYING: 'playing',
+            WARNING: 'warning',
+            CAUGHT: 'caught',
+            WIN: 'win'
+        };
+
+        let gameState = STATE.TITLE;
+        let isSpaceDown = false;
+        let progress = 0;
+        const MAX_Z = 17.8;
+        let warningTimer = 0;
+        const WARNING_DURATION = 2.0;
+        let warningActive = false;
+
+        // --- Таймер обратного отсчёта (интервал 11 секунд) ---
+        const WARNING_INTERVAL = 11.0; // изменено с 10 на 11
+        let timeToNextWarning = WARNING_INTERVAL;
+
+        const SOV_LOOK_LEFT = -Math.PI / 2;
+        const SOV_LOOK_TABLE = Math.atan2(0.3 - 1.8, 0 - (-2.5));
+        let sovTargetRotation = SOV_LOOK_LEFT;
+
+        // UI элементы
+        const uiDiv = document.getElementById('ui');
+        const timerDiv = document.getElementById('timer');
+        const warningDiv = document.getElementById('warning');
+        const messageDiv = document.getElementById('message');
+        const progressBar = document.getElementById('progress-bar');
+        const controlsHint = document.getElementById('controls-hint');
+        const restartBtn = document.getElementById('restart-btn');
+        const restartHint = document.getElementById('restart-hint');
+
+        function setMessage(text, color = '#fff') {
+            messageDiv.textContent = text;
+            messageDiv.style.color = color;
+        }
+
+        function setProgress(val) {
+            const p = Math.min(1, Math.max(0, val));
+            progressBar.style.width = (p * 100) + '%';
+            if (p < 0.3) progressBar.style.background = '#f44336';
+            else if (p < 0.7) progressBar.style.background = '#ff9800';
+            else progressBar.style.background = '#4caf50';
+        }
+
+        function showWarning(show) {
+            warningDiv.style.display = show ? 'block' : 'none';
+            if (show) {
+                timerDiv.classList.add('warning-active');
+            } else {
+                timerDiv.classList.remove('warning-active');
+            }
+        }
+
+        function showControls(show) {
+            controlsHint.style.display = show ? 'block' : 'none';
+        }
+
+        function showRestartButton(show) {
+            restartBtn.style.display = show ? 'block' : 'none';
+        }
+
+        function showRestartHint(show) {
+            restartHint.style.display = show ? 'block' : 'none';
+        }
+
+        function updateTimerDisplay(value) {
+            timerDiv.textContent = '⏱ ' + value.toFixed(1);
+        }
+
+        // ----- Сброс игры -----
+        function resetGame() {
+            gameState = STATE.TITLE;
+            isSpaceDown = false;
+            progress = 0;
+            kroshGroup.position.z = 0.3;
+            kroshGroup.position.x = 0;
+            kroshGroup.visible = true;
+            kroshGroup.rotation.x = 0;
+            kroshGroup.rotation.z = 0;
+            kroshGroup.position.y = 0.4;
+            kroshGroup.rotation.y = 0;
+            warningActive = false;
+            warningTimer = 0;
+            timeToNextWarning = WARNING_INTERVAL;
+            showWarning(false);
+            setMessage('🏠 Нажмите ПРОБЕЛ, чтобы начать побег!', '#fff');
+            setProgress(0);
+            showControls(false);
+            showRestartButton(false);
+            showRestartHint(false);
+            uiDiv.textContent = '🏠 Домик Совуньи';
+            timerDiv.style.opacity = '0.5';
+            updateTimerDisplay(timeToNextWarning);
+            panGroup.visible = false;
+            sovGroup.position.set(-2.5, 0.4, 1.8);
+            sovGroup.rotation.y = SOV_LOOK_LEFT;
+            sovTargetRotation = SOV_LOOK_LEFT;
+        }
+
+        // ----- Начало игры -----
+        function startGame() {
+            gameState = STATE.PLAYING;
+            isSpaceDown = false;
+            progress = 0;
+            kroshGroup.position.z = 0.3;
+            kroshGroup.position.x = 0;
+            kroshGroup.visible = true;
+            kroshGroup.position.y = 0.4;
+            kroshGroup.rotation.y = 0;
+            warningActive = false;
+            warningTimer = 0;
+            timeToNextWarning = WARNING_INTERVAL;
+            showWarning(false);
+            setMessage('🚪 Беги к двери! Удерживай ПРОБЕЛ', '#aaffaa');
+            setProgress(0);
+            showControls(true);
+            showRestartButton(false);
+            showRestartHint(false);
+            uiDiv.textContent = '🏃‍♂️ Побег!';
+            timerDiv.style.opacity = '1';
+            updateTimerDisplay(timeToNextWarning);
+            panGroup.visible = false;
+            sovGroup.position.set(-2.5, 0.4, 1.8);
+            sovGroup.rotation.y = SOV_LOOK_LEFT;
+            sovTargetRotation = SOV_LOOK_LEFT;
+        }
+
+        // ----- Анимация поимки (погоня) -----
+        function playCaughtAnimation() {
+            const targetPos = kroshGroup.position.clone();
+            targetPos.y = 0.4;
+
+            panGroup.visible = true;
+            const runDuration = 0.6;
+            let runTime = 0;
+
+            function runToKrosh(time) {
+                const delta = Math.min((time - lastRunTime) / 1000, 0.05);
+                lastRunTime = time;
+                runTime += delta;
+
+                if (runTime < runDuration) {
+                    const t = runTime / runDuration;
+                    sovGroup.position.lerp(targetPos, t * 0.8);
+                    const angle = Math.atan2(targetPos.x - sovGroup.position.x, targetPos.z - sovGroup.position.z);
+                    sovGroup.rotation.y = angle;
+                    panGroup.position.set(sovGroup.position.x + 0.3, sovGroup.position.y + 0.5, sovGroup.position.z + 0.2);
+                    panGroup.rotation.x = -0.8;
+                    panGroup.rotation.z = 0.5;
+                    requestAnimationFrame(runToKrosh);
+                } else {
+                    let hitTime = 0;
+                    const hitDuration = 0.25;
+
+                    function animateHit(time2) {
+                        const delta2 = Math.min((time2 - lastHitTime) / 1000, 0.05);
+                        lastHitTime = time2;
+                        hitTime += delta2;
+
+                        if (hitTime < hitDuration) {
+                            const t2 = hitTime / hitDuration;
+                            const startY = panGroup.position.y;
+                            const targetY = 0.85;
+                            panGroup.position.y = startY + (targetY - startY) * t2;
+                            panGroup.rotation.x = -1.2 + t2 * 0.6;
+                            panGroup.rotation.z = 0.3 - t2 * 0.2;
+                            kroshGroup.position.y = 0.4 - t2 * 0.15;
+                            kroshGroup.rotation.z = -t2 * 0.1;
+                            requestAnimationFrame(animateHit);
+                        } else {
+                            kroshGroup.visible = false;
+                            panGroup.position.set(0.0, 0.3, 0.7);
+                            panGroup.rotation.x = -0.5;
+                            panGroup.rotation.z = 0.0;
+                            setTimeout(() => {
+                                resetGame();
+                            }, 1200);
+                        }
+                    }
+                    let lastHitTime = performance.now();
+                    requestAnimationFrame(animateHit);
+                }
+            }
+            let lastRunTime = performance.now();
+            requestAnimationFrame(runToKrosh);
+        }
+
+        // ----- Поимка -----
+        function caught() {
+            gameState = STATE.CAUGHT;
+            showWarning(false);
+            setMessage('😱 Совунья догнала!', '#ff4444');
+            showControls(false);
+            showRestartButton(false);
+            showRestartHint(false);
+            uiDiv.textContent = '❌ Пойман!';
+            timerDiv.style.opacity = '0.3';
+            playCaughtAnimation();
+        }
+
+        // ----- Победа -----
+        function win() {
+            gameState = STATE.WIN;
+            showWarning(false);
+            setMessage('🎉 Ура! Крош вырвался на свободу!', '#ffdd44');
+            showControls(false);
+            showRestartButton(true);
+            showRestartHint(false);
+            uiDiv.textContent = '✅ Победа!';
+            timerDiv.style.opacity = '0.3';
+        }
+
+        // ----- Обновление -----
+        function update(delta) {
+            if (gameState === STATE.TITLE) {
+                if (isSpaceDown) {
+                    startGame();
+                }
+                return;
+            }
+
+            if (gameState === STATE.CAUGHT || gameState === STATE.WIN) {
+                return;
+            }
+
+            sovGroup.rotation.y += (sovTargetRotation - sovGroup.rotation.y) * delta * 3;
+
+            if (gameState === STATE.PLAYING) {
+                timeToNextWarning -= delta;
+                if (timeToNextWarning < 0) timeToNextWarning = 0;
+                updateTimerDisplay(timeToNextWarning);
+
+                if (timeToNextWarning <= 0 && !warningActive) {
+                    warningActive = true;
+                    warningTimer = WARNING_DURATION;
+                    showWarning(true);
+                    gameState = STATE.WARNING;
+                    setMessage('⚠️ Осторожно! Отпусти ПРОБЕЛ и сядь!', '#ffaa00');
+                    sovTargetRotation = SOV_LOOK_TABLE;
+                    updateTimerDisplay(0);
+                }
+
+                if (isSpaceDown && !warningActive) {
+                    const speed = 1.8;
+                    kroshGroup.position.z += speed * delta;
+                    if (kroshGroup.position.z > MAX_Z) {
+                        kroshGroup.position.z = MAX_Z;
+                        win();
+                        return;
+                    }
+                    progress = (kroshGroup.position.z - 0.3) / (MAX_Z - 0.3);
+                    setProgress(progress);
+                    kroshGroup.position.y = 0.4 + Math.sin(Date.now() * 0.01) * 0.02;
+                } else if (!isSpaceDown && !warningActive) {
+                    if (kroshGroup.position.z > 0.3) {
+                        kroshGroup.position.z += (0.3 - kroshGroup.position.z) * delta * 2;
+                        if (Math.abs(kroshGroup.position.z - 0.3) < 0.01) {
+                            kroshGroup.position.z = 0.3;
+                        }
+                        progress = (kroshGroup.position.z - 0.3) / (MAX_Z - 0.3);
+                        setProgress(progress);
+                    }
+                    kroshGroup.position.y = 0.4;
+                }
+            } else if (gameState === STATE.WARNING) {
+                warningTimer -= delta;
+                if (warningTimer <= 0) {
+                    if (isSpaceDown) {
+                        caught();
+                        return;
+                    } else {
+                        warningActive = false;
+                        showWarning(false);
+                        gameState = STATE.PLAYING;
+                        sovTargetRotation = SOV_LOOK_LEFT;
+                        kroshGroup.position.z += (0.3 - kroshGroup.position.z) * delta * 4;
+                        if (Math.abs(kroshGroup.position.z - 0.3) < 0.01) {
+                            kroshGroup.position.z = 0.3;
+                        }
+                        progress = (kroshGroup.position.z - 0.3) / (MAX_Z - 0.3);
+                        setProgress(progress);
+                        setMessage('✅ Всё тихо, можно продолжать', '#88ff88');
+                        timeToNextWarning = WARNING_INTERVAL;
+                        updateTimerDisplay(timeToNextWarning);
+                        setTimeout(() => {
+                            if (gameState === STATE.PLAYING) {
+                                setMessage('🚪 Беги к двери! Удерживай ПРОБЕЛ', '#aaffaa');
+                            }
+                        }, 800);
+                    }
+                } else {
+                    if (!isSpaceDown) {
+                        kroshGroup.position.z += (0.3 - kroshGroup.position.z) * delta * 4;
+                        if (Math.abs(kroshGroup.position.z - 0.3) < 0.01) {
+                            kroshGroup.position.z = 0.3;
+                        }
+                        progress = (kroshGroup.position.z - 0.3) / (MAX_Z - 0.3);
+                        setProgress(progress);
+                    } else {
+                        setMessage('⚠️ ОТПУСТИ ПРОБЕЛ!', '#ff0000');
+                    }
+                }
+            }
+        }
+
+        // ----- Обработка клавиш -----
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                isSpaceDown = true;
+                if (gameState === STATE.TITLE) {
+                    startGame();
+                }
+            }
+            if (e.code === 'KeyR') {
+                if (gameState === STATE.CAUGHT || gameState === STATE.WIN) {
+                    resetGame();
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                isSpaceDown = false;
+            }
+        });
+
+        restartBtn.addEventListener('click', () => {
+            if (gameState === STATE.WIN) {
+                resetGame();
+            }
+        });
+
+        // ----- Анимационный цикл -----
+        let lastTime = 0;
+
+        function animate(time) {
+            const delta = Math.min((time - lastTime) / 1000, 0.05);
+            lastTime = time;
+
+            update(delta);
+
+            const targetZ = Math.min(kroshGroup.position.z + 3, 12);
+            camera.position.z += (targetZ - camera.position.z) * delta * 0.5;
+            camera.lookAt(kroshGroup.position.x, 0.5, kroshGroup.position.z - 1);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        resetGame();
+        animate(0);
+
+        console.log('Игра загружена! Нажмите ПРОБЕЛ для начала.');
+    </script>
+</body>
+</html>
