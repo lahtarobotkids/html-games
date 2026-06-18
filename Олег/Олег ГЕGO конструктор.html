@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ГЕGO конструктор</title>
+    <style>
+        :root {
+            --bg: #1a1d23;
+            --panel-bg: #252830;
+            --text: #e0e0e0;
+            --text-secondary: #a0a4ab;
+            --accent: #ff6b35;
+            --accent-hover: #ff8c5a;
+            --danger: #e74c3c;
+            --danger-hover: #f06050;
+            --button-bg: #333840;
+            --button-hover: #3f4550;
+            --border: #3a3d44;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            display: flex;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            cursor: crosshair;
+        }
+        #canvas-container.rotating {
+            cursor: grab;
+        }
+        #canvas-container.rotating:active {
+            cursor: grabbing;
+        }
+        #canvas-container.removing {
+            cursor: pointer;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Панель инструментов */
+        #panel {
+            width: 300px;
+            min-width: 300px;
+            background: var(--panel-bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+            z-index: 10;
+            border-left: 1px solid var(--border);
+            padding: 20px 16px;
+            gap: 16px;
+            scrollbar-width: thin;
+            scrollbar-color: #444 transparent;
+        }
+        #panel::-webkit-scrollbar {
+            width: 5px;
+        }
+        #panel::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 10px;
+        }
+
+        #panel h1 {
+            font-size: 1.6em;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 0.02em;
+            background: linear-gradient(135deg, #ff6b35, #ffb347);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 4px;
+        }
+        #panel .subtitle {
+            text-align: center;
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            margin-top: -8px;
+            margin-bottom: 4px;
+        }
+
+        .section-label {
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: -8px;
+        }
+
+        #block-types, #figure-types {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .block-type-btn {
+            flex: 1 1 auto;
+            min-width: 44px;
+            padding: 10px 8px;
+            background: var(--button-bg);
+            border: 2px solid transparent;
+            border-radius: 10px;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.15s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .block-type-btn:hover {
+            background: var(--button-hover);
+            transform: translateY(-1px);
+        }
+        .block-type-btn.active {
+            border-color: var(--accent);
+            background: #332520;
+            box-shadow: 0 0 16px rgba(255, 107, 53, 0.25);
+        }
+        .block-type-btn .icon {
+            display: grid;
+            gap: 2px;
+        }
+        .block-type-btn .icon .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #888;
+            display: inline-block;
+        }
+        .block-type-btn.active .icon .dot {
+            background: #ffb347;
+        }
+        .block-type-btn .icon .glyph {
+            fill: #888;
+        }
+        .block-type-btn.active .icon .glyph {
+            fill: #ffb347;
+        }
+
+        #color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+        .color-swatch {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+        .color-swatch:hover {
+            transform: scale(1.15);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+        }
+        .color-swatch.active {
+            border-color: #fff;
+            box-shadow: 0 0 20px currentColor;
+            transform: scale(1.1);
+        }
+        .color-swatch.active::after {
+            content: '✓';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #fff;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: all 0.15s ease;
+            letter-spacing: 0.02em;
+            text-align: center;
+        }
+        .btn-accent {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-accent:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 4px 16px rgba(255, 107, 53, 0.35);
+        }
+        .btn-accent.active-mode {
+            background: #2ecc71;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.4);
+        }
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: var(--danger-hover);
+        }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover {
+            border-color: #fff;
+            background: var(--button-hover);
+        }
+
+        #mode-indicator {
+            display: flex;
+            gap: 8px;
+        }
+        #mode-indicator .btn {
+            flex: 1;
+            padding: 10px 8px;
+            font-size: 0.82em;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            background: var(--button-bg);
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+        .stats span {
+            font-weight: 700;
+            color: #fff;
+            font-size: 1.1em;
+        }
+
+        .instructions {
+            font-size: 0.72em;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            background: var(--button-bg);
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+        .instructions kbd {
+            background: #444;
+            border-radius: 4px;
+            padding: 2px 7px;
+            font-size: 0.9em;
+            color: #fff;
+            border: 1px solid #555;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+        #toast.show {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            #panel {
+                width: 100%;
+                min-width: 100%;
+                height: auto;
+                max-height: 40vh;
+                flex-shrink: 0;
+                border-left: none;
+                border-top: 1px solid var(--border);
+                padding: 12px;
+                gap: 10px;
+            }
+            #panel h1 {
+                font-size: 1.2em;
+            }
+            #canvas-container {
+                flex: 1;
+                min-height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="toast"></div>
+    </div>
+    <div id="panel">
+        <h1>🧱 ГЕGO конструктор</h1>
+        <p class="subtitle">3D • Поле 100×100 • Бесконечные блоки</p>
+
+        <div class="section-label">Тип блока</div>
+        <div id="block-types">
+            <button class="block-type-btn active" data-type="0">
+                <div class="icon" style="grid-template-columns:1fr;"><span class="dot"></span></div>
+                1×1
+            </button>
+            <button class="block-type-btn" data-type="1">
+                <div class="icon" style="grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span>
+                </div>
+                2×2
+            </button>
+            <button class="block-type-btn" data-type="2">
+                <div class="icon" style="grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span>
+                </div>
+                2×4
+            </button>
+            <button class="block-type-btn" data-type="3">
+                <div class="icon" style="grid-template-columns:1fr;grid-template-rows:1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span>
+                </div>
+                1×2
+            </button>
+            <button class="block-type-btn" data-type="4">
+                <div class="icon" style="grid-template-columns:1fr 1fr;grid-template-rows:1fr;">
+                    <span class="dot"></span><span class="dot"></span>
+                </div>
+                2×1
+            </button>
+            <button class="block-type-btn" data-type="5">
+                <div class="icon" style="grid-template-columns:1fr;grid-template-rows:1fr 1fr 1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                1×4
+            </button>
+            <button class="block-type-btn" data-type="6">
+                <div class="icon" style="grid-template-columns:1fr;grid-template-rows:1fr 1fr 1fr 1fr 1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                1×6
+            </button>
+            <button class="block-type-btn" data-type="7">
+                <div class="icon" style="grid-template-columns:1fr;grid-template-rows:repeat(8,1fr);">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                1×8
+            </button>
+            <button class="block-type-btn" data-type="8">
+                <div class="icon" style="grid-template-columns:1fr 1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr 1fr;">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                4×4
+            </button>
+            <button class="block-type-btn" data-type="9">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 28 22" width="28" height="22"><polygon points="0,22 28,22 28,0"/></svg>
+                </div>
+                Скос 2×2
+            </button>
+            <button class="block-type-btn" data-type="10">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 28 22" width="28" height="22"><polygon points="0,22 28,22 28,0"/></svg>
+                </div>
+                Скос 2×4
+            </button>
+            <button class="block-type-btn" data-type="11">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 28 24" width="28" height="24"><path d="M2,24 V10 Q2,2 14,2 Q26,2 26,10 V24 H20 V11 Q20,8 14,8 Q8,8 8,11 V24 Z"/></svg>
+                </div>
+                Арка 1×4
+            </button>
+        </div>
+
+        <div class="section-label">Фигурки</div>
+        <div id="figure-types">
+            <button class="block-type-btn active" data-figure="0">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="4" r="3"/><rect x="9" y="9" width="6" height="8" rx="1.5"/><rect x="5" y="9" width="3" height="9" rx="1.2"/><rect x="16" y="9" width="3" height="9" rx="1.2"/><rect x="8" y="17" width="3" height="6" rx="1"/><rect x="13" y="17" width="3" height="6" rx="1"/></svg>
+                </div>
+                Человечек
+            </button>
+            <button class="block-type-btn" data-figure="1">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 24 24" width="22" height="22"><polygon points="6,4 9,9 4,9"/><polygon points="18,4 20,9 15,9"/><ellipse cx="12" cy="13" rx="8" ry="5"/><rect x="18" y="11" width="4" height="2" rx="1"/></svg>
+                </div>
+                Кошка
+            </button>
+            <button class="block-type-btn" data-figure="2">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 24 24" width="22" height="22"><rect x="14" y="6" width="7" height="6" rx="1.5"/><rect x="19" y="7" width="2" height="2"/><ellipse cx="10" cy="13" rx="8" ry="5"/><rect x="20" y="14" width="3" height="1.6" rx="0.8"/></svg>
+                </div>
+                Собака
+            </button>
+            <button class="block-type-btn" data-figure="3">
+                <div class="icon" style="display:flex;align-items:center;justify-content:center;">
+                    <svg class="glyph" viewBox="0 0 24 24" width="22" height="22"><rect x="14" y="2" width="6" height="8" rx="1.5"/><polygon points="13,3 13,6 10,4"/><ellipse cx="10" cy="14" rx="9" ry="5"/><rect x="1" y="11" width="3" height="2" rx="1"/></svg>
+                </div>
+                Лошадь
+            </button>
+        </div>
+
+        <div class="section-label">Цвет</div>
+        <div id="color-palette">
+            <span class="color-swatch active" data-color="#C91A09" style="background:#C91A09;" title="Красный"></span>
+            <span class="color-swatch" data-color="#0051A8" style="background:#0051A8;" title="Синий"></span>
+            <span class="color-swatch" data-color="#F5CD2F" style="background:#F5CD2F;" title="Жёлтый"></span>
+            <span class="color-swatch" data-color="#00852B" style="background:#00852B;" title="Зелёный"></span>
+            <span class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF;" title="Белый"></span>
+            <span class="color-swatch" data-color="#1B2A34" style="background:#1B2A34;" title="Чёрный"></span>
+            <span class="color-swatch" data-color="#FE8A18" style="background:#FE8A18;" title="Оранжевый"></span>
+            <span class="color-swatch" data-color="#A0A5A9" style="background:#A0A5A9;" title="Серый"></span>
+        </div>
+
+        <div class="section-label">Режим</div>
+        <div id="mode-indicator">
+            <button class="btn btn-accent active-mode" id="btn-place">🔨 Строить</button>
+            <button class="btn btn-outline" id="btn-remove">🗑️ Удалять</button>
+        </div>
+
+        <div class="stats">
+            Размещено блоков: <span id="block-count">0</span>
+        </div>
+
+        <button class="btn btn-danger" id="btn-clear">🧹 Очистить всё</button>
+
+        <div class="section-label">Проект</div>
+        <div id="project-actions" style="display:flex; gap:8px;">
+            <button class="btn btn-outline" id="btn-save" style="flex:1;">💾 Сохранить</button>
+            <button class="btn btn-outline" id="btn-load" style="flex:1;">📂 Загрузить</button>
+        </div>
+        <input type="file" id="file-input" accept="application/json,.json" style="display:none;">
+
+        <div class="instructions">
+            <strong>Управление:</strong><br>
+            🖱️ <kbd>ЛКМ</kbd> — поставить блок<br>
+            🖱️ <kbd>ПКМ</kbd> + тянуть — вращать<br>
+            🖱️ <kbd>Колёсико</kbd> — зум<br>
+            ⌨️ <kbd>R</kbd> — режим удаления<br>
+            ⌨️ <kbd>Del</kbd> — удалить блок<br>
+            ⌨️ <kbd>1-5</kbd> — тип блока<br>
+            ⌨️ <kbd>C</kbd> — сменить цвет
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ==================== DOM ЭЛЕМЕНТЫ ====================
+        const container = document.getElementById('canvas-container');
+        const toastEl = document.getElementById('toast');
+        const blockCountEl = document.getElementById('block-count');
+        const blockTypeBtns = document.querySelectorAll('#block-types .block-type-btn');
+        const figureTypeBtns = document.querySelectorAll('#figure-types .block-type-btn');
+        const colorSwatches = document.querySelectorAll('.color-swatch');
+        const btnPlace = document.getElementById('btn-place');
+        const btnRemove = document.getElementById('btn-remove');
+        const btnClear = document.getElementById('btn-clear');
+        const btnSave = document.getElementById('btn-save');
+        const btnLoad = document.getElementById('btn-load');
+        const fileInput = document.getElementById('file-input');
+
+        // ==================== КОНСТАНТЫ (УВЕЛИЧЕНО ПОЛЕ) ====================
+        const GRID_SIZE = 100;               // поле 100x100
+        const UNIT_SIZE = 1;
+        const GAP = 0.08;
+        const BLOCK_HEIGHT = 0.6;
+        const STUD_HEIGHT = 0.2;
+        const STUD_RADIUS = 0.18;
+        const BASE_PLATE_THICKNESS = 0.25;
+
+        const BLOCK_TYPES = [
+            { name: '1×1', width: 1, depth: 1 },
+            { name: '2×2', width: 2, depth: 2 },
+            { name: '2×4', width: 2, depth: 4 },
+            { name: '1×2', width: 1, depth: 2 },
+            { name: '2×1', width: 2, depth: 1 },
+            { name: '1×4', width: 1, depth: 4 },
+            { name: '1×6', width: 1, depth: 6 },
+            { name: '1×8', width: 1, depth: 8 },
+            { name: '4×4', width: 4, depth: 4 },
+            { name: 'Скос 2×2', width: 2, depth: 2, shape: 'slope' },
+            { name: 'Скос 2×4', width: 2, depth: 4, shape: 'slope' },
+            { name: 'Арка 1×4', width: 1, depth: 4, shape: 'arch', heightUnits: 2 },
+        ];
+
+        const FIGURE_TYPES = [
+            { name: 'Человечек', key: 'human', width: 2, depth: 1, figHeight: 8 * BLOCK_HEIGHT },
+            { name: 'Кошка', key: 'cat', width: 2, depth: 3, figHeight: 3 * BLOCK_HEIGHT },
+            { name: 'Собака', key: 'dog', width: 2, depth: 4, figHeight: 4 * BLOCK_HEIGHT },
+            { name: 'Лошадь', key: 'horse', width: 2, depth: 6, figHeight: 7 * BLOCK_HEIGHT },
+        ];
+
+        const COLORS = [
+            '#C91A09', '#0051A8', '#F5CD2F', '#00852B',
+            '#FFFFFF', '#1B2A34', '#FE8A18', '#A0A5A9',
+        ];
+
+        // ==================== СОСТОЯНИЕ ====================
+        let selectedBlockTypeIndex = 0;
+        let placementKind = 'block'; // 'block' | 'figure'
+        let selectedFigureTypeIndex = 0;
+        let selectedColor = COLORS[0];
+        let isRemoveMode = false;
+        let placedBlocks = [];
+        let heightMap = [];
+        let ghostGroup = null;
+        let ghostValid = false;
+        let ghostGridX = 0;
+        let ghostGridZ = 0;
+        let isRightDragging = false;
+        let mouseMoved = false;
+        let mouseDownPos = { x: 0, y: 0 };
+
+        // ==================== THREE.JS НАСТРОЙКА ====================
+        const scene = new THREE.Scene();
+        // Светлый небесный фон
+        scene.background = new THREE.Color('#b0d8f0');
+        scene.fog = new THREE.Fog('#b0d8f0', 90, 260);
+
+        const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.5, 300);
+        camera.position.set(70, 60, 80);   // отодвинули камеру под поле 100x100
+        camera.lookAt(GRID_SIZE / 2, 0, GRID_SIZE / 2);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        const canvas = renderer.domElement;
+
+        // ==================== ОСВЕЩЕНИЕ (ярче для дневного неба) ====================
+        const ambientLight = new THREE.AmbientLight('#c8d8f0', 2.2);
+        scene.add(ambientLight);
+
+        const hemisphereLight = new THREE.HemisphereLight('#ffffff', '#557799', 0.9);
+        scene.add(hemisphereLight);
+
+        const sunLight = new THREE.DirectionalLight('#ffffff', 5.0);
+        sunLight.position.set(GRID_SIZE / 2 + 30, 60, GRID_SIZE / 2 + 20);
+        sunLight.target.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
+        scene.add(sunLight.target);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 220;
+        sunLight.shadow.camera.left = -120;
+        sunLight.shadow.camera.right = 120;
+        sunLight.shadow.camera.top = 120;
+        sunLight.shadow.camera.bottom = -30;
+        sunLight.shadow.bias = -0.0003;
+        sunLight.shadow.normalBias = 0.02;
+        scene.add(sunLight);
+
+        const fillLight = new THREE.DirectionalLight('#ffe0c0', 1.8);
+        fillLight.position.set(-10, 6, -8);
+        scene.add(fillLight);
+
+        // ==================== ORBIT CONTROLS ====================
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(GRID_SIZE / 2, 1.5, GRID_SIZE / 2);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.12;
+        controls.minDistance = 8;
+        controls.maxDistance = 150;
+        controls.maxPolarAngle = Math.PI * 0.48;
+        controls.minPolarAngle = 0.15;
+        controls.mouseButtons = {
+            LEFT: null,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.ROTATE,
+        };
+        controls.touches = {
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN,
+        };
+        controls.update();
+
+        // ==================== БАЗОВАЯ ПЛИТА ====================
+        const basePlateGeo = new THREE.BoxGeometry(GRID_SIZE, BASE_PLATE_THICKNESS, GRID_SIZE);
+        const basePlateMat = new THREE.MeshStandardMaterial({
+            color: '#5aae5a',
+            roughness: 0.5,
+            metalness: 0.05,
+        });
+        const basePlate = new THREE.Mesh(basePlateGeo, basePlateMat);
+        basePlate.position.set(GRID_SIZE / 2, -BASE_PLATE_THICKNESS / 2, GRID_SIZE / 2);
+        basePlate.receiveShadow = true;
+        basePlate.castShadow = true;
+        basePlate.name = 'basePlate';
+        scene.add(basePlate);
+
+        const edgeGeo = new THREE.BoxGeometry(GRID_SIZE + 0.15, 0.08, GRID_SIZE + 0.15);
+        const edgeMat = new THREE.MeshStandardMaterial({ color: '#4a8a4a', roughness: 0.5, metalness: 0.05 });
+        const edge = new THREE.Mesh(edgeGeo, edgeMat);
+        edge.position.set(GRID_SIZE / 2, -BASE_PLATE_THICKNESS - 0.04, GRID_SIZE / 2);
+        edge.receiveShadow = true;
+        scene.add(edge);
+
+        // Сетка
+        const gridHelper = new THREE.Group();
+        const gridLineMat = new THREE.MeshBasicMaterial({ color: '#7ac87a', transparent: true, opacity: 0.2, depthTest: true });
+        for (let i = 0; i <= GRID_SIZE; i++) {
+            const lineXGeo = new THREE.BoxGeometry(GRID_SIZE, 0.005, 0.04);
+            const lineX = new THREE.Mesh(lineXGeo, gridLineMat);
+            lineX.position.set(GRID_SIZE / 2, 0.003, i);
+            gridHelper.add(lineX);
+            const lineZGeo = new THREE.BoxGeometry(0.04, 0.005, GRID_SIZE);
+            const lineZ = new THREE.Mesh(lineZGeo, gridLineMat);
+            lineZ.position.set(i, 0.003, GRID_SIZE / 2);
+            gridHelper.add(lineZ);
+        }
+        scene.add(gridHelper);
+
+        // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+        function initHeightMap() {
+            heightMap = [];
+            for (let x = 0; x < GRID_SIZE; x++) {
+                heightMap[x] = new Array(GRID_SIZE).fill(0);
+            }
+        }
+
+        function rebuildHeightMap() {
+            initHeightMap();
+            for (const block of placedBlocks) {
+                const { gridX, gridZ, width, depth, topY } = block;
+                for (let dx = 0; dx < width; dx++) {
+                    for (let dz = 0; dz < depth; dz++) {
+                        const gx = gridX + dx;
+                        const gz = gridZ + dz;
+                        if (gx >= 0 && gx < GRID_SIZE && gz >= 0 && gz < GRID_SIZE) {
+                            heightMap[gx][gz] = Math.max(heightMap[gx][gz], topY);
+                        }
+                    }
+                }
+            }
+        }
+
+        function getMaxHeightForBlock(gridX, gridZ, width, depth) {
+            let maxH = 0;
+            for (let dx = 0; dx < width; dx++) {
+                for (let dz = 0; dz < depth; dz++) {
+                    const gx = gridX + dx;
+                    const gz = gridZ + dz;
+                    if (gx >= 0 && gx < GRID_SIZE && gz >= 0 && gz < GRID_SIZE) {
+                        maxH = Math.max(maxH, heightMap[gx][gz]);
+                    }
+                }
+            }
+            return maxH;
+        }
+
+        function clampGridOrigin(gx, gz, width, depth) {
+            return {
+                gx: Math.max(0, Math.min(GRID_SIZE - width, gx)),
+                gz: Math.max(0, Math.min(GRID_SIZE - depth, gz)),
+            };
+        }
+
+        function snapWorldToGridOrigin(worldX, worldZ, width, depth) {
+            const rawGx = Math.round(worldX - width / 2);
+            const rawGz = Math.round(worldZ - depth / 2);
+            return clampGridOrigin(rawGx, rawGz, width, depth);
+        }
+
+        // ==================== СОЗДАНИЕ БЛОКА ====================
+        function createLegoBlockMesh(width, depth, colorHex, heightUnits = 1) {
+            const group = new THREE.Group();
+            const color = new THREE.Color(colorHex);
+            const H = BLOCK_HEIGHT * heightUnits;
+            const bodyWidth = width * UNIT_SIZE - GAP;
+            const bodyDepth = depth * UNIT_SIZE - GAP;
+            const bodyGeo = new THREE.BoxGeometry(bodyWidth, H, bodyDepth);
+            const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.03 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = H / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            body.name = 'blockBody';
+            group.add(body);
+
+            const studGeo = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS * 1.08, STUD_HEIGHT, 16);
+            const studMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.04 });
+            const studY = H + STUD_HEIGHT / 2;
+            for (let sx = 0; sx < width; sx++) {
+                for (let sz = 0; sz < depth; sz++) {
+                    const stud = new THREE.Mesh(studGeo, studMat);
+                    stud.position.x = -bodyWidth / 2 + UNIT_SIZE / 2 + sx * UNIT_SIZE;
+                    stud.position.z = -bodyDepth / 2 + UNIT_SIZE / 2 + sz * UNIT_SIZE;
+                    stud.position.y = studY;
+                    stud.castShadow = true;
+                    stud.receiveShadow = true;
+                    stud.name = 'stud';
+                    group.add(stud);
+                }
+            }
+
+            const bottomInsetGeo = new THREE.BoxGeometry(bodyWidth - 0.25, 0.08, bodyDepth - 0.25);
+            const bottomInsetMat = new THREE.MeshStandardMaterial({ color: color.clone().multiplyScalar(0.7), roughness: 0.5, metalness: 0.02 });
+            const bottomInset = new THREE.Mesh(bottomInsetGeo, bottomInsetMat);
+            bottomInset.position.y = 0.04;
+            bottomInset.name = 'bottomInset';
+            group.add(bottomInset);
+
+            return group;
+        }
+
+        // Треугольный скос (пандус): сплошной клин без шипов сверху.
+        function buildSlopeGeometry(width, depth, height) {
+            const w2 = width / 2, d2 = depth / 2, h2 = height / 2;
+            const v0 = [-w2, -h2, -d2], v1 = [w2, -h2, -d2], v2 = [-w2, h2, -d2],
+                  v3 = [w2, h2, -d2], v4 = [-w2, -h2, d2], v5 = [w2, -h2, d2];
+            const tris = [
+                v0, v1, v4, v1, v5, v4,
+                v0, v2, v1, v2, v3, v1,
+                v2, v4, v5, v2, v5, v3,
+                v0, v4, v2,
+                v1, v3, v5,
+            ];
+            const positions = new Float32Array(tris.length * 3);
+            tris.forEach((v, i) => { positions[i * 3] = v[0]; positions[i * 3 + 1] = v[1]; positions[i * 3 + 2] = v[2]; });
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        function createSlopeMesh(width, depth, colorHex, heightUnits = 1) {
+            const group = new THREE.Group();
+            const color = new THREE.Color(colorHex);
+            const H = BLOCK_HEIGHT * heightUnits;
+            const bodyWidth = width * UNIT_SIZE - GAP;
+            const bodyDepth = depth * UNIT_SIZE - GAP;
+            const bodyGeo = buildSlopeGeometry(bodyWidth, bodyDepth, H);
+            const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.03 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = H / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            body.name = 'blockBody';
+            group.add(body);
+
+            const bottomInsetGeo = new THREE.BoxGeometry(bodyWidth - 0.25, 0.08, bodyDepth - 0.25);
+            const bottomInsetMat = new THREE.MeshStandardMaterial({ color: color.clone().multiplyScalar(0.7), roughness: 0.5, metalness: 0.02 });
+            const bottomInset = new THREE.Mesh(bottomInsetGeo, bottomInsetMat);
+            bottomInset.position.y = 0.04;
+            bottomInset.name = 'bottomInset';
+            group.add(bottomInset);
+
+            return group;
+        }
+
+        // Арка: прямоугольный блок с дверным проёмом, вырезанным снизу, плюс шипы сверху.
+        function createArchMesh(width, depth, colorHex, heightUnits = 2) {
+            const group = new THREE.Group();
+            const color = new THREE.Color(colorHex);
+            const H = BLOCK_HEIGHT * heightUnits;
+            const bodyWidth = width * UNIT_SIZE - GAP;
+            const bodyDepth = depth * UNIT_SIZE - GAP;
+
+            const margin = Math.min(0.18, bodyWidth * 0.25);
+            const doorHalfW = bodyWidth / 2 - margin;
+            const springY = -H / 2 + H * 0.45;
+            const apexY = H / 2 - Math.max(0.1, H * 0.08);
+            const bottomY = -H / 2;
+            const topY = H / 2;
+
+            const shape = new THREE.Shape();
+            shape.moveTo(-bodyWidth / 2, bottomY);
+            shape.lineTo(-doorHalfW, bottomY);
+            shape.lineTo(-doorHalfW, springY);
+            shape.quadraticCurveTo(-doorHalfW, apexY, 0, apexY);
+            shape.quadraticCurveTo(doorHalfW, apexY, doorHalfW, springY);
+            shape.lineTo(doorHalfW, bottomY);
+            shape.lineTo(bodyWidth / 2, bottomY);
+            shape.lineTo(bodyWidth / 2, topY);
+            shape.lineTo(-bodyWidth / 2, topY);
+            shape.closePath();
+
+            const bodyGeo = new THREE.ExtrudeGeometry(shape, { depth: bodyDepth, bevelEnabled: false });
+            bodyGeo.translate(0, 0, -bodyDepth / 2);
+            bodyGeo.computeVertexNormals();
+            const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.03 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = H / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            body.name = 'blockBody';
+            group.add(body);
+
+            const studGeo = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS * 1.08, STUD_HEIGHT, 16);
+            const studMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.04 });
+            const studY = H + STUD_HEIGHT / 2;
+            for (let sx = 0; sx < width; sx++) {
+                for (let sz = 0; sz < depth; sz++) {
+                    const stud = new THREE.Mesh(studGeo, studMat);
+                    stud.position.x = -bodyWidth / 2 + UNIT_SIZE / 2 + sx * UNIT_SIZE;
+                    stud.position.z = -bodyDepth / 2 + UNIT_SIZE / 2 + sz * UNIT_SIZE;
+                    stud.position.y = studY;
+                    stud.castShadow = true;
+                    stud.receiveShadow = true;
+                    stud.name = 'stud';
+                    group.add(stud);
+                }
+            }
+
+            const bottomInsetGeo = new THREE.BoxGeometry(bodyWidth - 0.25, 0.08, bodyDepth - 0.25);
+            const bottomInsetMat = new THREE.MeshStandardMaterial({ color: color.clone().multiplyScalar(0.7), roughness: 0.5, metalness: 0.02 });
+            const bottomInset = new THREE.Mesh(bottomInsetGeo, bottomInsetMat);
+            bottomInset.position.y = 0.04;
+            bottomInset.name = 'bottomInset';
+            group.add(bottomInset);
+
+            return group;
+        }
+
+        // Диспетчер форм: выбирает нужный конструктор меша по полю shape.
+        function createBlockMeshForType(blockType, colorHex) {
+            const heightUnits = blockType.heightUnits || 1;
+            switch (blockType.shape) {
+                case 'slope':
+                    return createSlopeMesh(blockType.width, blockType.depth, colorHex, heightUnits);
+                case 'arch':
+                    return createArchMesh(blockType.width, blockType.depth, colorHex, heightUnits);
+                default:
+                    return createLegoBlockMesh(blockType.width, blockType.depth, colorHex, heightUnits);
+            }
+        }
+
+        function createBlockMesh(gridX, gridZ, width, depth, colorHex, bottomY, shape = 'brick', heightUnits = 1) {
+            const group = createBlockMeshForType({ width, depth, shape, heightUnits }, colorHex);
+            const H = BLOCK_HEIGHT * heightUnits;
+            const centerX = gridX + width / 2;
+            const centerZ = gridZ + depth / 2;
+            const centerY = bottomY;
+            group.position.set(centerX, centerY, centerZ);
+            group.userData = { isBlock: true, gridX, gridZ, width, depth, colorHex, bottomY, topY: bottomY + H, shape, heightUnits };
+            return group;
+        }
+
+        // ==================== СОЗДАНИЕ ФИГУРОК (в стиле LEGO-игрушек) ====================
+        function addFigurePart(group, geometry, material, x, y, z, rotX = 0, rotY = 0, rotZ = 0) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            if (rotX) mesh.rotation.x = rotX;
+            if (rotY) mesh.rotation.y = rotY;
+            if (rotZ) mesh.rotation.z = rotZ;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.name = 'figurePart';
+            group.add(mesh);
+            return mesh;
+        }
+
+        // Прямоугольная деталь, заданная высотой нижней грани (y0): соседние
+        // детали слегка перекрывают друг друга по высоте, чтобы между "блочками"
+        // фигурки никогда не было видимых щелей (как у настоящего конструктора).
+        function addFigureBox(group, w, h, d, mat, cx, y0, cz, rotX = 0, rotY = 0, rotZ = 0) {
+            return addFigurePart(group, new THREE.BoxGeometry(Math.max(w, 0.01), Math.max(h, 0.01), Math.max(d, 0.01)), mat, cx, y0 + h / 2, cz, rotX, rotY, rotZ);
+        }
+
+        function addFigureCyl(group, rTop, rBottom, h, mat, cx, y0, cz, rotX = 0, rotY = 0, rotZ = 0) {
+            return addFigurePart(group, new THREE.CylinderGeometry(rTop, rBottom, Math.max(h, 0.01), 16), mat, cx, y0 + h / 2, cz, rotX, rotY, rotZ);
+        }
+
+        // Деталь-«отросток» (хвост, грива): точка (cx,cy,cz) — это её ОСНОВАНИЕ,
+        // а не центр. Поэтому при повороте rotX основание остаётся на месте
+        // крепления и деталь не отрывается от того, к чему она приставлена.
+        function addFigureLimb(group, w, h, d, mat, cx, cy, cz, rotX = 0) {
+            const geo = new THREE.BoxGeometry(Math.max(w, 0.01), Math.max(h, 0.01), Math.max(d, 0.01));
+            geo.translate(0, h / 2, 0);
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(cx, cy, cz);
+            if (rotX) mesh.rotation.x = rotX;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.name = 'figurePart';
+            group.add(mesh);
+            return mesh;
+        }
+
+        // Точки крепления внизу фигурки — расставлены по той же сетке, что и
+        // шипы LEGO-блоков, чтобы фигурка визуально "надевалась" на блок под ней.
+        function addFigureBaseSockets(group, width, depth) {
+            const socketGeo = new THREE.CylinderGeometry(STUD_RADIUS * 1.2, STUD_RADIUS * 1.3, 0.06, 16);
+            const socketMat = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.7, metalness: 0.05 });
+            for (let sx = 0; sx < width; sx++) {
+                for (let sz = 0; sz < depth; sz++) {
+                    const socket = new THREE.Mesh(socketGeo, socketMat);
+                    socket.position.set(
+                        -width / 2 + UNIT_SIZE / 2 + sx * UNIT_SIZE,
+                        0.03,
+                        -depth / 2 + UNIT_SIZE / 2 + sz * UNIT_SIZE
+                    );
+                    socket.name = 'figureBaseSocket';
+                    socket.receiveShadow = true;
+                    group.add(socket);
+                }
+            }
+        }
+
+        // Человечек: классическая LEGO-минифигурка — блочные ноги, пояс, торс,
+        // руки и цилиндрическая голова. Каждая деталь заходит в соседнюю.
+        function createHumanMesh(colorHex, figHeight, width = 2, depth = 1) {
+            const group = new THREE.Group();
+            const H = figHeight;
+            const OV = 0.035 * H;
+
+            const skin = new THREE.Color('#ffcc66');
+            const shirt = new THREE.Color(colorHex);
+            const pants = shirt.clone().multiplyScalar(0.6);
+            const matSkin = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.4, metalness: 0.02 });
+            const matShirt = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.4, metalness: 0.03 });
+            const matPants = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.4, metalness: 0.03 });
+
+            // Ноги — два блока, слегка перекрывающие друг друга по центру.
+            const legD = Math.min(0.55, depth * 0.8);
+            const legW = 0.44;
+            const legH = 0.40 * H;
+            addFigureBox(group, legW, legH, legD, matPants, -legW / 2 + 0.01, 0, 0);
+            addFigureBox(group, legW, legH, legD, matPants, legW / 2 - 0.01, 0, 0);
+
+            // Пояс — связывает ноги и торс в единое целое.
+            const hipW = Math.min(1.05, width * 0.55);
+            const hipH = 0.10 * H;
+            const hipY0 = legH - OV;
+            addFigureBox(group, hipW, hipH, legD, matPants, 0, hipY0, 0);
+
+            // Торс — самая широкая часть фигурки.
+            const torsoW = Math.min(1.35, width * 0.7);
+            const torsoD = Math.min(0.62, depth * 0.9);
+            const torsoH = 0.32 * H;
+            const torsoY0 = hipY0 + hipH - OV;
+            addFigureBox(group, torsoW, torsoH, torsoD, matShirt, 0, torsoY0, 0);
+
+            // Руки — прижаты к бокам торса с перекрытием, без зазора.
+            const armW = 0.26;
+            const armD = torsoD * 0.85;
+            const armH = torsoH * 0.95;
+            const armY0 = torsoY0 + torsoH * 0.02;
+            const armX = torsoW / 2 + armW / 2 - 0.06;
+            addFigureBox(group, armW, armH, armD, matShirt, -armX, armY0, 0);
+            addFigureBox(group, armW, armH, armD, matShirt, armX, armY0, 0);
+            const handH = 0.08 * H;
+            addFigureBox(group, armW * 0.9, handH, armD * 0.9, matSkin, -armX, armY0 - handH * 0.4, 0);
+            addFigureBox(group, armW * 0.9, handH, armD * 0.9, matSkin, armX, armY0 - handH * 0.4, 0);
+
+            // Шея — узкая деталь, утопленная и в торс, и в голову.
+            const neckW = 0.22;
+            const neckH = 0.08 * H;
+            const neckY0 = torsoY0 + torsoH - OV;
+            addFigureBox(group, neckW, neckH, neckW, matSkin, 0, neckY0, 0);
+
+            // Голова — цилиндр, как у настоящих минифигурок.
+            const headR = Math.min(0.42, width * 0.24);
+            const headH = 0.22 * H;
+            const headY0 = neckY0 + neckH - OV;
+            addFigureCyl(group, headR, headR * 0.92, headH, matSkin, 0, headY0, 0);
+
+            addFigureBaseSockets(group, width, depth);
+            return group;
+        }
+
+        // Универсальный конструктор четвероногого животного в блочном
+        // LEGO-стиле. Сначала считается корпус — все остальные детали (ноги,
+        // шея с головой, хвост) привязаны к его границам и гарантированно
+        // пересекаются с ним, поэтому между "блочками" не остаётся зазоров.
+        function createQuadrupedMesh(colorHex, figHeight, width, depth, opts = {}) {
+            const group = new THREE.Group();
+            const H = figHeight;
+            const OV = 0.05 * H;
+            const color = new THREE.Color(colorHex);
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.02 });
+            const accent = opts.accentColor ? new THREE.Color(opts.accentColor) : color.clone().multiplyScalar(0.55);
+            const matAccent = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.5, metalness: 0.02 });
+
+            // Корпус — точка отсчёта для всех остальных деталей.
+            const bodyW = Math.max(width - 0.5, width * 0.55);
+            const bodyD = depth * (opts.bodyDepthFrac ?? 0.55);
+            const bodyH = (opts.bodyFrac ?? 0.32) * H;
+            const bodyFrontZ = -bodyD / 2;
+            const bodyBackZ = bodyD / 2;
+
+            // Ноги — строго под передним и задним краем корпуса (а не под
+            // всей длиной фигурки), поэтому всегда заходят и в корпус, и в землю.
+            const legH = (opts.legFrac ?? 0.42) * H;
+            const legW = Math.min(0.32, bodyW * 0.22);
+            const legD = Math.min(0.32, bodyD * 0.22);
+            const legX = bodyW / 2 - legW * 0.42;
+            const legZFront = bodyFrontZ + legD * 0.3;
+            const legZBack = bodyBackZ - legD * 0.3;
+            const bodyY0 = legH - OV;
+            [-legX, legX].forEach(x => {
+                addFigureBox(group, legW, legH, legD, mat, x, 0, legZFront);
+                addFigureBox(group, legW, legH, legD, mat, x, 0, legZBack);
+            });
+
+            // Корпус — единый блок поверх ног (вместо капсулы — без зазоров).
+            addFigureBox(group, bodyW, bodyH, bodyD, mat, 0, bodyY0, 0);
+
+            // Шея и голова выступают за передний край корпуса, входя друг в друга.
+            const neckH = (opts.neckFrac ?? 0.10) * H;
+            const neckD = depth * 0.16;
+            const neckY0 = bodyY0 + bodyH * 0.35;
+            const neckZ = bodyFrontZ - neckD * 0.25;
+            addFigureBox(group, bodyW * 0.55, neckH, neckD, mat, 0, neckY0, neckZ);
+
+            const headW = bodyW * (opts.headWidthFrac ?? 0.7);
+            const headD = depth * (opts.headDepthFrac ?? 0.18);
+            const headH = (opts.headFrac ?? 0.28) * H;
+            const headY0 = neckY0 + neckH - OV * 0.8;
+            const headZ = neckZ - neckD * 0.15 - headD * 0.25;
+            addFigureBox(group, headW, headH, headD, mat, 0, headY0, headZ);
+
+            // Морда.
+            const muzzleD = headD * 0.5;
+            addFigureBox(group, headW * 0.5, headH * 0.45, muzzleD, matAccent, 0, headY0, headZ - headD / 2 - muzzleD * 0.25);
+
+            // Уши.
+            const earW = headW * 0.22;
+            const earH = headH * 0.55;
+            const earY0 = headY0 + headH - OV;
+            addFigureBox(group, earW, earH, earW, mat, -headW * 0.28, earY0, headZ);
+            addFigureBox(group, earW, earH, earW, mat, headW * 0.28, earY0, headZ);
+
+            // Хвост — растёт от заднего края корпуса. Точка крепления передана
+            // как ОСНОВАНИЕ детали (addFigureLimb), поэтому при наклоне хвост
+            // не отрывается от тела.
+            const tailLen = (opts.tailFrac ?? 0.5) * H;
+            const tailW = Math.min(0.15, width * 0.09);
+            addFigureLimb(group, tailW, tailLen, tailW, matAccent, 0, bodyY0 + bodyH * 0.5, bodyBackZ - tailW * 0.15, opts.tailAngle ?? -0.7);
+
+            // Грива (у лошади) — растёт от верхнего края шеи тем же способом.
+            if (opts.mane) {
+                const maneLen = neckH + headH * 0.7;
+                addFigureLimb(group, headW * 0.16, maneLen, headW * 0.16 * 1.6, matAccent, 0, neckY0, neckZ, 0.3);
+            }
+
+            addFigureBaseSockets(group, width, depth);
+            return group;
+        }
+
+        // Кошка.
+        function createCatMesh(colorHex, figHeight, width = 2, depth = 3) {
+            return createQuadrupedMesh(colorHex, figHeight, width, depth, {
+                legFrac: 0.34, bodyFrac: 0.30, bodyDepthFrac: 0.58, headFrac: 0.26, headDepthFrac: 0.24,
+                neckFrac: 0.08, tailFrac: 0.55, tailAngle: -0.9,
+            });
+        }
+
+        // Собака — крупнее и приземистее кошки.
+        function createDogMesh(colorHex, figHeight, width = 2, depth = 4) {
+            return createQuadrupedMesh(colorHex, figHeight, width, depth, {
+                legFrac: 0.40, bodyFrac: 0.32, bodyDepthFrac: 0.60, headFrac: 0.28, headDepthFrac: 0.24,
+                neckFrac: 0.10, tailFrac: 0.45, tailAngle: -0.5,
+            });
+        }
+
+        // Лошадь — самая крупная фигура, с длинными ногами, шеей и гривой.
+        function createHorseMesh(colorHex, figHeight, width = 2, depth = 6) {
+            return createQuadrupedMesh(colorHex, figHeight, width, depth, {
+                legFrac: 0.52, bodyFrac: 0.30, bodyDepthFrac: 0.56, headFrac: 0.22, headDepthFrac: 0.20,
+                neckFrac: 0.20, tailFrac: 0.5, tailAngle: -0.7, accentColor: '#3a2a1a', mane: true,
+            });
+        }
+
+        // Диспетчер фигур: выбирает конструктор меша по ключу типа фигуры.
+        function createFigureMeshForType(figureType, colorHex) {
+            const { figHeight, width, depth } = figureType;
+            switch (figureType.key) {
+                case 'cat': return createCatMesh(colorHex, figHeight, width, depth);
+                case 'dog': return createDogMesh(colorHex, figHeight, width, depth);
+                case 'horse': return createHorseMesh(colorHex, figHeight, width, depth);
+                default: return createHumanMesh(colorHex, figHeight, width, depth);
+            }
+        }
+
+        function createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY) {
+            const group = createFigureMeshForType(figureType, colorHex);
+            const { width, depth, figHeight, key } = figureType;
+            const centerX = gridX + width / 2;
+            const centerZ = gridZ + depth / 2;
+            const centerY = bottomY;
+            group.position.set(centerX, centerY, centerZ);
+            group.userData = { isBlock: true, isFigure: true, kind: 'figure', figureType: key, gridX, gridZ, width, depth, colorHex, bottomY, topY: bottomY + figHeight, figHeight };
+            return group;
+        }
+
+        // ==================== УПРАВЛЕНИЕ БЛОКАМИ ====================
+        function placeBlock(gridX, gridZ) {
+            const blockType = BLOCK_TYPES[selectedBlockTypeIndex];
+            const { width, depth } = blockType;
+            const shape = blockType.shape || 'brick';
+            const heightUnits = blockType.heightUnits || 1;
+            const H = BLOCK_HEIGHT * heightUnits;
+            const clamped = clampGridOrigin(gridX, gridZ, width, depth);
+            const gx = clamped.gx;
+            const gz = clamped.gz;
+            const bottomY = getMaxHeightForBlock(gx, gz, width, depth);
+            const topY = bottomY + H;
+
+            const blockGroup = createBlockMesh(gx, gz, width, depth, selectedColor, bottomY, shape, heightUnits);
+            scene.add(blockGroup);
+            placedBlocks.push({ mesh: blockGroup, gridX: gx, gridZ: gz, width, depth, colorHex: selectedColor, bottomY, topY, shape, heightUnits });
+
+            for (let dx = 0; dx < width; dx++) {
+                for (let dz = 0; dz < depth; dz++) {
+                    const hx = gx + dx;
+                    const hz = gz + dz;
+                    if (hx >= 0 && hx < GRID_SIZE && hz >= 0 && hz < GRID_SIZE) {
+                        heightMap[hx][hz] = topY;
+                    }
+                }
+            }
+            updateBlockCount();
+            animateBlockPlace(blockGroup);
+        }
+
+        function placeFigure(gridX, gridZ) {
+            const figureType = FIGURE_TYPES[selectedFigureTypeIndex];
+            const { width, depth, figHeight } = figureType;
+            const clamped = clampGridOrigin(gridX, gridZ, width, depth);
+            const gx = clamped.gx;
+            const gz = clamped.gz;
+            const bottomY = getMaxHeightForBlock(gx, gz, width, depth);
+            const topY = bottomY + figHeight;
+
+            const figureGroup = createFigureMesh(gx, gz, figureType, selectedColor, bottomY);
+            scene.add(figureGroup);
+            placedBlocks.push({ mesh: figureGroup, gridX: gx, gridZ: gz, width, depth, colorHex: selectedColor, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
+
+            for (let dx = 0; dx < width; dx++) {
+                for (let dz = 0; dz < depth; dz++) {
+                    const hx = gx + dx;
+                    const hz = gz + dz;
+                    if (hx >= 0 && hx < GRID_SIZE && hz >= 0 && hz < GRID_SIZE) {
+                        heightMap[hx][hz] = topY;
+                    }
+                }
+            }
+            updateBlockCount();
+            animateBlockPlace(figureGroup);
+        }
+
+        function removeBlockByMesh(mesh) {
+            const index = placedBlocks.findIndex(b => b.mesh === mesh);
+            if (index === -1) return false;
+            const blockData = placedBlocks[index];
+            scene.remove(blockData.mesh);
+            disposeBlockGroup(blockData.mesh);
+            placedBlocks.splice(index, 1);
+            rebuildHeightMap();
+            updateBlockCount();
+            return true;
+        }
+
+        function disposeBlockGroup(group) {
+            group.traverse(child => {
+                if (child.geometry && child.geometry !== basePlateGeo && child.geometry !== edgeGeo) {
+                    child.geometry.dispose();
+                }
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => m.dispose());
+                    } else if (child.material !== basePlateMat && child.material !== edgeMat && child.material !== gridLineMat) {
+                        child.material.dispose();
+                    }
+                }
+            });
+        }
+
+        function clearAllBlocks() {
+            while (placedBlocks.length > 0) {
+                const block = placedBlocks.pop();
+                scene.remove(block.mesh);
+                disposeBlockGroup(block.mesh);
+            }
+            initHeightMap();
+            updateBlockCount();
+            showToast('Всё очищено 🧹');
+        }
+
+        function updateBlockCount() {
+            blockCountEl.textContent = placedBlocks.length;
+        }
+
+        function animateBlockPlace(group) {
+            const originalY = group.position.y;
+            group.position.y = originalY + 2;
+            group.scale.set(0.01, 0.01, 0.01);
+            const startTime = performance.now();
+            const duration = 350;
+            function animStep(time) {
+                const elapsed = time - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - t, 3);
+                const bounce = t < 0.85 ? eased : eased + Math.sin((t - 0.85) / 0.15 * Math.PI * 2) * 0.06 * (1 - t);
+                group.position.y = originalY + 2 * (1 - bounce);
+                group.scale.setScalar(Math.min(1, eased * 1.05));
+                if (t < 1) {
+                    requestAnimationFrame(animStep);
+                } else {
+                    group.position.y = originalY;
+                    group.scale.setScalar(1);
+                }
+            }
+            requestAnimationFrame(animStep);
+        }
+
+        // ==================== GHOST БЛОК ====================
+        function createGhostGroup() {
+            const group = new THREE.Group();
+            group.visible = false;
+            group.renderOrder = 999;
+            group.userData = { variants: [], figureVariants: [] };
+            for (let ti = 0; ti < BLOCK_TYPES.length; ti++) {
+                const bt = BLOCK_TYPES[ti];
+                const variantGroup = createBlockMeshForType(bt, '#ffffff');
+                variantGroup.visible = false;
+                variantGroup.name = `ghostVariant_${ti}`;
+                variantGroup.traverse(child => {
+                    if (child.material && child.name !== 'bottomInset') {
+                        child.material = child.material.clone();
+                        child.material.transparent = true;
+                        child.material.opacity = 0.5;
+                        child.material.depthWrite = false;
+                        child.material.color.set('#ffffff');
+                    }
+                    if (child.material && child.name === 'bottomInset') {
+                        child.material = child.material.clone();
+                        child.material.transparent = true;
+                        child.material.opacity = 0.35;
+                        child.material.depthWrite = false;
+                    }
+                });
+                group.add(variantGroup);
+                group.userData.variants.push(variantGroup);
+            }
+            for (let fi = 0; fi < FIGURE_TYPES.length; fi++) {
+                const ft = FIGURE_TYPES[fi];
+                const figureVariantGroup = createFigureMeshForType(ft, '#ffffff');
+                figureVariantGroup.visible = false;
+                figureVariantGroup.name = `ghostFigureVariant_${fi}`;
+                figureVariantGroup.traverse(child => {
+                    if (child.material) {
+                        child.material = child.material.clone();
+                        child.material.transparent = true;
+                        child.material.opacity = 0.5;
+                        child.material.depthWrite = false;
+                        child.material.color.set('#ffffff');
+                    }
+                });
+                group.add(figureVariantGroup);
+                group.userData.figureVariants.push(figureVariantGroup);
+            }
+            const invalidGroup = createLegoBlockMesh(1, 1, '#ff0000');
+            invalidGroup.visible = false;
+            invalidGroup.name = 'ghostInvalid';
+            invalidGroup.traverse(child => {
+                if (child.material) {
+                    child.material = child.material.clone();
+                    child.material.transparent = true;
+                    child.material.opacity = 0.55;
+                    child.material.depthWrite = false;
+                    child.material.color.set('#ff3333');
+                    child.material.emissive = new THREE.Color('#ff0000');
+                    child.material.emissiveIntensity = 0.4;
+                }
+            });
+            group.add(invalidGroup);
+            group.userData.invalidVariant = invalidGroup;
+            scene.add(group);
+            return group;
+        }
+
+        function updateGhostPosition(worldX, worldZ) {
+            if (!ghostGroup) return;
+            const isFigure = placementKind === 'figure';
+            const activeType = isFigure ? FIGURE_TYPES[selectedFigureTypeIndex] : BLOCK_TYPES[selectedBlockTypeIndex];
+            const { width, depth } = activeType;
+            const snapped = snapWorldToGridOrigin(worldX, worldZ, width, depth);
+            const gx = snapped.gx;
+            const gz = snapped.gz;
+            // Блок/фигура всегда опирается на самую высокую точку под своим основанием —
+            // это позволяет ставить блок так, чтобы он лишь краем держался за соседний,
+            // более высокий блок (частичная опора), а не только на идеально ровной площадке.
+            const H = isFigure ? activeType.figHeight : BLOCK_HEIGHT * (activeType.heightUnits || 1);
+            const bottomY = getMaxHeightForBlock(gx, gz, width, depth);
+            const centerX = gx + width / 2;
+            const centerZ = gz + depth / 2;
+            const centerY = bottomY + H / 2 + 0.006;
+
+            ghostValid = true;
+
+            ghostGroup.position.set(centerX, centerY, centerZ);
+            ghostGroup.visible = true;
+            const variants = ghostGroup.userData.variants;
+            const figureVariants = ghostGroup.userData.figureVariants;
+            const invalidVariant = ghostGroup.userData.invalidVariant;
+            for (let i = 0; i < variants.length; i++) variants[i].visible = false;
+            for (let i = 0; i < figureVariants.length; i++) figureVariants[i].visible = false;
+            invalidVariant.visible = false;
+
+            if (isFigure) {
+                const activeVariant = figureVariants[selectedFigureTypeIndex];
+                if (activeVariant) {
+                    activeVariant.visible = true;
+                    activeVariant.traverse(child => {
+                        if (child.material && child.material.color) {
+                            child.material.color.set(selectedColor);
+                            child.material.emissive?.set(selectedColor);
+                            child.material.emissiveIntensity = 0.25;
+                        }
+                    });
+                }
+            } else {
+                const activeVariant = variants[selectedBlockTypeIndex];
+                if (activeVariant) {
+                    activeVariant.visible = true;
+                    activeVariant.traverse(child => {
+                        if (child.material && child.name !== 'bottomInset' && child.material.color) {
+                            child.material.color.set(selectedColor);
+                            child.material.emissive?.set(selectedColor);
+                            child.material.emissiveIntensity = 0.25;
+                        }
+                    });
+                }
+            }
+            ghostGridX = gx;
+            ghostGridZ = gz;
+        }
+
+        function hideGhost() {
+            if (ghostGroup) {
+                ghostGroup.visible = false;
+                ghostValid = false;
+            }
+        }
+
+        // ==================== RAYCASTER ====================
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = 60;
+
+        function getIntersectionWithScene(event) {
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / container.clientWidth) * 2 - 1;
+            mouse.y = -(event.clientY / container.clientHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const targets = [basePlate];
+            for (const block of placedBlocks) targets.push(block.mesh);
+            const allTargets = [];
+            for (const t of targets) {
+                t.traverse(child => { if (child.isMesh && child.name !== 'bottomInset') allTargets.push(child); });
+            }
+            const intersects = raycaster.intersectObjects(allTargets, false);
+            return intersects.length > 0 ? intersects[0] : null;
+        }
+
+        function getBlockMeshFromIntersect(intersect) {
+            let obj = intersect.object;
+            while (obj) {
+                if (obj.userData?.isBlock) return obj;
+                obj = obj.parent;
+            }
+            return null;
+        }
+
+        // ==================== ОБРАБОТЧИКИ СОБЫТИЙ (УЛУЧШЕННАЯ УСТАНОВКА) ====================
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        canvas.addEventListener('pointerdown', (event) => {
+            mouseDownPos = { x: event.clientX, y: event.clientY };
+            mouseMoved = false;
+
+            if (event.button === 2) {
+                isRightDragging = true;
+                container.classList.add('rotating');
+                return;
+            }
+        });
+
+        canvas.addEventListener('pointermove', (event) => {
+            const dx = event.clientX - mouseDownPos.x;
+            const dy = event.clientY - mouseDownPos.y;
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) mouseMoved = true;
+
+            if (isRightDragging) return;
+
+            const intersect = getIntersectionWithScene(event);
+            if (intersect && intersect.point) {
+                updateGhostPosition(intersect.point.x, intersect.point.z);
+            } else {
+                hideGhost();
+            }
+        });
+
+        canvas.addEventListener('pointerup', (event) => {
+            if (event.button === 2) {
+                isRightDragging = false;
+                container.classList.remove('rotating');
+                return;
+            }
+
+            if (event.button === 0 && !mouseMoved && !isRightDragging) {
+                if (isRemoveMode) {
+                    handleRemoveClick(event);
+                } else {
+                    // Пересчитываем позицию установки заново по актуальному рейкасту в момент клика —
+                    // это гарантирует, что блок встанет ровно туда, где был показан призрак.
+                    const intersect = getIntersectionWithScene(event);
+                    if (intersect && intersect.point) {
+                        const isFigure = placementKind === 'figure';
+                        const activeType = isFigure ? FIGURE_TYPES[selectedFigureTypeIndex] : BLOCK_TYPES[selectedBlockTypeIndex];
+                        const snapped = snapWorldToGridOrigin(intersect.point.x, intersect.point.z, activeType.width, activeType.depth);
+                        if (isFigure) {
+                            placeFigure(snapped.gx, snapped.gz);
+                        } else {
+                            placeBlock(snapped.gx, snapped.gz);
+                        }
+                        updateGhostPosition(intersect.point.x, intersect.point.z);
+                    }
+                }
+            }
+
+            if (event.button === 1 && !mouseMoved) {
+                handleRemoveClick(event);
+            }
+        });
+
+        function handleRemoveClick(event) {
+            const intersect = getIntersectionWithScene(event);
+            if (!intersect) return;
+            const blockMesh = getBlockMeshFromIntersect(intersect);
+            if (blockMesh) {
+                const removed = removeBlockByMesh(blockMesh);
+                if (removed) showToast('Блок удалён 🗑️');
+            }
+        }
+
+        window.addEventListener('pointerup', () => {
+            if (isRightDragging) {
+                isRightDragging = false;
+                container.classList.remove('rotating');
+            }
+        });
+
+        // Клавиатура
+        window.addEventListener('keydown', (event) => {
+            const key = event.key.toLowerCase();
+            if (key === 'r') {
+                toggleRemoveMode();
+                showToast(isRemoveMode ? 'Режим: Удаление 🗑️' : 'Режим: Строительство 🔨');
+            }
+            if (key === 'delete' || key === 'backspace') {
+                const fakeEvent = { clientX: container.clientWidth / 2, clientY: container.clientHeight / 2 };
+                const intersect = getIntersectionWithScene(fakeEvent);
+                if (intersect) {
+                    const blockMesh = getBlockMeshFromIntersect(intersect);
+                    if (blockMesh) {
+                        removeBlockByMesh(blockMesh);
+                        showToast('Блок удалён 🗑️');
+                    }
+                }
+            }
+            if (key === 'c') {
+                cycleColor();
+                showToast('Цвет: ' + selectedColor);
+            }
+            if (key >= '1' && key <= '5') {
+                const index = parseInt(key) - 1;
+                selectBlockType(index);
+                showToast('Тип: ' + BLOCK_TYPES[index].name);
+            }
+            if (key === 'escape') {
+                if (isRemoveMode) {
+                    setRemoveMode(false);
+                    showToast('Режим: Строительство 🔨');
+                }
+            }
+        });
+
+        // ==================== UI ====================
+        function selectBlockType(index) {
+            selectedBlockTypeIndex = index;
+            placementKind = 'block';
+            blockTypeBtns.forEach((btn, i) => btn.classList.toggle('active', i === index));
+            figureTypeBtns.forEach(btn => btn.classList.remove('active'));
+        }
+        function selectFigureType(index) {
+            selectedFigureTypeIndex = index;
+            placementKind = 'figure';
+            figureTypeBtns.forEach((btn, i) => btn.classList.toggle('active', i === index));
+            blockTypeBtns.forEach(btn => btn.classList.remove('active'));
+        }
+        function selectColor(colorHex) {
+            selectedColor = colorHex;
+            colorSwatches.forEach(sw => sw.classList.toggle('active', sw.dataset.color === colorHex));
+        }
+        function cycleColor() {
+            const currentIndex = COLORS.indexOf(selectedColor);
+            const nextIndex = (currentIndex + 1) % COLORS.length;
+            selectColor(COLORS[nextIndex]);
+        }
+        function setRemoveMode(value) {
+            isRemoveMode = value;
+            if (value) {
+                btnRemove.classList.add('active-mode');
+                btnRemove.style.background = '#e74c3c';
+                btnPlace.classList.remove('active-mode');
+                btnPlace.style.background = '';
+                container.classList.add('removing');
+            } else {
+                btnPlace.classList.add('active-mode');
+                btnPlace.style.background = '';
+                btnRemove.classList.remove('active-mode');
+                btnRemove.style.background = '';
+                container.classList.remove('removing');
+            }
+        }
+        function toggleRemoveMode() { setRemoveMode(!isRemoveMode); }
+
+        blockTypeBtns.forEach(btn => btn.addEventListener('click', () => selectBlockType(parseInt(btn.dataset.type))));
+        figureTypeBtns.forEach(btn => btn.addEventListener('click', () => selectFigureType(parseInt(btn.dataset.figure))));
+        colorSwatches.forEach(sw => sw.addEventListener('click', () => selectColor(sw.dataset.color)));
+        btnPlace.addEventListener('click', () => setRemoveMode(false));
+        btnRemove.addEventListener('click', () => setRemoveMode(true));
+        btnClear.addEventListener('click', () => {
+            if (placedBlocks.length === 0) return;
+            if (confirm('Удалить все блоки? Это действие нельзя отменить.')) clearAllBlocks();
+        });
+
+        // ==================== СОХРАНЕНИЕ / ЗАГРУЗКА ПРОЕКТА ====================
+        function serializeProject() {
+            return {
+                format: 'lego-constructor-project',
+                version: 1,
+                gridSize: GRID_SIZE,
+                blocks: placedBlocks.map(b => ({
+                    kind: b.kind || 'block',
+                    gridX: b.gridX,
+                    gridZ: b.gridZ,
+                    width: b.width,
+                    depth: b.depth,
+                    colorHex: b.colorHex,
+                    bottomY: b.bottomY,
+                    shape: b.shape || 'brick',
+                    heightUnits: b.heightUnits || 1,
+                    figureType: b.figureType || null,
+                })),
+            };
+        }
+
+        function saveProject() {
+            if (placedBlocks.length === 0) {
+                showToast('Нечего сохранять — поле пустое 🤷');
+                return;
+            }
+            const data = serializeProject();
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date();
+            const stamp = date.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            a.href = url;
+            a.download = `lego-project-${stamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Проект сохранён 💾');
+        }
+
+        function loadProjectFromData(data) {
+            if (!data || !Array.isArray(data.blocks)) {
+                showToast('Не удалось прочитать файл проекта ⚠️');
+                return;
+            }
+            clearAllBlocks();
+            for (const b of data.blocks) {
+                const gridX = b.gridX || 0;
+                const gridZ = b.gridZ || 0;
+                const colorHex = b.colorHex || COLORS[0];
+
+                if (b.kind === 'figure') {
+                    const figureType = FIGURE_TYPES.find(ft => ft.key === b.figureType) || FIGURE_TYPES[0];
+                    const { width, depth, figHeight } = figureType;
+                    const bottomY = typeof b.bottomY === 'number' ? b.bottomY : getMaxHeightForBlock(gridX, gridZ, width, depth);
+                    const topY = bottomY + figHeight;
+                    const figureGroup = createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY);
+                    scene.add(figureGroup);
+                    placedBlocks.push({ mesh: figureGroup, gridX, gridZ, width, depth, colorHex, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
+                } else {
+                    const width = b.width || 1;
+                    const depth = b.depth || 1;
+                    const bottomY = typeof b.bottomY === 'number' ? b.bottomY : getMaxHeightForBlock(gridX, gridZ, width, depth);
+                    const shape = b.shape || 'brick';
+                    const heightUnits = b.heightUnits || 1;
+                    const topY = bottomY + BLOCK_HEIGHT * heightUnits;
+                    const blockGroup = createBlockMesh(gridX, gridZ, width, depth, colorHex, bottomY, shape, heightUnits);
+                    scene.add(blockGroup);
+                    placedBlocks.push({ mesh: blockGroup, gridX, gridZ, width, depth, colorHex, bottomY, topY, shape, heightUnits, kind: 'block', figureType: null });
+                }
+            }
+            rebuildHeightMap();
+            updateBlockCount();
+            showToast(`Проект загружен: ${placedBlocks.length} объект(ов) 📂`);
+        }
+
+        function loadProjectFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    loadProjectFromData(data);
+                } catch (err) {
+                    console.error(err);
+                    showToast('Ошибка чтения файла проекта ⚠️');
+                }
+            };
+            reader.onerror = () => showToast('Не удалось прочитать файл ⚠️');
+            reader.readAsText(file);
+        }
+
+        btnSave.addEventListener('click', saveProject);
+        btnLoad.addEventListener('click', () => {
+            if (placedBlocks.length > 0 && !confirm('Загрузка проекта заменит текущую постройку. Продолжить?')) return;
+            fileInput.click();
+        });
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files && event.target.files[0];
+            if (file) loadProjectFromFile(file);
+            fileInput.value = '';
+        });
+
+        let toastTimeout;
+        function showToast(message) {
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastEl.textContent = message;
+            toastEl.classList.add('show');
+            toastTimeout = setTimeout(() => toastEl.classList.remove('show'), 1500);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+        function init() {
+            initHeightMap();
+            ghostGroup = createGhostGroup();
+            updateBlockCount();
+            selectBlockType(0);
+            selectColor(COLORS[0]);
+            setRemoveMode(false);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            if (ghostGroup && ghostGroup.visible) {
+                const isFigure = placementKind === 'figure';
+                const activeType = isFigure ? FIGURE_TYPES[selectedFigureTypeIndex] : BLOCK_TYPES[selectedBlockTypeIndex];
+                const floatOffset = Math.sin(performance.now() * 0.005) * 0.04;
+                const centerY = getMaxHeightForBlock(ghostGridX, ghostGridZ, activeType.width, activeType.depth) + 0.006 + floatOffset;
+                ghostGroup.position.y = centerY;
+            }
+            renderer.render(scene, camera);
+        }
+
+        init();
+        animate();
+        showToast(`Готово! Стройте на поле ${GRID_SIZE}×${GRID_SIZE} 🧱☀️`);
+
+        console.log('🧱 ГЕGO конструктор (поле 100×100, небесный фон)');
+    </script>
+</body>
+</html>

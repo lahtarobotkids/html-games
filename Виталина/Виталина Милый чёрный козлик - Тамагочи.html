@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Милый чёрный козлик - Тамагочи</title>
+    <style>
+        :root { --bg: #1a1a2e; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #gameContainer {
+            position: relative;
+            width: 820px; height: 620px;
+            border-radius: 20px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5), 0 0 80px rgba(100,60,160,0.3);
+            overflow: hidden;
+        }
+        canvas { display: block; border-radius: 20px; cursor: default; }
+        #hint {
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.75); color: #ddd; padding: 6px 16px;
+            border-radius: 20px; font-size: 13px; pointer-events: none;
+            letter-spacing: 0.5px; transition: opacity 0.4s; white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="hint"></div>
+</div>
+<script>
+    (function() {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hintEl = document.getElementById('hint');
+        const W = 820, H = 620;
+        canvas.width = W; canvas.height = H;
+
+        // ── STATE ──────────────────────────
+        const STATE = {
+            scene: 'mainRoom',
+            sleepNeed: 45, foodNeed: 35, waterNeed: 30, sacrificeNeed: 20,
+            selectedBtn: -1,
+            goatOnBed: false, draggingGoat: false, goatBedX: 350, goatBedY: 400,
+            bedTargetX: 400, bedTargetY: 220, sleepTimer: 0, sleptEnough: false,
+            goatFieldX: 400, goatFieldY: 380, spacePressCount: 0, fieldEaten: false, fieldReturnTimer: 0,
+            goatKitchenX: 340, goatKitchenY: 300, draggingGlass: null,
+            glassPositions: [
+                { x: 280, y: 350, type: 'water', color: '#a8d8ea' },
+                { x: 380, y: 335, type: 'tea', color: '#c89460' },
+                { x: 480, y: 345, type: 'mors', color: '#c0392b' }
+            ],
+            glassOriginal: [
+                { x: 280, y: 350 }, { x: 380, y: 335 }, { x: 480, y: 345 }
+            ],
+            drankEnough: false, drinkReturnTimer: 0,
+            goatOutsideX: 100, goatOutsideY: 380, people: [], grabbedPerson: null, outsideReturnTimer: 0,
+            sacrificePersonX: 400, sacrificePersonY: 340, sacrificeBurnTimer: 0, sacrificeDone: false, sacrificeReturnTimer: 0,
+            thoughtBubble: null, thoughtTimer: 0,
+            autoReturnTimer: 0,
+            // Змейка Люцифер
+            snakeActive: false, snakeTimer: 120, snakeX: 200, snakeY: 380, snakeFed: false,
+            snakeMessageTimer: 0, snakeTimeout: 0, snakeDir: 1, snakeSpeed: 25, // пикселей в секунду
+            appleVisible: false, appleX: 0, appleY: 0, draggingApple: false
+        };
+
+        function initOutsidePeople() {
+            STATE.people = [
+                { x: 250, y: 370, alive: true, walked: 0, dir: 1, speed: 0.3 + Math.random()*0.5 },
+                { x: 500, y: 355, alive: true, walked: 0, dir: -1, speed: 0.3 + Math.random()*0.5 },
+                { x: 620, y: 380, alive: true, walked: 0, dir: -1, speed: 0.4 + Math.random()*0.5 },
+                { x: 350, y: 365, alive: true, walked: 0, dir: 1, speed: 0.35 + Math.random()*0.4 }
+            ];
+            STATE.grabbedPerson = null;
+            STATE.outsideReturnTimer = 0;
+            STATE.goatOutsideX = 100; STATE.goatOutsideY = 380;
+        }
+
+        // ── DRAW GOAT ──
+        function drawGoat(gx, gy, scale = 1, bounce = 0) {
+            ctx.save(); ctx.translate(gx, gy); ctx.scale(scale, scale);
+            const bob = Math.sin(bounce) * 4;
+            ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(0, 28, 22, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#2c2c2c'; ctx.beginPath(); ctx.ellipse(0, -2+bob, 20, 16, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#3d3d3d'; ctx.beginPath(); ctx.ellipse(0, 2+bob, 13, 9, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a1a1a';
+            [-11,-4,4,11].forEach(lx => {
+                ctx.fillRect(lx-3, 12+bob, 6, 14);
+                ctx.fillStyle = '#2c2c2c'; ctx.beginPath(); ctx.arc(lx, 27+bob, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#1a1a1a';
+            });
+            ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.ellipse(20, -8+bob, 5, 7, -0.4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#2c2c2c'; ctx.beginPath(); ctx.arc(22, -10+bob, 13, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#3d3d3d'; ctx.beginPath(); ctx.ellipse(28, -4+bob, 8, 6, 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(34, -7+bob, 2.5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#5c4a3a'; ctx.lineWidth = 3; ctx.strokeStyle = '#5c4a3a';
+            ctx.beginPath(); ctx.moveTo(17, -20+bob); ctx.quadraticCurveTo(12, -35+bob, 20, -38+bob); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, -22+bob); ctx.quadraticCurveTo(30, -37+bob, 26, -40+bob); ctx.stroke(); ctx.lineWidth = 1;
+            ctx.fillStyle = '#2c2c2c'; ctx.beginPath(); ctx.ellipse(12, -17+bob, 5, 9, -0.6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#3d3d3d'; ctx.beginPath(); ctx.ellipse(12, -17+bob, 2.5, 5, -0.6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(25, -14+bob, 5.5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(27, -14+bob, 3.2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(28.5, -16+bob, 1.2, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(32, -2+bob, 4, 0.2, Math.PI-0.2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // ── DRAW PERSON ──
+        function drawGreyPerson(px, py, scale = 1) {
+            ctx.save(); ctx.translate(px, py); ctx.scale(scale, scale);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(0, 30, 10, 4, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#8a8a8a'; ctx.fillRect(-7, -8, 14, 22);
+            ctx.fillStyle = '#9a9a9a'; ctx.beginPath(); ctx.arc(0, -14, 9, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-3, -15, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3, -15, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#7a7a7a'; ctx.fillRect(-5, 14, 5, 14); ctx.fillRect(0, 14, 5, 14);
+            ctx.fillRect(-12, -5, 5, 12); ctx.fillRect(7, -5, 5, 12);
+            ctx.restore();
+        }
+
+        // ── DRAW SNAKE (кубическая) ──
+        function drawSnake(x, y) {
+            ctx.save(); ctx.translate(x, y);
+            const segW = 12, segH = 10, gap = 2;
+            // тело из 5 сегментов, голова чуть крупнее
+            for (let i = 4; i >= 1; i--) {
+                const offsetX = -i * (segW + gap);
+                ctx.fillStyle = i % 2 === 0 ? '#3a5a20' : '#4a6a28';
+                ctx.fillRect(offsetX, -segH/2, segW, segH);
+                ctx.strokeStyle = '#1a2a0a';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(offsetX, -segH/2, segW, segH);
+            }
+            // голова
+            const headW = 16, headH = 12;
+            ctx.fillStyle = '#4a6a28';
+            ctx.fillRect(0, -headH/2, headW, headH);
+            ctx.strokeStyle = '#1a2a0a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, -headH/2, headW, headH);
+            // глаза
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(10, -4, 3, 3);
+            ctx.fillRect(10, 1, 3, 3);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(11, -3, 1.5, 1.5);
+            ctx.fillRect(11, 2, 1.5, 1.5);
+            // язык
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(16, 1);
+            ctx.lineTo(22, -2);
+            ctx.moveTo(16, -1);
+            ctx.lineTo(22, -4);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // ── DRAW APPLE ──
+        function drawApple(ax, ay) {
+            ctx.save(); ctx.translate(ax, ay);
+            ctx.fillStyle = '#e63946'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#c1121f'; ctx.beginPath(); ctx.arc(-4, -4, 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#2a9d8f'; ctx.beginPath(); ctx.ellipse(0, -14, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#5c3d2e'; ctx.fillRect(-1, -20, 3, 8);
+            ctx.restore();
+        }
+
+        // ── UTILS ──
+        function drawLightRay(x, y, w, h, color = 'rgba(255,255,200,0.12)') {
+            const grad = ctx.createLinearGradient(x, y, x+w, y+h);
+            grad.addColorStop(0, color); grad.addColorStop(1, 'rgba(255,255,200,0)');
+            ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
+        }
+        function drawShadow(ox, oy, w, h, blur = 8) {
+            ctx.fillStyle = 'rgba(20,15,10,0.25)';
+            ctx.beginPath(); ctx.ellipse(ox+w/2, oy+h, w/2, blur, 0, 0, Math.PI*2); ctx.fill();
+        }
+
+        // ── MAIN ROOM (добавлены змея, яблоко, кнопка) ──
+        function drawMainRoom() {
+            ctx.fillStyle = '#cbb89a'; ctx.fillRect(0,0,W,H);
+            for (let i=0;i<8;i++) { ctx.fillStyle = '#8b7355'; ctx.fillRect(i*120,0,6,H); }
+            ctx.fillStyle = '#9c7e5c'; ctx.fillRect(0,400,W,220);
+            for (let i=0;i<14;i++) { ctx.fillStyle = '#7a5e3e'; ctx.fillRect(i*65,400,2,220); }
+            ctx.fillStyle = '#b8a07a'; ctx.fillRect(0,398,W,6);
+
+            // окно и свечи
+            ctx.fillStyle = '#f5f0e8'; ctx.fillRect(40,60,110,140);
+            ctx.strokeStyle = '#6b5a4a'; ctx.lineWidth = 6; ctx.strokeRect(38,58,114,144);
+            ctx.fillStyle = '#6b5a4a'; ctx.fillRect(93,60,6,140);
+            drawLightRay(150,60, 200, 250, 'rgba(255,250,210,0.25)');
+            ctx.fillStyle = 'rgba(40,30,20,0.15)'; ctx.fillRect(0,0,W,H);
+            ctx.fillStyle = '#6b4f2e'; ctx.fillRect(180,140,180,12);
+            for (let i=0;i<3;i++) {
+                let cx = 220 + i*70;
+                ctx.fillStyle = '#333'; ctx.fillRect(cx-3,125,6,20);
+                ctx.fillStyle = '#ffdd88'; ctx.beginPath(); ctx.arc(cx,122,5,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff9e0'; ctx.beginPath(); ctx.arc(cx,122,2.5,0,Math.PI*2); ctx.fill();
+            }
+
+            // ковёр и козлик
+            ctx.fillStyle = '#8b6c4a'; ctx.beginPath(); ctx.ellipse(400,440,130,40,0,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2; ctx.stroke();
+            drawShadow(300,420,200,30,12);
+            drawShadow(340,445,60,15);
+            const bounce = Date.now()/800;
+            drawGoat(380,420,1.3,bounce);
+
+            // Змея Люцифер (если активна)
+            if (STATE.snakeActive) {
+                drawSnake(STATE.snakeX, STATE.snakeY);
+                if (STATE.snakeMessageTimer > 0) {
+                    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Segoe UI", sans-serif';
+                    ctx.fillText('“Thanks Satan”', STATE.snakeX - 30, STATE.snakeY - 35);
+                }
+            }
+
+            // Яблоко (если видно)
+            if (STATE.appleVisible) {
+                drawApple(STATE.appleX, STATE.appleY);
+            }
+
+            // Кнопка вызова яблока
+            ctx.fillStyle = '#d9c8a8'; ctx.strokeStyle = '#7b6b50'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(680, 100, 70, 60, 12); ctx.fill(); ctx.stroke();
+            ctx.font = '30px serif'; ctx.fillText('🍎', 695, 145);
+            ctx.fillStyle = '#3a2e1f'; ctx.font = 'bold 10px "Segoe UI", sans-serif';
+            ctx.fillText('Яблоко', 690, 170);
+
+            // основные кнопки
+            const btns = [
+                { x:80,y:510,label:'🛏️',text:'Кровать',key:'1'},
+                { x:260,y:510,label:'🌿',text:'Трава',key:'2'},
+                { x:440,y:510,label:'🥛',text:'Вода',key:'3'},
+                { x:620,y:510,label:'⭐',text:'Пентаграмма',key:'4'}
+            ];
+            btns.forEach((b,i)=>{
+                const isSel = STATE.selectedBtn===i;
+                ctx.fillStyle = isSel?'#e6c468':'#d9c8a8';
+                ctx.strokeStyle = isSel?'#b8860b':'#7b6b50';
+                ctx.lineWidth = isSel?4:2;
+                ctx.beginPath(); ctx.roundRect(b.x-55,b.y-40,110,80,16); ctx.fill(); ctx.stroke();
+                ctx.font = '36px serif'; ctx.fillText(b.label,b.x-18,b.y+5);
+                ctx.fillStyle = '#3a2e1f'; ctx.font = 'bold 11px "Segoe UI", sans-serif';
+                ctx.fillText(b.text,b.x-ctx.measureText(b.text).width/2,b.y+30);
+            });
+
+            drawNeedsBars();
+            if (STATE.thoughtBubble && STATE.thoughtTimer>0) drawThoughtBubble(440,340,STATE.thoughtBubble);
+        }
+
+        function drawNeedsBars() {
+            const needs = [
+                { label:'Сон',val:STATE.sleepNeed,x:20,y:16,color:'#6b5ce7'},
+                { label:'Еда',val:STATE.foodNeed,x:180,y:16,color:'#2ecc71'},
+                { label:'Вода',val:STATE.waterNeed,x:340,y:16,color:'#3498db'},
+                { label:'Жертва',val:STATE.sacrificeNeed,x:500,y:16,color:'#e74c3c'}
+            ];
+            needs.forEach(n=>{
+                ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(n.x,n.y,140,18);
+                ctx.fillStyle=n.color; ctx.fillRect(n.x,n.y,Math.max(0,(n.val/100)*140),18);
+                ctx.fillStyle='#fff'; ctx.font='bold 10px "Segoe UI", sans-serif'; ctx.fillText(n.label,n.x+6,n.y+13);
+                ctx.strokeStyle='#333'; ctx.lineWidth=1; ctx.strokeRect(n.x,n.y,140,18);
+            });
+        }
+
+        function drawThoughtBubble(bx,by,emoji){
+            ctx.fillStyle='#fff'; ctx.strokeStyle='#888'; ctx.lineWidth=2;
+            ctx.beginPath(); ctx.arc(bx,by,28,0,Math.PI*2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(bx-20,by+20); ctx.lineTo(bx-35,by+40); ctx.lineTo(bx-10,by+25); ctx.fill(); ctx.stroke();
+            ctx.font='28px serif'; ctx.fillText(emoji,bx-16,by+9);
+        }
+
+        // ── BEDROOM ──
+        function drawBedroom(){
+            ctx.fillStyle='#5a4a34'; ctx.fillRect(0,0,W,H);
+            for(let i=0;i<20;i++){ ctx.fillStyle='#4a3a24'; ctx.fillRect(i*44,0,2,H); }
+            ctx.fillStyle='#b89a40'; ctx.fillRect(0,350,W,270);
+            ctx.fillStyle='#c9a840'; ctx.beginPath(); ctx.ellipse(350,430,100,35,0,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle='#9c7a2e'; ctx.lineWidth=3; ctx.stroke();
+            ctx.fillStyle='#5c3d2e'; ctx.fillRect(280,160,240,120);
+            ctx.fillStyle='#7a5035'; ctx.fillRect(290,170,220,100);
+            ctx.fillStyle='#d4c4a8'; ctx.fillRect(300,185,200,70);
+            ctx.strokeStyle='#aaa'; ctx.lineWidth=2; ctx.strokeRect(300,185,200,70);
+            ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(340,205,30,20,0,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#8b3a3a'; ctx.fillRect(370,200,120,50);
+            if(!STATE.goatOnBed){
+                drawGoat(STATE.goatBedX,STATE.goatBedY,1.2,Date.now()/700);
+            } else {
+                drawGoat(380,205,1.0,0);
+                ctx.fillStyle='#fff'; ctx.font='bold 16px "Segoe UI", sans-serif';
+                const zX=420,zY=170;
+                ctx.fillText('Z',zX,zY-Math.sin(Date.now()/400)*6);
+                ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('Z',zX+14,zY-16-Math.sin(Date.now()/350+1)*7);
+                ctx.font='bold 24px "Segoe UI", sans-serif'; ctx.fillText('Z',zX+30,zY-34-Math.sin(Date.now()/300+2)*8);
+            }
+            if(STATE.sleptEnough && STATE.autoReturnTimer>0){
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+                ctx.fillStyle='#fff'; ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('😴 Козлик выспался! Возвращаемся...',230,300);
+            }
+        }
+
+        // ── FIELD ──
+        function drawField(){
+            ctx.fillStyle='#87aac4'; ctx.fillRect(0,0,W,350);
+            drawCloud(120,70,1.2); drawCloud(380,40,1); drawCloud(600,100,0.8); drawCloud(260,130,0.9);
+            ctx.fillStyle='rgba(255,240,180,0.9)'; ctx.beginPath(); ctx.arc(680,80,35,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='rgba(255,255,200,0.5)'; ctx.beginPath(); ctx.arc(680,80,45,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#5a8c3c'; ctx.fillRect(0,340,W,280);
+            for(let i=0;i<80;i++){ let gx=i*11+Math.sin(i*0.7)*8; let gh=10+Math.abs(Math.cos(i*0.4))*18; ctx.fillStyle=`hsl(${90+Math.random()*30},50%,${25+Math.random()*20}%)`; ctx.beginPath(); ctx.moveTo(gx,345); ctx.lineTo(gx-3,345-gh); ctx.lineTo(gx+3,345-gh+5); ctx.fill(); }
+            drawGoat(STATE.goatFieldX,STATE.goatFieldY,1.1,Date.now()/600);
+            ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(20,20,200,36);
+            ctx.fillStyle='#fff'; ctx.font='bold 15px "Segoe UI", sans-serif'; ctx.fillText(`ПРОБЕЛ: ${STATE.spacePressCount}/2 (поесть)`,30,44);
+            if(STATE.fieldEaten && STATE.fieldReturnTimer>0){ ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('😋 Козлик наелся! Возвращаемся...',230,300); }
+        }
+        function drawCloud(cx,cy,sc){ ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.arc(cx,cy,25*sc,0,Math.PI*2); ctx.arc(cx+25*sc,cy-10*sc,30*sc,0,Math.PI*2); ctx.arc(cx+50*sc,cy,22*sc,0,Math.PI*2); ctx.arc(cx+20*sc,cy-20*sc,20*sc,0,Math.PI*2); ctx.fill(); }
+
+        // ── KITCHEN ──
+        function drawKitchen(){
+            ctx.fillStyle='#d4c4a2'; ctx.fillRect(0,0,W,H);
+            for(let i=0;i<22;i++){ ctx.fillStyle='#c0b088'; ctx.fillRect(i*40,0,2,H); }
+            ctx.fillStyle='#9c7e5c'; ctx.fillRect(0,380,W,240);
+            ctx.fillStyle='#87aac4'; ctx.fillRect(560,50,140,120);
+            ctx.strokeStyle='#6b5a4a'; ctx.lineWidth=6; ctx.strokeRect(558,48,144,124);
+            ctx.fillStyle='#6b5a4a'; ctx.fillRect(628,50,4,120);
+            drawLightRay(560,170,140,150,'rgba(255,255,200,0.15)');
+            ctx.fillStyle='#6b4f2e'; ctx.fillRect(100,100,300,12);
+            ctx.fillStyle='#5c3d2e'; for(let i=0;i<3;i++){ let cx=180+i*120; ctx.fillRect(cx-3,85,6,20); ctx.fillStyle='#ffdd88'; ctx.beginPath(); ctx.arc(cx,82,5,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff9e0'; ctx.beginPath(); ctx.arc(cx,82,2.5,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5c3d2e'; }
+            drawGoat(STATE.goatKitchenX,STATE.goatKitchenY,1.0,Date.now()/900);
+            ctx.fillStyle='#6b4f2e'; ctx.fillRect(240,370,12,80); ctx.fillRect(540,370,12,80);
+            ctx.fillStyle='#8b6f4e'; ctx.fillRect(198,366,404,8);
+            ctx.fillStyle='#b8a07a'; ctx.fillRect(205,340,390,28);
+            ctx.strokeStyle='#7b6b50'; ctx.lineWidth=2; ctx.strokeRect(205,340,390,28);
+            STATE.glassPositions.forEach((g,i)=>{
+                ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.strokeStyle='#999'; ctx.lineWidth=2;
+                ctx.beginPath(); ctx.moveTo(g.x-16,g.y+10); ctx.lineTo(g.x-12,g.y-18); ctx.lineTo(g.x+12,g.y-18); ctx.lineTo(g.x+16,g.y+10); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.fillStyle=g.color; ctx.beginPath(); ctx.moveTo(g.x-13,g.y+8); ctx.lineTo(g.x-10,g.y-6); ctx.lineTo(g.x+10,g.y-6); ctx.lineTo(g.x+13,g.y+8); ctx.closePath(); ctx.fill();
+                ctx.fillStyle='#333'; ctx.font='10px "Segoe UI", sans-serif'; ctx.fillText(['Вода','Чай','Морс'][i],g.x-14,g.y+22);
+            });
+            if(STATE.drankEnough && STATE.drinkReturnTimer>0){ ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('😋 Козлик напился! Возвращаемся...',230,300); }
+        }
+
+        // ── OUTSIDE ──
+        function drawOutside(){
+            ctx.fillStyle='#7e9bb5'; ctx.fillRect(0,0,W,300);
+            ctx.fillStyle='rgba(255,240,180,0.9)'; ctx.beginPath(); ctx.arc(680,80,35,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='rgba(255,255,200,0.5)'; ctx.beginPath(); ctx.arc(680,80,45,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#7a9e5a'; ctx.beginPath(); ctx.moveTo(0,280); ctx.quadraticCurveTo(200,220,400,270); ctx.quadraticCurveTo(600,310,820,260); ctx.lineTo(820,340); ctx.lineTo(0,340); ctx.fill();
+            ctx.fillStyle='#9c8a6a'; ctx.fillRect(0,330,W,120);
+            ctx.fillStyle='#b8a080'; ctx.fillRect(0,350,W,80);
+            drawVillageHouse(60,220); drawVillageHouse(300,200); drawVillageHouse(580,230); drawVillageHouse(700,210);
+            ctx.fillStyle='#6b5a4a'; for(let i=0;i<25;i++){ ctx.fillRect(30+i*32,305,6,50); } ctx.fillRect(30,315,770,6); ctx.fillRect(30,335,770,4);
+            drawGoat(STATE.goatOutsideX,STATE.goatOutsideY,1.0,Date.now()/700);
+            STATE.people.forEach(p=>{ if(p.alive) drawGreyPerson(p.x,p.y,0.9); });
+            if(STATE.grabbedPerson){ ctx.fillStyle='rgba(255,200,50,0.7)'; ctx.beginPath(); ctx.arc(STATE.goatOutsideX+20,STATE.goatOutsideY-20,14,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#333'; ctx.font='bold 16px "Segoe UI", sans-serif'; ctx.fillText('🧑',STATE.goatOutsideX+8,STATE.goatOutsideY-14); ctx.fillStyle='#fff'; ctx.font='bold 14px "Segoe UI", sans-serif'; ctx.fillText('Схвачен! Возвращаемся...',STATE.goatOutsideX-40,STATE.goatOutsideY-45); }
+            if(STATE.outsideReturnTimer>0){ ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('🏠 Возвращаемся домой с жертвой...',220,300); }
+        }
+        function drawVillageHouse(hx,hy){ ctx.fillStyle='#b89a70'; ctx.fillRect(hx,hy,70,100); ctx.fillStyle='#6b4a2a'; ctx.beginPath(); ctx.moveTo(hx-8,hy); ctx.lineTo(hx+35,hy-40); ctx.lineTo(hx+78,hy); ctx.fill(); ctx.fillStyle='#4a301a'; ctx.fillRect(hx+20,hy+30,18,25); ctx.fillStyle='#87aac4'; ctx.fillRect(hx+45,hy+25,16,16); ctx.strokeStyle='#5c3d2e'; ctx.lineWidth=2; ctx.strokeRect(hx+45,hy+25,16,16); }
+
+        // ── SACRIFICE ROOM ──
+        function drawSacrificeRoom(){
+            ctx.fillStyle='#1a0a0a'; ctx.fillRect(0,0,W,H);
+            for(let i=0;i<20;i++){ ctx.fillStyle='#2a1a1a'; ctx.fillRect(i*44,0,2,H); }
+            const cx = 400, cy = 360, radius = 90;
+            ctx.strokeStyle = '#8b0000'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.stroke();
+            const points = [];
+            for (let i = 0; i < 5; i++) {
+                const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+                points.push({ x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius });
+            }
+            ctx.strokeStyle = '#b22222'; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            ctx.lineTo(points[2].x, points[2].y);
+            ctx.lineTo(points[4].x, points[4].y);
+            ctx.lineTo(points[1].x, points[1].y);
+            ctx.lineTo(points[3].x, points[3].y);
+            ctx.closePath(); ctx.stroke();
+            ctx.strokeStyle = '#660000'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y); ctx.lineTo(points[3].x, points[3].y);
+            ctx.moveTo(points[1].x, points[1].y); ctx.lineTo(points[4].x, points[4].y);
+            ctx.moveTo(points[2].x, points[2].y); ctx.lineTo(points[0].x, points[0].y);
+            ctx.stroke();
+            for (let i = 0; i < 5; i++) {
+                const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+                const sx = cx + Math.cos(angle) * (radius + 15);
+                const sy = cy + Math.sin(angle) * (radius + 15);
+                ctx.fillStyle = '#333'; ctx.fillRect(sx-3, sy, 6, 20);
+                ctx.fillStyle = '#ff6600'; ctx.beginPath(); ctx.arc(sx, sy-2, 5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(sx, sy-2, 2.5, 0, Math.PI*2); ctx.fill();
+            }
+            if(!STATE.sacrificeDone){
+                drawGreyPerson(STATE.sacrificePersonX, STATE.sacrificePersonY, 1.0);
+                if(STATE.sacrificeBurnTimer>0) drawFireParticles(STATE.sacrificePersonX, STATE.sacrificePersonY-10);
+            } else {
+                drawFireParticles(STATE.sacrificePersonX, STATE.sacrificePersonY-10, true);
+            }
+            drawGoat(200, 420, 1.2, STATE.sacrificeDone ? Date.now()/300 : Date.now()/800);
+            if(STATE.sacrificeReturnTimer>0 && STATE.sacrificeDone){
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+                ctx.fillStyle='#fff'; ctx.font='bold 20px "Segoe UI", sans-serif'; ctx.fillText('😈 Козлик доволен жертвой! Возвращаемся...',180,300);
+            }
+        }
+        function drawFireParticles(fx,fy,big=false){
+            const t=Date.now()/100;
+            for(let i=0;i<(big?25:12);i++){
+                const a=(i/(big?25:12))*Math.PI*2+t*0.5;
+                const d=10+Math.sin(t*3+i)*(big?30:15);
+                const px=fx+Math.cos(a)*d, py=fy+Math.sin(a)*d-Math.abs(Math.sin(t*4+i))*25;
+                ctx.fillStyle=`rgba(${Math.random()<0.5?'255,140,0':'255,200,50'},0.7)`;
+                ctx.beginPath(); ctx.arc(px,py,2+Math.random()*(big?8:5),0,Math.PI*2); ctx.fill();
+            }
+        }
+
+        // ── RENDER ──
+        function render(){ ctx.clearRect(0,0,W,H); switch(STATE.scene){ case'mainRoom':drawMainRoom();break; case'bedroom':drawBedroom();break; case'field':drawField();break; case'kitchen':drawKitchen();break; case'outside':drawOutside();break; case'sacrificeRoom':drawSacrificeRoom();break; } }
+
+        // ── UPDATE (включая движение змеи) ──
+        function update(dt){
+            STATE.sleepNeed = Math.min(100, STATE.sleepNeed + dt*1.2);
+            STATE.foodNeed = Math.min(100, STATE.foodNeed + dt*1.0);
+            STATE.waterNeed = Math.min(100, STATE.waterNeed + dt*0.8);
+            STATE.sacrificeNeed = Math.min(100, STATE.sacrificeNeed + dt*0.6);
+
+            // Логика змеи только в главной комнате
+            if (STATE.scene === 'mainRoom') {
+                STATE.thoughtTimer = Math.max(0, STATE.thoughtTimer - dt);
+                if(STATE.thoughtTimer<=0){
+                    const max = Math.max(STATE.sleepNeed,STATE.foodNeed,STATE.waterNeed,STATE.sacrificeNeed);
+                    if(max>50){ STATE.thoughtTimer=3+Math.random()*4; STATE.thoughtBubble = max===STATE.sleepNeed?'😴':max===STATE.foodNeed?'🌿':max===STATE.waterNeed?'💧':'😈'; }
+                    else STATE.thoughtBubble=null;
+                }
+
+                // Таймер появления змеи
+                if (!STATE.snakeActive && !STATE.snakeFed) {
+                    STATE.snakeTimer -= dt;
+                    if (STATE.snakeTimer <= 0) {
+                        STATE.snakeActive = true;
+                        STATE.snakeFed = false;
+                        STATE.snakeX = 100;
+                        STATE.snakeY = 370;
+                        STATE.snakeDir = 1;
+                        STATE.snakeTimeout = 30;
+                        STATE.snakeMessageTimer = 0;
+                        STATE.appleVisible = false;
+                    }
+                }
+                if (STATE.snakeActive && !STATE.snakeFed) {
+                    STATE.snakeTimeout -= dt;
+                    // Движение змеи
+                    STATE.snakeX += STATE.snakeDir * STATE.snakeSpeed * dt;
+                    if (STATE.snakeX > 700) { STATE.snakeDir = -1; }
+                    if (STATE.snakeX < 80) { STATE.snakeDir = 1; }
+                    if (STATE.snakeTimeout <= 0) {
+                        STATE.snakeActive = false;
+                        STATE.snakeTimer = 120;
+                        STATE.appleVisible = false;
+                    }
+                }
+                if (STATE.snakeFed) {
+                    STATE.snakeMessageTimer -= dt;
+                    if (STATE.snakeMessageTimer <= 0) {
+                        STATE.snakeActive = false;
+                        STATE.snakeFed = false;
+                        STATE.snakeTimer = 120;
+                        STATE.appleVisible = false;
+                    }
+                }
+            }
+
+            switch(STATE.scene){
+                case'bedroom': if(STATE.goatOnBed&&!STATE.sleptEnough){ STATE.sleepTimer+=dt; STATE.sleepNeed=Math.max(0,STATE.sleepNeed-dt*25); if(STATE.sleepTimer>2.5||STATE.sleepNeed<=5){ STATE.sleptEnough=true; STATE.sleepNeed=0; STATE.autoReturnTimer=2.0; } } if(STATE.sleptEnough&&STATE.autoReturnTimer>0){ STATE.autoReturnTimer-=dt; if(STATE.autoReturnTimer<=0) returnToMain('bedroom'); } break;
+                case'field': if(STATE.fieldEaten&&STATE.fieldReturnTimer>0){ STATE.fieldReturnTimer-=dt; if(STATE.fieldReturnTimer<=0) returnToMain('field'); } break;
+                case'kitchen': if(STATE.drankEnough&&STATE.drinkReturnTimer>0){ STATE.drinkReturnTimer-=dt; if(STATE.drinkReturnTimer<=0) returnToMain('kitchen'); } break;
+                case'outside': STATE.people.forEach(p=>{ if(p.alive&&!STATE.grabbedPerson){ p.walked+=p.speed*dt; p.x+=p.dir*p.speed*dt*40; if(Math.abs(p.walked)>3){ p.dir*=-1; p.walked=0; } p.x=Math.max(60,Math.min(750,p.x)); } }); if(STATE.grabbedPerson&&STATE.outsideReturnTimer<=0) STATE.outsideReturnTimer=1.5; if(STATE.outsideReturnTimer>0){ STATE.outsideReturnTimer-=dt; if(STATE.outsideReturnTimer<=0&&STATE.grabbedPerson){ STATE.scene='sacrificeRoom'; STATE.sacrificePersonX=400; STATE.sacrificePersonY=340; STATE.sacrificeBurnTimer=0; STATE.sacrificeDone=false; STATE.sacrificeReturnTimer=0; STATE.sacrificeNeed=Math.max(0,STATE.sacrificeNeed-60); STATE.grabbedPerson=null; } } break;
+                case'sacrificeRoom': if(!STATE.sacrificeDone){ STATE.sacrificeBurnTimer+=dt; if(STATE.sacrificeBurnTimer>2.0){ STATE.sacrificeDone=true; STATE.sacrificeReturnTimer=2.5; STATE.sacrificeNeed=0; } } if(STATE.sacrificeDone&&STATE.sacrificeReturnTimer>0){ STATE.sacrificeReturnTimer-=dt; if(STATE.sacrificeReturnTimer<=0) returnToMain('sacrifice'); } break;
+            }
+        }
+        function returnToMain(from){
+            STATE.scene='mainRoom'; STATE.goatOnBed=false; STATE.draggingGoat=false; STATE.goatBedX=350; STATE.goatBedY=400; STATE.sleepTimer=0; STATE.sleptEnough=false; STATE.autoReturnTimer=0;
+            STATE.spacePressCount=0; STATE.fieldEaten=false; STATE.fieldReturnTimer=0; STATE.goatFieldX=400; STATE.goatFieldY=380;
+            STATE.draggingGlass=null; STATE.glassPositions.forEach((g,i)=>{ g.x=STATE.glassOriginal[i].x; g.y=STATE.glassOriginal[i].y; }); STATE.drankEnough=false; STATE.drinkReturnTimer=0;
+            STATE.goatKitchenX=340; STATE.goatKitchenY=300; STATE.grabbedPerson=null; STATE.outsideReturnTimer=0; STATE.sacrificeBurnTimer=0; STATE.sacrificeDone=false; STATE.sacrificeReturnTimer=0;
+            initOutsidePeople(); if(from==='field') STATE.foodNeed=0; if(from==='kitchen') STATE.waterNeed=0; STATE.thoughtTimer=0; STATE.thoughtBubble=null;
+            STATE.appleVisible = false; STATE.draggingApple = false;
+        }
+
+        // ── EVENTS (добавлена обработка яблока) ──
+        const keysPressed = {}; let mouseX=0,mouseY=0,mouseDown=false;
+        canvas.addEventListener('mousemove',(e)=>{
+            const rect=canvas.getBoundingClientRect(); mouseX=(e.clientX-rect.left)*(W/rect.width); mouseY=(e.clientY-rect.top)*(H/rect.height);
+            if(STATE.scene==='bedroom'&&STATE.draggingGoat&&!STATE.goatOnBed){ STATE.goatBedX=mouseX; STATE.goatBedY=mouseY; if(Math.hypot(mouseX-400,mouseY-220)<50){ STATE.goatOnBed=true; STATE.draggingGoat=false; STATE.goatBedX=380; STATE.goatBedY=205; STATE.sleepTimer=0; STATE.sleptEnough=false; } }
+            if(STATE.scene==='kitchen'&&STATE.draggingGlass!==null&&!STATE.drankEnough){ STATE.glassPositions[STATE.draggingGlass].x=mouseX; STATE.glassPositions[STATE.draggingGlass].y=mouseY; if(Math.hypot(mouseX-(STATE.goatKitchenX+32),mouseY-(STATE.goatKitchenY-8))<30){ STATE.drankEnough=true; STATE.draggingGlass=null; STATE.drinkReturnTimer=2.0; STATE.waterNeed=0; } }
+            if (STATE.scene === 'mainRoom' && STATE.draggingApple) {
+                STATE.appleX = mouseX; STATE.appleY = mouseY;
+            }
+        });
+        canvas.addEventListener('mousedown',(e)=>{
+            mouseDown=true; const rect=canvas.getBoundingClientRect(); const mx=(e.clientX-rect.left)*(W/rect.width); const my=(e.clientY-rect.top)*(H/rect.height);
+            if(STATE.scene==='mainRoom'){
+                const btns=[{x:80,y:510,action:'bedroom'},{x:260,y:510,action:'field'},{x:440,y:510,action:'kitchen'},{x:620,y:510,action:'outside'}];
+                btns.forEach((b,i)=>{ if(mx>b.x-55&&mx<b.x+55&&my>b.y-40&&my<b.y+40){ STATE.selectedBtn=i; activateButton(i); } });
+                if (mx > 680 && mx < 750 && my > 100 && my < 160) {
+                    if (!STATE.appleVisible && STATE.snakeActive && !STATE.snakeFed) {
+                        STATE.appleVisible = true;
+                        STATE.appleX = 150 + Math.random() * 400;
+                        STATE.appleY = 250 + Math.random() * 150;
+                        STATE.draggingApple = false;
+                    }
+                }
+                if (STATE.appleVisible && !STATE.draggingApple) {
+                    if (Math.hypot(mx - STATE.appleX, my - STATE.appleY) < 25) {
+                        STATE.draggingApple = true;
+                    }
+                }
+            }
+            if(STATE.scene==='bedroom'&&!STATE.goatOnBed&&!STATE.sleptEnough){ if(Math.hypot(mx-STATE.goatBedX,my-STATE.goatBedY)<40) STATE.draggingGoat=true; }
+            if(STATE.scene==='kitchen'&&!STATE.drankEnough){ STATE.glassPositions.forEach((g,i)=>{ if(Math.hypot(mx-g.x,my-g.y)<28) STATE.draggingGlass=i; }); }
+        });
+        canvas.addEventListener('mouseup',(e)=>{
+            mouseDown=false; STATE.draggingGoat=false;
+            if(STATE.draggingGlass!==null&&!STATE.drankEnough){ const i=STATE.draggingGlass; STATE.glassPositions[i].x=STATE.glassOriginal[i].x; STATE.glassPositions[i].y=STATE.glassOriginal[i].y; STATE.draggingGlass=null; }
+            if (STATE.draggingApple) {
+                STATE.draggingApple = false;
+                if (STATE.snakeActive && !STATE.snakeFed && Math.hypot(STATE.appleX - STATE.snakeX, STATE.appleY - STATE.snakeY) < 50) {
+                    STATE.snakeFed = true;
+                    STATE.snakeMessageTimer = 2.5;
+                    STATE.appleVisible = false;
+                }
+            }
+        });
+        function activateButton(idx){
+            switch(idx){
+                case 0: STATE.scene='bedroom'; STATE.goatOnBed=false; STATE.draggingGoat=false; STATE.goatBedX=350; STATE.goatBedY=400; STATE.sleepTimer=0; STATE.sleptEnough=false; STATE.autoReturnTimer=0; break;
+                case 1: STATE.scene='field'; STATE.spacePressCount=0; STATE.fieldEaten=false; STATE.fieldReturnTimer=0; STATE.goatFieldX=400; STATE.goatFieldY=380; break;
+                case 2: STATE.scene='kitchen'; STATE.draggingGlass=null; STATE.glassPositions.forEach((g,i)=>{ g.x=STATE.glassOriginal[i].x; g.y=STATE.glassOriginal[i].y; }); STATE.drankEnough=false; STATE.drinkReturnTimer=0; STATE.goatKitchenX=340; STATE.goatKitchenY=300; break;
+                case 3: STATE.scene='outside'; STATE.goatOutsideX=100; STATE.goatOutsideY=380; STATE.grabbedPerson=null; STATE.outsideReturnTimer=0; STATE.sacrificeBurnTimer=0; STATE.sacrificeDone=false; STATE.sacrificeReturnTimer=0; initOutsidePeople(); break;
+            }
+            STATE.selectedBtn=-1;
+            if (idx !== undefined) { STATE.appleVisible = false; STATE.draggingApple = false; }
+        }
+        window.addEventListener('keydown',(e)=>{
+            const key=e.key, code=e.code;
+            const isF=(key==='ф'||key==='Ф'||code==='KeyA'), isV=(key==='в'||key==='В'||code==='KeyD'), isC=(key==='ц'||key==='Ц'||code==='KeyW'), isU=(key==='у'||key==='У'||code==='KeyE'), isYeru=(key==='ы'||key==='Ы'||code==='KeyS');
+            if(isF||isV||isC||isU||isYeru||e.key===' '||e.key.startsWith('Arrow')) e.preventDefault();
+            if(STATE.scene==='mainRoom'){ if(isF) STATE.selectedBtn=(STATE.selectedBtn-1+4)%4; if(isV) STATE.selectedBtn=(STATE.selectedBtn+1)%4; if(isC&&STATE.selectedBtn>=0) activateButton(STATE.selectedBtn); if(isU) activateButton(3); }
+            if(STATE.scene==='field'&&!STATE.fieldEaten){ const s=5; if(e.key==='ArrowLeft') STATE.goatFieldX-=s; if(e.key==='ArrowRight') STATE.goatFieldX+=s; if(e.key==='ArrowUp') STATE.goatFieldY-=s; if(e.key==='ArrowDown') STATE.goatFieldY+=s; STATE.goatFieldX=Math.max(30,Math.min(W-30,STATE.goatFieldX)); STATE.goatFieldY=Math.max(320,Math.min(H-30,STATE.goatFieldY)); if(e.key===' '){ STATE.spacePressCount++; if(STATE.spacePressCount>=2){ STATE.fieldEaten=true; STATE.fieldReturnTimer=2.0; STATE.foodNeed=0; } } }
+            if(STATE.scene==='outside'&&!STATE.grabbedPerson&&STATE.outsideReturnTimer<=0){ const s=4; if(e.key==='ArrowLeft') STATE.goatOutsideX-=s; if(e.key==='ArrowRight') STATE.goatOutsideX+=s; if(e.key==='ArrowUp') STATE.goatOutsideY-=s; if(e.key==='ArrowDown') STATE.goatOutsideY+=s; STATE.goatOutsideX=Math.max(40,Math.min(W-40,STATE.goatOutsideX)); STATE.goatOutsideY=Math.max(310,Math.min(H-40,STATE.goatOutsideY)); if(isYeru){ STATE.people.forEach(p=>{ if(p.alive&&!STATE.grabbedPerson&&Math.hypot(STATE.goatOutsideX-p.x,STATE.goatOutsideY-p.y)<55){ STATE.grabbedPerson=p; p.alive=false; STATE.outsideReturnTimer=1.5; } }); } }
+            keysPressed[e.key]=true;
+        });
+        window.addEventListener('keyup',(e)=>{ keysPressed[e.key]=false; });
+
+        function updateHint(){
+            let h='';
+            switch(STATE.scene){ case'mainRoom':h='Ф/В — кнопки | Ц — выбрать | У — улица | Яблоко для змеи (кнопка справа)'; break; case'bedroom':h=STATE.sleptEnough?'Козлик спит...':'Перетащи козлика на кровать'; break; case'field':h=STATE.fieldEaten?'Наелся!':'Стрелки — ходить, ПРОБЕЛ x2 — поесть'; break; case'kitchen':h=STATE.drankEnough?'Напился!':'Перетащи стакан козлику в рот'; break; case'outside':h=STATE.grabbedPerson?'Возвращаемся...':'Стрелки — ходить, Ы — схватить человека'; break; case'sacrificeRoom':h=STATE.sacrificeDone?'Козлик радуется!':'Жертва сгорает...'; break; }
+            hintEl.textContent=h;
+        }
+
+        let lastTime=performance.now();
+        function gameLoop(ts){
+            let dt=(ts-lastTime)/1000; if(dt>0.2) dt=0.2; if(dt<=0) dt=0.016; lastTime=ts;
+            update(dt); render(); updateHint(); requestAnimationFrame(gameLoop);
+        }
+
+        if(!ctx.roundRect){ ctx.roundRect=function(x,y,w,h,r){ if(typeof r==='number') r={tl:r,tr:r,br:r,bl:r}; ctx.beginPath(); ctx.moveTo(x+r.tl,y); ctx.lineTo(x+w-r.tr,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r.tr); ctx.lineTo(x+w,y+h-r.br); ctx.quadraticCurveTo(x+w,y+h,x+w-r.br,y+h); ctx.lineTo(x+r.bl,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r.bl); ctx.lineTo(x,y+r.tl); ctx.quadraticCurveTo(x,y,x+r.tl,y); ctx.closePath(); }; }
+        initOutsidePeople(); STATE.scene='mainRoom'; requestAnimationFrame(gameLoop);
+    })();
+</script>
+</body>
+</html>

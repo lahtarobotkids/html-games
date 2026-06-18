@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Пиксель-Кот: 4 уровня 🐱✨</title>
+    <style>
+        :root { --bg: #1a1a2e; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden;
+            font-family: 'Courier New', monospace;
+            touch-action: manipulation;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .game-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        canvas {
+            image-rendering: pixelated; image-rendering: crisp-edges;
+            border: 4px solid #444; border-radius: 8px;
+            box-shadow: 0 0 30px rgba(255,140,0,0.4), 0 0 60px rgba(255,100,0,0.2), 0 8px 32px rgba(0,0,0,0.5);
+            background: #000; max-width: 95vw; max-height: 85vh;
+            width: 640px; height: 480px;
+        }
+        .hint {
+            color: #ffa; font-size: 13px; letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,200,0,0.7);
+            animation: pulse 2s infinite; text-align: center;
+        }
+        @keyframes pulse { 0%,100% { opacity:0.6; } 50% { opacity:1; } }
+        @media (max-width:660px) {
+            canvas { width:100vw; height:auto; aspect-ratio:320/240; max-height:70vh; border-radius:4px; border-width:2px; }
+            .hint { font-size:11px; letter-spacing:1px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <canvas id="game" width="320" height="240"></canvas>
+        <div class="hint">🎮 СТРЕЛКИ / WASD — двигаться &nbsp;|&nbsp; 📱 Коснись экрана</div>
+    </div>
+    <script>
+        (function() {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            const W = 320, H = 240;
+
+            // ==================== ЗВУКИ ====================
+            let audioCtx = null;
+            function initAudio() {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            }
+            function playBeep(f, d, t = 'square', v = 0.08, g = null) {
+                if (!audioCtx) return;
+                try {
+                    const o = audioCtx.createOscillator();
+                    const gn = audioCtx.createGain();
+                    o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+                    if (g) o.frequency.linearRampToValueAtTime(g, audioCtx.currentTime + d);
+                    gn.gain.setValueAtTime(v, audioCtx.currentTime);
+                    gn.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + d);
+                    o.connect(gn); gn.connect(audioCtx.destination);
+                    o.start(); o.stop(audioCtx.currentTime + d);
+                } catch (e) {}
+            }
+            function sfxCatch() { playBeep(600,0.08,'square',0.07); playBeep(900,0.1,'square',0.06,1200); }
+            function sfxBonus() { playBeep(800,0.06,'square',0.07); playBeep(1100,0.08,'square',0.06); playBeep(1400,0.12,'triangle',0.05); }
+            function sfxHurt() { playBeep(80,0.25,'sawtooth',0.12,40); }
+            function sfxGameOver() { playBeep(200,0.2,'square',0.1,120); setTimeout(() => playBeep(150,0.3,'triangle',0.09,60),200); }
+            function sfxPowerUp() { playBeep(400,0.1,'square',0.06,600); playBeep(600,0.1,'square',0.06,800); playBeep(800,0.15,'triangle',0.07,1000); }
+            function sfxLevelUp() { playBeep(500,0.12,'square',0.07,700); playBeep(700,0.15,'triangle',0.06,900); }
+            function sfxVictory() {
+                playBeep(800,0.15,'square',0.08);
+                setTimeout(() => playBeep(1000,0.15,'square',0.08),150);
+                setTimeout(() => playBeep(1200,0.2,'triangle',0.09),300);
+                setTimeout(() => playBeep(1500,0.25,'triangle',0.08),500);
+            }
+
+            // ==================== СОСТОЯНИЯ ====================
+            const STATE = { TITLE:'title', PLAYING:'playing', GAMEOVER:'gameover', VICTORY:'victory' };
+            let gameState = STATE.TITLE;
+            let score = 0, lives = 3, shakeTime = 0, shakeIntensity = 0, invincibleTimer = 0;
+            let difficultyLevel = 1, poweredUp = false, currentLevel = 1;
+            let levelTransitionTimer = 0, levelTransitionMessage = '';
+            let bestScore = parseInt(localStorage.getItem('pixelCatBest') || '0');
+            let stars = [];
+
+            function generateStars() {
+                stars = [];
+                for (let i=0; i<80; i++) stars.push({
+                    x: Math.random()*W, y: Math.random()*H,
+                    size: 1+Math.floor(Math.random()*2.5),
+                    phase: Math.random()*Math.PI*2, speed: 0.5+Math.random()*1.5
+                });
+            }
+
+            // ==================== ВВОД ====================
+            const keys = {};
+            let touchDir = {x:0,y:0};
+            window.addEventListener('keydown', e => {
+                keys[e.key] = true;
+                if (e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault(); initAudio();
+                    if (gameState === STATE.TITLE) startGame();
+                    else if (gameState === STATE.GAMEOVER || gameState === STATE.VICTORY) resetAndStart();
+                }
+                if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key)) e.preventDefault();
+            });
+            window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+            function getCanvasPos(t) {
+                const r = canvas.getBoundingClientRect();
+                return { x: (t.clientX - r.left) * W / r.width, y: (t.clientY - r.top) * H / r.height };
+            }
+            function updateTouchDir(touches) {
+                let dx=0, dy=0;
+                const dpadCX=275, dpadCY=185, dpadR=50;
+                for (const t of touches) {
+                    const p = getCanvasPos(t);
+                    const dist = Math.hypot(p.x-dpadCX, p.y-dpadCY);
+                    if (dist < dpadR+15) {
+                        const ang = Math.atan2(p.y-dpadCY, p.x-dpadCX);
+                        const dead = 0.35;
+                        if (Math.abs(ang) < Math.PI-dead && Math.abs(ang) > dead) { dx += Math.cos(ang); dy += Math.sin(ang); }
+                        else if (Math.abs(ang) <= dead) dx += 1;
+                        else if (Math.abs(ang) >= Math.PI-dead) dx -= 1;
+                        if (ang < -0.7 && ang > -2.4) dy -= 1;
+                        if (ang > 0.7 && ang < 2.4) dy += 1;
+                    } else if (p.x < W*0.6 && p.y < H*0.75 && player) {
+                        const toX = p.x - player.x, toY = p.y - player.y;
+                        const d = Math.hypot(toX, toY);
+                        if (d > 8) { dx += toX/d; dy += toY/d; }
+                    }
+                }
+                const mag = Math.hypot(dx, dy);
+                if (mag > 0) { touchDir.x = dx/mag; touchDir.y = dy/mag; }
+                else { touchDir.x = 0; touchDir.y = 0; }
+            }
+            canvas.addEventListener('touchstart', e => {
+                e.preventDefault(); initAudio();
+                if (gameState === STATE.TITLE) startGame();
+                else if (gameState === STATE.GAMEOVER || gameState === STATE.VICTORY) resetAndStart();
+                updateTouchDir(e.touches);
+            }, {passive:false});
+            canvas.addEventListener('touchmove', e => { e.preventDefault(); updateTouchDir(e.touches); }, {passive:false});
+            canvas.addEventListener('touchend', e => { e.preventDefault(); updateTouchDir(e.touches); });
+            canvas.addEventListener('touchcancel', () => { touchDir.x=0; touchDir.y=0; });
+            canvas.addEventListener('click', () => {
+                initAudio();
+                if (gameState === STATE.TITLE) startGame();
+                else if (gameState === STATE.GAMEOVER || gameState === STATE.VICTORY) resetAndStart();
+            });
+
+            // ==================== ПЕРСОНАЖИ ====================
+            let player = null;
+            let mice = [], dogs = [], fishes = [], particles = [], grassTiles = [];
+
+            function generateGrass(level) {
+                grassTiles = [];
+                const rng = mulberry32(Date.now() % 100000);
+                if (level === 1) {
+                    const colors = ['#5a9e3e','#4d8c34','#559639','#4a8030','#5fa344'];
+                    for (let y=0; y<H; y+=4) for (let x=0; x<W; x+=4) grassTiles.push({x,y,color:colors[Math.floor(rng()*5)]});
+                    for (let i=0; i<40; i++) {
+                        const fx = Math.floor(rng()*(W-8))+4, fy = Math.floor(rng()*(H-8))+4;
+                        const fc = ['#ff0','#fff','#faf','#ffa','#f88'][Math.floor(rng()*5)];
+                        grassTiles.push({x:fx,y:fy,color:fc,isFlower:true});
+                        if (rng()>0.5) grassTiles.push({x:fx+2,y:fy-2,color:fc,isFlower:true});
+                        if (rng()>0.3) grassTiles.push({x:fx-2,y:fy-1,color:fc,isFlower:true});
+                    }
+                } else if (level === 2) {
+                    const colors = ['#666','#777','#888','#999','#aaa'];
+                    for (let y=0; y<H; y+=4) for (let x=0; x<W; x+=4) grassTiles.push({x,y,color:colors[Math.floor(rng()*5)]});
+                    const cryColors = ['#ff4444','#44ff44','#4488ff','#ffff44','#ff44ff','#44ffff'];
+                    for (let i=0; i<35; i++) {
+                        const cx = Math.floor(rng()*(W-10))+5, cy = Math.floor(rng()*(H-10))+5;
+                        grassTiles.push({x:cx,y:cy,color:cryColors[Math.floor(rng()*cryColors.length)],isCrystal:true});
+                    }
+                } else if (level === 3) {
+                    const skyColors = ['#4da6ff','#66b3ff','#3399ff','#5bb5ff','#3da0f5'];
+                    for (let y=0; y<H; y+=4) for (let x=0; x<W; x+=4) grassTiles.push({x,y,color:skyColors[Math.floor(rng()*5)]});
+                    for (let i=0; i<20; i++) {
+                        const cx = Math.floor(rng()*(W-30))+10, cy = Math.floor(rng()*(H-30))+10;
+                        grassTiles.push({x:cx,y:cy,color:'#ffffff',isCloud:true, cloudW:6+Math.floor(rng()*8), cloudH:3+Math.floor(rng()*3)});
+                    }
+                } else if (level === 4) {
+                    for (let y=0; y<H; y+=4) for (let x=0; x<W; x+=4) grassTiles.push({x,y,rainbow:true, phase:(x+y)*0.02});
+                    for (let i=0; i<30; i++) {
+                        const cx = Math.floor(rng()*(W-10))+5, cy = Math.floor(rng()*(H-10))+5;
+                        grassTiles.push({x:cx,y:cy,rainbow:true, phase:(cx+cy)*0.03, isCrystal:true});
+                    }
+                }
+            }
+
+            function mulberry32(a) {
+                return function() {
+                    a |= 0; a = a + 0x6D2B79F5 | 0;
+                    let t = Math.imul(a ^ a >>> 15, 1 | a);
+                    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+                    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+                };
+            }
+
+            // ==================== СПРАЙТЫ ====================
+            function drawPixelSprite(ctx, data, px, py, scale=2, flipX=false) {
+                for (let r=0; r<data.length; r++) {
+                    for (let c=0; c<data[r].length; c++) {
+                        const col = data[r][c];
+                        if (col === null || col === 0) continue;
+                        let dc = flipX ? (data[r].length-1-c) : c;
+                        ctx.fillStyle = col;
+                        ctx.fillRect(Math.floor(px+dc*scale), Math.floor(py+r*scale), scale, scale);
+                    }
+                }
+            }
+
+            const CAT_PAL = {0:null,1:'#1a1a1a',2:'#f90',3:'#e70',4:'#fff',5:'#000',6:'#faa',7:'#fb0',8:'#d50',9:'#ff0'};
+            const CAT_SPR = [
+                [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,2,2,2,2,1,1,0,0,0,0,0,0],
+                [0,0,0,0,0,1,1,2,2,7,7,2,2,1,1,0,0,0,0,0],[0,0,0,0,1,1,2,2,7,7,7,7,2,2,1,1,0,0,0,0],
+                [0,0,0,1,1,2,2,7,7,3,3,7,7,2,2,1,1,0,0,0],[0,0,0,1,2,2,7,7,3,3,3,3,7,7,2,2,1,0,0,0],
+                [0,0,1,1,2,2,7,3,3,4,4,3,3,7,2,2,1,1,0,0],[0,0,1,2,2,7,3,3,4,4,4,4,3,3,7,2,2,1,0,0],
+                [0,0,1,2,7,7,3,4,4,5,5,4,4,3,7,7,2,1,0,0],[0,1,1,2,7,3,3,4,5,5,5,5,4,3,3,7,2,1,1,0],
+                [0,1,2,2,7,3,4,4,5,4,4,5,4,4,3,7,2,2,1,0],[0,1,2,7,7,3,4,4,4,6,6,4,4,4,3,7,7,2,1,0],
+                [0,0,1,2,7,3,3,4,4,4,4,4,4,3,3,7,2,1,0,0],[0,0,1,2,2,7,3,3,3,3,3,3,3,3,7,2,2,1,0,0],
+                [0,0,0,1,2,2,7,7,7,7,7,7,7,7,2,2,1,0,0,0],[0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,1,1,0,0,0],
+                [0,0,1,1,3,1,2,2,2,1,1,2,2,2,1,3,1,1,0,0],[0,0,1,3,3,1,1,1,1,3,3,1,1,1,1,3,3,1,0,0],
+                [0,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1,1,0],[0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+            ];
+            const HAPPY_CAT = CAT_SPR.map(r=>[...r]);
+            HAPPY_CAT[10] = [0,1,2,2,7,3,4,4,5,4,9,4,5,4,3,7,2,2,1,0];
+            HAPPY_CAT[11] = [0,1,2,7,7,3,4,4,4,9,6,9,4,4,3,7,7,2,1,0];
+
+            const MOUSE_SPR = [[0,0,0,1,1,1,1,1,0,0,0,0],[0,0,1,2,2,2,2,2,1,0,0,0],[0,1,2,2,3,3,2,2,2,1,0,0],[0,1,2,3,3,3,3,2,2,1,0,0],[1,1,2,2,3,3,2,2,2,1,1,0],[1,2,2,2,2,2,2,2,2,2,1,0],[1,2,2,1,5,5,1,2,2,1,0,0],[0,1,1,6,6,6,6,1,1,1,0,1],[0,0,0,1,1,1,1,1,0,0,1,1],[0,0,0,0,0,0,0,0,0,0,0,1]];
+            const MOUSE_PAL = {0:null,1:'#555',2:'#999',3:'#bbb',5:'#111',6:'#faa'};
+            const DOG_SPR = [[0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,1,3,3,3,3,1,1,0,0,0,0,0,0,0],[0,0,0,0,1,1,3,3,3,3,3,3,1,1,0,0,0,0,0,0],[0,0,0,1,1,3,3,2,2,3,3,3,3,1,1,0,0,0,0,0],[0,0,1,1,3,3,2,2,2,2,3,3,3,3,1,1,0,0,0,0],[0,0,1,3,3,2,2,2,2,2,2,3,3,3,3,1,0,0,0,0],[0,1,1,3,3,2,2,2,2,2,2,3,3,3,3,1,1,0,0,0],[0,1,3,3,2,2,2,2,2,2,2,2,3,3,3,3,1,0,0,0],[1,1,3,3,2,2,2,4,4,2,2,2,3,3,3,3,1,1,0,0],[1,3,3,3,2,2,4,4,4,4,2,2,3,3,3,3,3,1,0,0],[1,3,3,3,2,2,4,5,5,4,2,2,3,3,3,3,3,1,0,0],[0,1,3,3,3,2,2,4,4,2,2,3,3,3,3,3,1,0,0,0],[0,1,1,3,3,3,2,2,2,2,3,3,3,3,3,1,1,0,0,0],[0,0,1,1,3,3,3,3,3,3,3,3,3,3,1,1,0,0,0,0],[0,0,0,1,1,3,3,3,3,3,3,3,3,1,1,0,0,0,0,0],[0,0,1,1,3,1,1,1,1,1,1,1,1,3,1,1,0,0,0,0],[0,0,1,3,3,1,1,0,0,0,0,1,1,3,3,1,0,0,0,0],[0,0,0,1,1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]];
+            const DOG_PAL = {0:null,1:'#3a1f0d',2:'#6b3a1f',3:'#8b5a2b',4:'#fff',5:'#111'};
+            const FISH_SPR = [[0,0,0,0,0,0,0,0,1,1,0,0,0,0],[0,0,0,0,0,0,1,1,2,2,1,0,0,0],[0,0,0,0,1,1,2,2,3,3,2,1,1,0],[0,1,1,1,2,2,2,2,3,3,3,2,2,1],[1,2,2,2,2,2,3,3,3,3,2,2,2,1],[0,1,1,1,2,2,2,2,3,3,3,2,2,1],[0,0,0,0,1,1,2,2,3,3,2,1,1,0],[0,0,0,0,0,0,1,1,2,2,1,0,0,0]];
+            const FISH_PAL = {0:null,1:'#4488cc',2:'#66bbff',3:'#ff9944'};
+            const HEART_SPR = [[0,1,1,0,0,0,0,1,1,0],[1,3,3,1,0,0,1,3,3,1],[1,3,3,3,1,1,3,3,3,1],[0,1,3,3,3,3,3,3,1,0],[0,0,1,3,3,3,3,1,0,0],[0,0,0,1,3,3,1,0,0,0],[0,0,0,0,1,1,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]];
+            const HEART_PAL = {0:null,1:'#c0392b',3:'#e74c3c'};
+
+            // ==================== КЛАССЫ ====================
+            class Player {
+                constructor() { this.x=W/2; this.y=H/2; this.width=40; this.height=40; this.speed=110; this.facingRight=true; this.animTimer=0; this.bobOffset=0; }
+                update(dt) {
+                    let dx=0, dy=0;
+                    if (keys['ArrowLeft']||keys['a']||keys['ф']) dx-=1;
+                    if (keys['ArrowRight']||keys['d']||keys['в']) dx+=1;
+                    if (keys['ArrowUp']||keys['w']||keys['ц']) dy-=1;
+                    if (keys['ArrowDown']||keys['s']||keys['ы']) dy+=1;
+                    if (touchDir.x || touchDir.y) { dx+=touchDir.x; dy+=touchDir.y; }
+                    const mag = Math.hypot(dx,dy);
+                    if (mag>0) { dx/=mag; dy/=mag; if(dx>0.1) this.facingRight=true; if(dx<-0.1) this.facingRight=false; }
+                    this.x += dx*this.speed*dt; this.y += dy*this.speed*dt;
+                    const hw=this.width/2, hh=this.height/2;
+                    if (this.x<hw) this.x=hw; if (this.x>W-hw) this.x=W-hw;
+                    if (this.y<hh) this.y=hh; if (this.y>H-hh) this.y=H-hh;
+                    if (mag>0) { this.animTimer+=dt*12; this.bobOffset=Math.sin(this.animTimer)*2; }
+                    else { this.animTimer=0; this.bobOffset=0; }
+                    if (invincibleTimer>0) invincibleTimer-=dt;
+                }
+                draw(ctx, happy=false) {
+                    if (invincibleTimer>0 && Math.floor(invincibleTimer*20)%2===0 && !happy) return;
+                    const sx=this.x-this.width/2, sy=this.y-this.height/2+this.bobOffset;
+                    const spr = happy ? HAPPY_CAT.map(r=>r.map(c=>CAT_PAL[c]||null)) : CAT_SPR.map(r=>r.map(c=>CAT_PAL[c]||null));
+                    if (poweredUp && gameState===STATE.PLAYING) {
+                        ctx.save(); ctx.shadowColor='#FFD700'; ctx.shadowBlur=10+Math.sin(Date.now()/150)*4;
+                        drawPixelSprite(ctx, spr, sx, sy, 2, !this.facingRight); ctx.restore();
+                    } else drawPixelSprite(ctx, spr, sx, sy, 2, !this.facingRight);
+                }
+                getBounds() { const m=8; return { x:this.x-this.width/2+m, y:this.y-this.height/2+m, w:this.width-m*2, h:this.height-m*2 }; }
+                hit() {
+                    if (poweredUp || invincibleTimer>0) return false;
+                    invincibleTimer=1.6; lives--; shakeTime=0.35; shakeIntensity=6; sfxHurt();
+                    spawnParticles(this.x, this.y, '#ff4444', 18);
+                    if (lives<=0) {
+                        gameState=STATE.GAMEOVER; sfxGameOver();
+                        if (score>bestScore) { bestScore=score; localStorage.setItem('pixelCatBest',bestScore); }
+                    }
+                    return true;
+                }
+            }
+
+            class Mouse {
+                constructor() { this.reset(); }
+                reset() {
+                    const e=Math.floor(Math.random()*4);
+                    switch(e){ case 0: this.x=-20; this.y=Math.random()*H; break; case 1: this.x=W+20; this.y=Math.random()*H; break; case 2: this.x=Math.random()*W; this.y=-20; break; case 3: this.x=Math.random()*W; this.y=H+20; break; }
+                    this.width=24; this.height=20;
+                    let levelSpeedMul = (currentLevel === 3) ? 0.65 : 1.0;
+                    this.speed = (45 + Math.random() * 50 + difficultyLevel * 8) * levelSpeedMul;
+                    this.dirChangeTimer=1+Math.random()*2; this.vx=(Math.random()-0.5)*this.speed; this.vy=(Math.random()-0.5)*this.speed; this.fleeTimer=0;
+                }
+                update(dt, p) {
+                    const dist=Math.hypot(this.x-p.x, this.y-p.y), fleeRange=poweredUp?110:90;
+                    if (dist<fleeRange) this.fleeTimer=0.4;
+                    if (this.fleeTimer>0) {
+                        this.fleeTimer-=dt; const fx=this.x-p.x, fy=this.y-p.y, fdist=Math.hypot(fx,fy)||1, fs=this.speed*1.6;
+                        this.vx+=(fx/fdist)*fs*dt*8; this.vy+=(fy/fdist)*fs*dt*8;
+                    } else {
+                        this.dirChangeTimer-=dt;
+                        if (this.dirChangeTimer<=0) { this.dirChangeTimer=1+Math.random()*2.5; this.vx+=(Math.random()-0.5)*this.speed*1.5; this.vy+=(Math.random()-0.5)*this.speed*1.5; }
+                    }
+                    const ms=this.speed*1.5, sp=Math.hypot(this.vx,this.vy);
+                    if (sp>ms) { this.vx=(this.vx/sp)*ms; this.vy=(this.vy/sp)*ms; }
+                    if (sp<this.speed*0.3 && this.fleeTimer<=0) { this.vx+=(Math.random()-0.5)*this.speed; this.vy+=(Math.random()-0.5)*this.speed; }
+                    this.x+=this.vx*dt; this.y+=this.vy*dt;
+                    const m=15; if(this.x<m){this.x=m; this.vx=Math.abs(this.vx);} if(this.x>W-m){this.x=W-m; this.vx=-Math.abs(this.vx);}
+                    if(this.y<m){this.y=m; this.vy=Math.abs(this.vy);} if(this.y>H-m){this.y=H-m; this.vy=-Math.abs(this.vy);}
+                }
+                draw(ctx) { const sx=this.x-this.width/2, sy=this.y-this.height/2; drawPixelSprite(ctx, MOUSE_SPR.map(r=>r.map(c=>MOUSE_PAL[c]||null)), sx, sy, 2, this.vx<-5); }
+                getBounds() { const m=4; return {x:this.x-this.width/2+m, y:this.y-this.height/2+m, w:this.width-m*2, h:this.height-m*2}; }
+            }
+
+            class Dog {
+                constructor() { this.reset(); }
+                reset() {
+                    const s=Math.floor(Math.random()*4);
+                    switch(s){ case 0: this.x=-30; this.y=Math.random()*H; break; case 1: this.x=W+30; this.y=Math.random()*H; break; case 2: this.x=Math.random()*W; this.y=-30; break; case 3: this.x=Math.random()*W; this.y=H+30; break; }
+                    this.width=40; this.height=36;
+                    let levelSpeedMul = (currentLevel === 3) ? 0.65 : 1.0;
+                    this.speed = (55 + difficultyLevel * 12 + Math.random() * 20) * levelSpeedMul;
+                    this.vx=0; this.vy=0;
+                }
+                update(dt, p) {
+                    const dx=p.x-this.x, dy=p.y-this.y, dist=Math.hypot(dx,dy)||1;
+                    const tvx=(dx/dist)*this.speed, tvy=(dy/dist)*this.speed, lerp=3.5*dt;
+                    this.vx+=(tvx-this.vx)*lerp; this.vy+=(tvy-this.vy)*lerp;
+                    const sp=Math.hypot(this.vx,this.vy), ms=this.speed*1.2;
+                    if (sp>ms) { this.vx=(this.vx/sp)*ms; this.vy=(this.vy/sp)*ms; }
+                    this.x+=this.vx*dt; this.y+=this.vy*dt;
+                    const m=20; if(this.x<-m)this.x=-m; if(this.x>W+m)this.x=W+m; if(this.y<-m)this.y=-m; if(this.y>H+m)this.y=H+m;
+                }
+                draw(ctx) { const sx=this.x-this.width/2, sy=this.y-this.height/2; drawPixelSprite(ctx, DOG_SPR.map(r=>r.map(c=>DOG_PAL[c]||null)), sx, sy, 2, this.vx<-3); }
+                getBounds() { const m=6; return {x:this.x-this.width/2+m, y:this.y-this.height/2+m, w:this.width-m*2, h:this.height-m*2}; }
+            }
+
+            class Fish {
+                constructor() { this.reset(); }
+                reset() { this.x=Math.random()*(W-40)+20; this.y=Math.random()*(H-40)+20; this.width=28; this.height=16; this.vx=(Math.random()-0.5)*50; this.vy=(Math.random()-0.5)*50; this.lifeTimer=12+Math.random()*15; this.bobPhase=Math.random()*Math.PI*2; }
+                update(dt) { this.lifeTimer-=dt; this.bobPhase+=dt*3; this.x+=this.vx*dt; this.y+=this.vy*dt+Math.sin(this.bobPhase)*0.5; if(this.x<5||this.x>W-5) this.vx*=-1; if(this.y<5||this.y>H-5) this.vy*=-1; }
+                draw(ctx) { const sx=this.x-this.width/2, sy=this.y-this.height/2+Math.sin(this.bobPhase)*3; drawPixelSprite(ctx, FISH_SPR.map(r=>r.map(c=>FISH_PAL[c]||null)), sx, sy, 2, this.vx<0); }
+                getBounds() { const m=3; return {x:this.x-this.width/2+m, y:this.y-this.height/2+m, w:this.width-m*2, h:this.height-m*2}; }
+                isExpired() { return this.lifeTimer<=0; }
+            }
+
+            // ==================== ЧАСТИЦЫ ====================
+            function spawnParticles(x,y,color,count=10) { for(let i=0;i<count;i++){ const a=Math.random()*Math.PI*2, s=40+Math.random()*120; particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.4+Math.random()*0.5,maxLife:0.4+Math.random()*0.5,color,size:2+Math.floor(Math.random()*3)}); } }
+            function updateParticles(dt) { for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; if(p.life<=0) particles.splice(i,1); } }
+            function drawParticles(ctx) { for(const p of particles){ ctx.globalAlpha=Math.max(0,p.life/p.maxLife); ctx.fillStyle=p.color; ctx.fillRect(Math.floor(p.x),Math.floor(p.y),p.size,p.size); } ctx.globalAlpha=1; }
+
+            // ==================== КОЛЛИЗИИ И УРОВНИ ====================
+            function rectsOverlap(a,b) { return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+            function checkPowerUp() { if(!poweredUp && score >= 299) { poweredUp=true; sfxPowerUp(); } }
+            function isLevelComplete() {
+                if (gameState !== STATE.PLAYING) return false;
+                // Уничтожение всех собак в супер-режиме — завершение уровня
+                if (poweredUp && dogs.length === 0) return true;
+                if (currentLevel === 1) return score >= 100;
+                if (currentLevel === 2) return score >= 200;
+                if (currentLevel === 3) return score >= 399;   // 4 уровень наступает после 399 очков
+                if (currentLevel === 4) return score >= 500;   // цель 4 уровня — 500 очков
+                return false;
+            }
+            function handleCollisions() {
+                if (!player || gameState!==STATE.PLAYING) return;
+                const pb=player.getBounds();
+                for(let i=mice.length-1;i>=0;i--) if(rectsOverlap(pb,mice[i].getBounds())) { score+=10; sfxCatch(); spawnParticles(mice[i].x,mice[i].y,'#ffff66',8); mice[i].reset(); difficultyLevel=Math.floor(score/50)+1; checkPowerUp(); }
+                for(let i=fishes.length-1;i>=0;i--) if(rectsOverlap(pb,fishes[i].getBounds())) { score+=25; sfxBonus(); spawnParticles(fishes[i].x,fishes[i].y,'#ffaa00',14); fishes.splice(i,1); checkPowerUp(); }
+                if (!poweredUp && invincibleTimer<=0) { for(const d of dogs) if(rectsOverlap(pb,d.getBounds())) { player.hit(); if(gameState===STATE.GAMEOVER) return; break; } }
+                else if (poweredUp) { for(let i=dogs.length-1;i>=0;i--) if(rectsOverlap(pb,dogs[i].getBounds())) { score+=50; sfxBonus(); spawnParticles(dogs[i].x,dogs[i].y,'#ff4444',20); dogs.splice(i,1); checkPowerUp(); break; } }
+            }
+            function spawnManager(dt) {
+                if (gameState!==STATE.PLAYING) return;
+                let maxMice = currentLevel===1 ? 4 : (currentLevel===2 ? 5 : (currentLevel===3 ? 6 : 7));
+                let maxDogs = currentLevel===1 ? 1 : (currentLevel===2 ? 2 : (currentLevel===3 ? (poweredUp ? 0 : 3) : 4));
+                while(mice.length<maxMice) mice.push(new Mouse()); while(mice.length>maxMice) mice.pop();
+                if(!(poweredUp && currentLevel===3)) {
+                    while(dogs.length<maxDogs) dogs.push(new Dog()); while(dogs.length>maxDogs) dogs.pop();
+                }
+                if(fishes.length<2 && Math.random()<dt*0.15) fishes.push(new Fish());
+                for(let i=fishes.length-1;i>=0;i--) if(fishes[i].isExpired()) fishes.splice(i,1);
+            }
+            function goToNextLevel() {
+                if (currentLevel < 4) {
+                    currentLevel++;
+                    levelTransitionTimer=0; levelTransitionMessage='';
+                    mice=[]; dogs=[]; fishes=[]; particles=[]; invincibleTimer=0;
+                    if(player) { player.x=W/2; player.y=H/2; }
+                    generateGrass(currentLevel);
+                    const mm = currentLevel===2 ? 5 : (currentLevel===3 ? 6 : 7);
+                    const md = currentLevel===2 ? 2 : (currentLevel===3 ? 3 : 4);
+                    for(let i=0;i<mm;i++) mice.push(new Mouse());
+                    for(let i=0;i<md;i++) dogs.push(new Dog());
+                    sfxLevelUp();
+                } else {
+                    gameState = STATE.VICTORY;
+                    sfxVictory();
+                    if(score>bestScore){ bestScore=score; localStorage.setItem('pixelCatBest',bestScore); }
+                }
+            }
+
+            // ==================== ОТРИСОВКА ====================
+            function drawBackground(ctx) {
+                const time = performance.now() / 1000;
+                for(const t of grassTiles) {
+                    if (t.rainbow) {
+                        const hue = ((t.phase + time * 40) % 360);
+                        ctx.fillStyle = `hsl(${hue}, 80%, 65%)`;
+                    } else {
+                        ctx.fillStyle = t.color;
+                    }
+                    if (t.isFlower) ctx.fillRect(t.x,t.y,2,2);
+                    else if (t.isCrystal) { ctx.fillRect(t.x+1,t.y,2,1); ctx.fillRect(t.x,t.y+1,4,2); ctx.fillRect(t.x+1,t.y+3,2,1); }
+                    else if (t.isCloud) ctx.fillRect(t.x,t.y,t.cloudW||6,t.cloudH||3);
+                    else ctx.fillRect(t.x,t.y,4,4);
+                }
+                ctx.fillStyle='#5c3a1e';
+                for(let x=0;x<W;x+=12) { ctx.fillRect(x,0,6,4); ctx.fillRect(x,H-4,6,4); }
+                for(let y=0;y<H;y+=12) { ctx.fillRect(0,y,4,6); ctx.fillRect(W-4,y,4,6); }
+            }
+            function drawUI(ctx) {
+                ctx.fillStyle='#1a1a1a'; ctx.fillRect(4,4,130,36);
+                ctx.fillStyle='#ffd700'; ctx.font='bold 11px "Courier New"'; ctx.textAlign='left'; ctx.fillText('🐾 ОЧКИ: '+score,8,20);
+                ctx.fillStyle='#fff'; ctx.font='9px "Courier New"'; ctx.fillText('УРОВЕНЬ: '+currentLevel+'/4',8,34);
+                ctx.fillStyle='#ffa'; ctx.fillText('ЛУЧШЕ: '+bestScore,8,46);
+                if (poweredUp && gameState===STATE.PLAYING) {
+                    const pulse=Math.sin(Date.now()/200)*0.4+0.8;
+                    ctx.fillStyle=`rgba(255,215,0,${pulse})`; ctx.font='bold 13px "Courier New"'; ctx.textAlign='center'; ctx.fillText('⚡СУПЕР-КОТ⚡',W/2,18);
+                }
+                for(let i=0;i<lives;i++) drawPixelSprite(ctx, HEART_SPR.map(r=>r.map(c=>HEART_PAL[c]||null)), W-40-i*28, 6, 1.5, false);
+            }
+            function drawDpad(ctx) {
+                const cx=275,cy=185,r=28; ctx.globalAlpha=0.35;
+                ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(cx,cy,r+8,0,Math.PI*2); ctx.fill();
+                const btnR=11;
+                for(const p of [{dx:0,dy:-r*0.65,l:'▲'},{dx:0,dy:r*0.65,l:'▼'},{dx:-r*0.65,dy:0,l:'◄'},{dx:r*0.65,dy:0,l:'►'}]) {
+                    ctx.fillStyle='#555'; ctx.beginPath(); ctx.arc(cx+p.dx,cy+p.dy,btnR,0,Math.PI*2); ctx.fill();
+                    ctx.fillStyle='#fff'; ctx.font='bold 10px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(p.l, cx+p.dx, cy+p.dy);
+                }
+                ctx.fillStyle='#888'; ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+            }
+            function drawTitleScreen(ctx) {
+                drawBackground(ctx); ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,H/2-70,W,120);
+                ctx.fillStyle='#ff8c00'; ctx.font='bold 28px "Courier New"'; ctx.textAlign='center'; ctx.fillText('ПИКСЕЛЬ-КОТ',W/2+2,H/2-18);
+                ctx.fillStyle='#ffd700'; ctx.fillText('ПИКСЕЛЬ-КОТ',W/2,H/2-20);
+                ctx.fillStyle='#fff'; ctx.font='bold 13px "Courier New"'; ctx.globalAlpha=Math.sin(Date.now()/600)*0.3+0.7;
+                ctx.fillText('НАЖМИ ПРОБЕЛ',W/2,H/2+20); ctx.fillText('ИЛИ КОСНИСЬ ЭКРАНА',W/2,H/2+38); ctx.globalAlpha=1;
+                drawPixelSprite(ctx, CAT_SPR.map(r=>r.map(c=>CAT_PAL[c]||null)), W/2-20, H/2-90+Math.sin(Date.now()/800)*5, 2.5, false);
+                drawPixelSprite(ctx, MOUSE_SPR.map(r=>r.map(c=>MOUSE_PAL[c]||null)), 60+Math.sin(Date.now()/500)*15, H/2-75, 2, false);
+                drawPixelSprite(ctx, MOUSE_SPR.map(r=>r.map(c=>MOUSE_PAL[c]||null)), 240-Math.sin(Date.now()/450)*15, H/2-70, 2, true);
+                if(bestScore>0){ ctx.fillStyle='#ffa'; ctx.font='11px "Courier New"'; ctx.fillText('🏆 РЕКОРД: '+bestScore,W/2,H/2+58); }
+            }
+            function drawGameOverScreen(ctx) {
+                ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+                ctx.fillStyle='#ff4444'; ctx.font='bold 26px "Courier New"'; ctx.textAlign='center'; ctx.fillText('ИГРА ОКОНЧЕНА',W/2+2,H/2-10);
+                ctx.fillStyle='#ff6666'; ctx.fillText('ИГРА ОКОНЧЕНА',W/2,H/2-12);
+                ctx.fillStyle='#fff'; ctx.font='bold 15px "Courier New"'; ctx.fillText('ОЧКИ: '+score,W/2,H/2+28);
+                if(score>=bestScore&&score>0) { ctx.fillStyle='#ffd700'; ctx.fillText('🌟 НОВЫЙ РЕКОРД! 🌟',W/2,H/2+48); }
+                else { ctx.fillStyle='#aaa'; ctx.fillText('РЕКОРД: '+bestScore,W/2,H/2+48); }
+                ctx.fillStyle='#ffa'; ctx.globalAlpha=Math.sin(Date.now()/500)*0.3+0.7; ctx.font='bold 12px "Courier New"'; ctx.fillText('ПРОБЕЛ — ИГРАТЬ СНОВА',W/2,H/2+72); ctx.globalAlpha=1;
+            }
+            function drawVictoryScreen(ctx) {
+                ctx.fillStyle='#0a0a2e'; ctx.fillRect(0,0,W,H);
+                const now=performance.now()/1000;
+                for(const s of stars) { ctx.fillStyle=`rgba(255,255,255,${0.5+0.5*Math.sin(now*s.speed+s.phase)})`; ctx.fillRect(s.x,s.y,s.size,s.size); }
+                ctx.save(); ctx.shadowColor='#FFD700'; ctx.shadowBlur=25+Math.sin(now*3)*10;
+                drawPixelSprite(ctx, HAPPY_CAT.map(r=>r.map(c=>CAT_PAL[c]||null)), W/2-30, H/2-60+Math.sin(now*2)*4, 3, false); ctx.restore();
+                ctx.fillStyle='#FFD700'; ctx.font='bold 30px "Courier New"'; ctx.textAlign='center'; ctx.fillText('ПОБЕДА!',W/2,H/2+40);
+                ctx.fillStyle='#fff'; ctx.font='bold 14px "Courier New"'; ctx.fillText('СЧАСТЛИВЫЙ КОТ',W/2,H/2+62); ctx.fillText('ОЧКИ: '+score,W/2,H/2+82);
+                if(score>=bestScore&&score>0) { ctx.fillStyle='#ffd700'; ctx.fillText('🌟 НОВЫЙ РЕКОРД! 🌟',W/2,H/2+100); }
+                ctx.fillStyle='#fff'; ctx.globalAlpha=0.6+Math.sin(now*5)*0.3; ctx.font='bold 12px "Courier New"'; ctx.fillText('ПРОБЕЛ — ИГРАТЬ СНОВА',W/2,H/2+122); ctx.globalAlpha=1;
+            }
+            function drawLevelTransition(ctx) {
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,H/2-30,W,60);
+                ctx.fillStyle='#FFD700'; ctx.font='bold 22px "Courier New"'; ctx.textAlign='center'; ctx.fillText(levelTransitionMessage,W/2,H/2+8);
+            }
+
+            // ==================== ГЛАВНЫЙ ЦИКЛ ====================
+            let lastTime=performance.now();
+            function gameLoop(ts) {
+                let dt=(ts-lastTime)/1000; if(dt<=0) dt=0.016; if(dt>0.15) dt=0.15; lastTime=ts;
+
+                if (gameState===STATE.PLAYING) {
+                    if(player) player.update(dt);
+                    for(const m of mice) m.update(dt,player);
+                    for(const d of dogs) d.update(dt,player);
+                    for(const f of fishes) f.update(dt);
+                    updateParticles(dt);
+                    if(shakeTime>0) shakeTime-=dt;
+                    handleCollisions();
+                    if(gameState===STATE.PLAYING) {
+                        spawnManager(dt);
+                        if(levelTransitionTimer<=0 && isLevelComplete()) {
+                            if(currentLevel < 4) {
+                                levelTransitionTimer=2.0; levelTransitionMessage='УРОВЕНЬ '+currentLevel+' ПРОЙДЕН!'; sfxLevelUp();
+                            } else if (currentLevel === 4) {
+                                goToNextLevel();
+                            }
+                        }
+                        if(levelTransitionTimer>0) { levelTransitionTimer-=dt; if(levelTransitionTimer<=0 && currentLevel<4) goToNextLevel(); }
+                    }
+                }
+
+                ctx.clearRect(0,0,W,H);
+                let sx=0,sy=0;
+                if(shakeTime>0 && shakeIntensity>0) { const decay=shakeTime/0.35; sx=(Math.random()-0.5)*shakeIntensity*decay*2; sy=(Math.random()-0.5)*shakeIntensity*decay*2; }
+                ctx.save(); ctx.translate(sx,sy);
+
+                if(gameState===STATE.TITLE) drawTitleScreen(ctx);
+                else if(gameState===STATE.VICTORY) drawVictoryScreen(ctx);
+                else {
+                    drawBackground(ctx);
+                    for(const f of fishes) f.draw(ctx);
+                    for(const m of mice) m.draw(ctx);
+                    for(const d of dogs) d.draw(ctx);
+                    if(player) player.draw(ctx);
+                    drawParticles(ctx); drawUI(ctx);
+                    if('ontouchstart' in window || navigator.maxTouchPoints>0) drawDpad(ctx);
+                    if(gameState===STATE.GAMEOVER) drawGameOverScreen(ctx);
+                    if(levelTransitionTimer>0 && gameState===STATE.PLAYING) drawLevelTransition(ctx);
+                }
+                ctx.restore();
+
+                if(gameState===STATE.PLAYING && invincibleTimer>0 && player && !poweredUp) {
+                    ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(player.x,player.y,player.width/2+4,0,Math.PI*2); ctx.fill();
+                }
+                requestAnimationFrame(gameLoop);
+            }
+
+            function startGame() {
+                initAudio(); gameState=STATE.PLAYING; score=0; lives=3; currentLevel=1; difficultyLevel=1; invincibleTimer=0; poweredUp=false; shakeTime=0; shakeIntensity=0; levelTransitionTimer=0; levelTransitionMessage='';
+                player=new Player(); mice=[]; dogs=[]; fishes=[]; particles=[];
+                generateGrass(1);
+                for(let i=0;i<4;i++) mice.push(new Mouse()); for(let i=0;i<1;i++) dogs.push(new Dog());
+            }
+            function resetAndStart() { startGame(); }
+            function init() {
+                generateStars(); generateGrass(1);
+                player=new Player(); mice=[]; dogs=[]; fishes=[]; for(let i=0;i<3;i++) mice.push(new Mouse());
+                gameState=STATE.TITLE; lastTime=performance.now(); requestAnimationFrame(gameLoop);
+            }
+            init();
+            console.log('🐱 Пиксель-Кот: 4 уровня! 4 уровень после 399 очков. Цель 4 уровня — 500 очков!');
+        })();
+    </script>
+</body>
+</html>
