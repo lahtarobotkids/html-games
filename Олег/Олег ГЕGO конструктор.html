@@ -488,7 +488,8 @@
             ⌨️ <kbd>R</kbd> — режим удаления<br>
             ⌨️ <kbd>Del</kbd> — удалить блок<br>
             ⌨️ <kbd>1-5</kbd> — тип блока<br>
-            ⌨️ <kbd>C</kbd> — сменить цвет
+            ⌨️ <kbd>C</kbd> — сменить цвет<br>
+            ⌨️ <kbd>Q</kbd> / <kbd>E</kbd> — повернуть блок
         </div>
     </div>
 
@@ -570,6 +571,20 @@
         let isRightDragging = false;
         let mouseMoved = false;
         let mouseDownPos = { x: 0, y: 0 };
+        let currentRotation = 0; // 0 | 90 | 180 | 270 — поворот вокруг вертикальной оси (Y)
+        let lastGhostWorld = null; // последняя точка под курсором, для обновления призрака при повороте
+
+        function getRotatedDims(width, depth, rotationDeg) {
+            const norm = ((rotationDeg % 360) + 360) % 360;
+            return (norm === 90 || norm === 270) ? { width: depth, depth: width } : { width, depth };
+        }
+
+        function rotateCurrent(stepDeg) {
+            currentRotation = ((currentRotation + stepDeg) % 360 + 360) % 360;
+            if (lastGhostWorld) {
+                updateGhostPosition(lastGhostWorld.x, lastGhostWorld.z);
+            }
+        }
 
         // ==================== THREE.JS НАСТРОЙКА ====================
         const scene = new THREE.Scene();
@@ -891,14 +906,16 @@
             }
         }
 
-        function createBlockMesh(gridX, gridZ, width, depth, colorHex, bottomY, shape = 'brick', heightUnits = 1) {
-            const group = createBlockMeshForType({ width, depth, shape, heightUnits }, colorHex);
+        function createBlockMesh(gridX, gridZ, baseWidth, baseDepth, colorHex, bottomY, shape = 'brick', heightUnits = 1, rotation = 0) {
+            const group = createBlockMeshForType({ width: baseWidth, depth: baseDepth, shape, heightUnits }, colorHex);
             const H = BLOCK_HEIGHT * heightUnits;
+            const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
             const centerX = gridX + width / 2;
             const centerZ = gridZ + depth / 2;
             const centerY = bottomY;
             group.position.set(centerX, centerY, centerZ);
-            group.userData = { isBlock: true, gridX, gridZ, width, depth, colorHex, bottomY, topY: bottomY + H, shape, heightUnits };
+            group.rotation.y = rotation * Math.PI / 180;
+            group.userData = { isBlock: true, gridX, gridZ, width, depth, baseWidth, baseDepth, rotation, colorHex, bottomY, topY: bottomY + H, shape, heightUnits };
             return group;
         }
 
@@ -1139,33 +1156,38 @@
             }
         }
 
-        function createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY) {
+        function createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY, rotation = 0) {
             const group = createFigureMeshForType(figureType, colorHex);
-            const { width, depth, figHeight, key } = figureType;
+            const { width: baseWidth, depth: baseDepth, figHeight, key } = figureType;
+            const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
             const centerX = gridX + width / 2;
             const centerZ = gridZ + depth / 2;
             const centerY = bottomY;
             group.position.set(centerX, centerY, centerZ);
-            group.userData = { isBlock: true, isFigure: true, kind: 'figure', figureType: key, gridX, gridZ, width, depth, colorHex, bottomY, topY: bottomY + figHeight, figHeight };
+            group.rotation.y = rotation * Math.PI / 180;
+            group.userData = { isBlock: true, isFigure: true, kind: 'figure', figureType: key, gridX, gridZ, width, depth, baseWidth, baseDepth, rotation, colorHex, bottomY, topY: bottomY + figHeight, figHeight };
             return group;
         }
 
         // ==================== УПРАВЛЕНИЕ БЛОКАМИ ====================
         function placeBlock(gridX, gridZ) {
             const blockType = BLOCK_TYPES[selectedBlockTypeIndex];
-            const { width, depth } = blockType;
+            const baseWidth = blockType.width;
+            const baseDepth = blockType.depth;
             const shape = blockType.shape || 'brick';
             const heightUnits = blockType.heightUnits || 1;
             const H = BLOCK_HEIGHT * heightUnits;
+            const rotation = currentRotation;
+            const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
             const clamped = clampGridOrigin(gridX, gridZ, width, depth);
             const gx = clamped.gx;
             const gz = clamped.gz;
             const bottomY = getMaxHeightForBlock(gx, gz, width, depth);
             const topY = bottomY + H;
 
-            const blockGroup = createBlockMesh(gx, gz, width, depth, selectedColor, bottomY, shape, heightUnits);
+            const blockGroup = createBlockMesh(gx, gz, baseWidth, baseDepth, selectedColor, bottomY, shape, heightUnits, rotation);
             scene.add(blockGroup);
-            placedBlocks.push({ mesh: blockGroup, gridX: gx, gridZ: gz, width, depth, colorHex: selectedColor, bottomY, topY, shape, heightUnits });
+            placedBlocks.push({ mesh: blockGroup, gridX: gx, gridZ: gz, width, depth, baseWidth, baseDepth, rotation, colorHex: selectedColor, bottomY, topY, shape, heightUnits });
 
             for (let dx = 0; dx < width; dx++) {
                 for (let dz = 0; dz < depth; dz++) {
@@ -1182,16 +1204,18 @@
 
         function placeFigure(gridX, gridZ) {
             const figureType = FIGURE_TYPES[selectedFigureTypeIndex];
-            const { width, depth, figHeight } = figureType;
+            const { width: baseWidth, depth: baseDepth, figHeight } = figureType;
+            const rotation = currentRotation;
+            const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
             const clamped = clampGridOrigin(gridX, gridZ, width, depth);
             const gx = clamped.gx;
             const gz = clamped.gz;
             const bottomY = getMaxHeightForBlock(gx, gz, width, depth);
             const topY = bottomY + figHeight;
 
-            const figureGroup = createFigureMesh(gx, gz, figureType, selectedColor, bottomY);
+            const figureGroup = createFigureMesh(gx, gz, figureType, selectedColor, bottomY, rotation);
             scene.add(figureGroup);
-            placedBlocks.push({ mesh: figureGroup, gridX: gx, gridZ: gz, width, depth, colorHex: selectedColor, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
+            placedBlocks.push({ mesh: figureGroup, gridX: gx, gridZ: gz, width, depth, baseWidth, baseDepth, rotation, colorHex: selectedColor, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
 
             for (let dx = 0; dx < width; dx++) {
                 for (let dz = 0; dz < depth; dz++) {
@@ -1339,9 +1363,10 @@
 
         function updateGhostPosition(worldX, worldZ) {
             if (!ghostGroup) return;
+            lastGhostWorld = { x: worldX, z: worldZ };
             const isFigure = placementKind === 'figure';
             const activeType = isFigure ? FIGURE_TYPES[selectedFigureTypeIndex] : BLOCK_TYPES[selectedBlockTypeIndex];
-            const { width, depth } = activeType;
+            const { width, depth } = getRotatedDims(activeType.width, activeType.depth, currentRotation);
             const snapped = snapWorldToGridOrigin(worldX, worldZ, width, depth);
             const gx = snapped.gx;
             const gz = snapped.gz;
@@ -1357,6 +1382,7 @@
             ghostValid = true;
 
             ghostGroup.position.set(centerX, centerY, centerZ);
+            ghostGroup.rotation.y = currentRotation * Math.PI / 180;
             ghostGroup.visible = true;
             const variants = ghostGroup.userData.variants;
             const figureVariants = ghostGroup.userData.figureVariants;
@@ -1475,7 +1501,8 @@
                     if (intersect && intersect.point) {
                         const isFigure = placementKind === 'figure';
                         const activeType = isFigure ? FIGURE_TYPES[selectedFigureTypeIndex] : BLOCK_TYPES[selectedBlockTypeIndex];
-                        const snapped = snapWorldToGridOrigin(intersect.point.x, intersect.point.z, activeType.width, activeType.depth);
+                        const { width: rw, depth: rd } = getRotatedDims(activeType.width, activeType.depth, currentRotation);
+                        const snapped = snapWorldToGridOrigin(intersect.point.x, intersect.point.z, rw, rd);
                         if (isFigure) {
                             placeFigure(snapped.gx, snapped.gz);
                         } else {
@@ -1529,6 +1556,14 @@
             if (key === 'c') {
                 cycleColor();
                 showToast('Цвет: ' + selectedColor);
+            }
+            if (key === 'q') {
+                rotateCurrent(-90);
+                showToast('Поворот: ' + currentRotation + '°');
+            }
+            if (key === 'e') {
+                rotateCurrent(90);
+                showToast('Поворот: ' + currentRotation + '°');
             }
             if (key >= '1' && key <= '5') {
                 const index = parseInt(key) - 1;
@@ -1605,6 +1640,9 @@
                     gridZ: b.gridZ,
                     width: b.width,
                     depth: b.depth,
+                    baseWidth: b.baseWidth ?? b.width,
+                    baseDepth: b.baseDepth ?? b.depth,
+                    rotation: b.rotation || 0,
                     colorHex: b.colorHex,
                     bottomY: b.bottomY,
                     shape: b.shape || 'brick',
@@ -1646,24 +1684,30 @@
                 const gridZ = b.gridZ || 0;
                 const colorHex = b.colorHex || COLORS[0];
 
+                const rotation = b.rotation || 0;
+
                 if (b.kind === 'figure') {
                     const figureType = FIGURE_TYPES.find(ft => ft.key === b.figureType) || FIGURE_TYPES[0];
-                    const { width, depth, figHeight } = figureType;
+                    const baseWidth = b.baseWidth ?? figureType.width;
+                    const baseDepth = b.baseDepth ?? figureType.depth;
+                    const { figHeight } = figureType;
+                    const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
                     const bottomY = typeof b.bottomY === 'number' ? b.bottomY : getMaxHeightForBlock(gridX, gridZ, width, depth);
                     const topY = bottomY + figHeight;
-                    const figureGroup = createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY);
+                    const figureGroup = createFigureMesh(gridX, gridZ, figureType, colorHex, bottomY, rotation);
                     scene.add(figureGroup);
-                    placedBlocks.push({ mesh: figureGroup, gridX, gridZ, width, depth, colorHex, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
+                    placedBlocks.push({ mesh: figureGroup, gridX, gridZ, width, depth, baseWidth, baseDepth, rotation, colorHex, bottomY, topY, kind: 'figure', figureType: figureType.key, figHeight });
                 } else {
-                    const width = b.width || 1;
-                    const depth = b.depth || 1;
+                    const baseWidth = b.baseWidth ?? b.width ?? 1;
+                    const baseDepth = b.baseDepth ?? b.depth ?? 1;
+                    const { width, depth } = getRotatedDims(baseWidth, baseDepth, rotation);
                     const bottomY = typeof b.bottomY === 'number' ? b.bottomY : getMaxHeightForBlock(gridX, gridZ, width, depth);
                     const shape = b.shape || 'brick';
                     const heightUnits = b.heightUnits || 1;
                     const topY = bottomY + BLOCK_HEIGHT * heightUnits;
-                    const blockGroup = createBlockMesh(gridX, gridZ, width, depth, colorHex, bottomY, shape, heightUnits);
+                    const blockGroup = createBlockMesh(gridX, gridZ, baseWidth, baseDepth, colorHex, bottomY, shape, heightUnits, rotation);
                     scene.add(blockGroup);
-                    placedBlocks.push({ mesh: blockGroup, gridX, gridZ, width, depth, colorHex, bottomY, topY, shape, heightUnits, kind: 'block', figureType: null });
+                    placedBlocks.push({ mesh: blockGroup, gridX, gridZ, width, depth, baseWidth, baseDepth, rotation, colorHex, bottomY, topY, shape, heightUnits, kind: 'block', figureType: null });
                 }
             }
             rebuildHeightMap();
