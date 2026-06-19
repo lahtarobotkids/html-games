@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💣 Спецназ: Прыжок через бомбы</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .game-wrapper {
+            position: relative;
+            background: #f7f7f7;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 4px #333;
+            overflow: hidden;
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+        canvas {
+            display: block;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #535353;
+            font-size: 13px;
+            letter-spacing: 2px;
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .instructions span {
+            display: inline-block;
+            background: #e0e0e0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin: 0 3px;
+            font-weight: bold;
+            color: #333;
+            border: 2px solid #ccc;
+        }
+        @media (max-width: 600px) {
+            .instructions {
+                font-size: 10px;
+                bottom: 10px;
+                letter-spacing: 1px;
+            }
+            .instructions span {
+                padding: 3px 7px;
+                margin: 0 1px;
+            }
+            .game-wrapper {
+                border-radius: 8px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 3px #333;
+            }
+            canvas {
+                border-radius: 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div class="instructions" id="instructions">
+            <span>ПРОБЕЛ</span> или <span>↑</span> — прыжок &nbsp;|&nbsp;
+            <span>КЛИК</span> — прыжок
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const instructionsEl = document.getElementById('instructions');
+
+            // Адаптивный размер канваса
+            const BASE_WIDTH = 800;
+            const BASE_HEIGHT = 350;
+            let scale = 1;
+
+            function resizeCanvas() {
+                const maxWidth = Math.min(window.innerWidth - 20, 800);
+                const maxHeight = Math.min(window.innerHeight - 40, 350);
+                scale = Math.min(maxWidth / BASE_WIDTH, maxHeight / BASE_HEIGHT, 1.2);
+                canvas.width = Math.floor(BASE_WIDTH * scale);
+                canvas.height = Math.floor(BASE_HEIGHT * scale);
+            }
+
+            resizeCanvas();
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                updateScaledValues();
+            });
+
+            // Масштабируемые значения
+            let groundY, soldierX, soldierWidth, soldierHeight, groundHeight;
+            let gravity, jumpForce;
+
+            function updateScaledValues() {
+                groundHeight = Math.floor(40 * scale);
+                groundY = canvas.height - groundHeight;
+                soldierX = Math.floor(80 * scale);
+                soldierWidth = Math.floor(40 * scale);
+                soldierHeight = Math.floor(60 * scale);
+                gravity = 0.7 * scale;
+                jumpForce = -13 * scale;
+            }
+            updateScaledValues();
+
+            // ==================== СОСТОЯНИЯ ИГРЫ ====================
+            const STATE = {
+                IDLE: 'idle',
+                RUNNING: 'running',
+                JUMPING: 'jumping',
+                GAME_OVER: 'gameOver',
+            };
+
+            let gameState = STATE.IDLE;
+            let score = 0;
+            let highScore = parseInt(localStorage.getItem('specnazHighScore')) || 0;
+            let gameSpeed = 5 * scale;
+            const BASE_SPEED = 5 * scale;
+            const MAX_SPEED = 12 * scale;
+            let frameCount = 0;
+            let obstacles = [];
+            let particles = [];
+            let groundOffset = 0;
+            let difficultyLevel = 1;
+            let obstacleTimer = 0;
+            let minObstacleInterval = 70;
+
+            // ==================== СОЛДАТ (СПЕЦНАЗ) ====================
+            const soldier = {
+                x: soldierX,
+                y: groundY - soldierHeight,
+                width: soldierWidth,
+                height: soldierHeight,
+                vy: 0,
+                isJumping: false,
+                legFrame: 0,
+                eyeBlinkTimer: 0,
+                blinkFrame: 0,
+            };
+
+            function resetSoldier() {
+                soldier.y = groundY - soldier.height;
+                soldier.vy = 0;
+                soldier.isJumping = false;
+                soldier.legFrame = 0;
+                soldier.eyeBlinkTimer = 0;
+                soldier.blinkFrame = 0;
+            }
+
+            // ==================== БОМБЫ (препятствия) ====================
+            function createBomb() {
+                const types = ['grenade', 'mine', 'bigbomb', 'spikemine'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                let width, height;
+
+                switch (type) {
+                    case 'grenade':
+                        width = Math.floor(22 * scale);
+                        height = Math.floor(30 * scale);
+                        break;
+                    case 'mine':
+                        width = Math.floor(32 * scale);
+                        height = Math.floor(18 * scale);
+                        break;
+                    case 'bigbomb':
+                        width = Math.floor(38 * scale);
+                        height = Math.floor(48 * scale);
+                        break;
+                    case 'spikemine':
+                        width = Math.floor(36 * scale);
+                        height = Math.floor(26 * scale);
+                        break;
+                }
+
+                return {
+                    type: 'bomb',
+                    bombType: type,
+                    x: canvas.width + Math.random() * 100 * scale,
+                    y: groundY - height,
+                    width: width,
+                    height: height,
+                    passed: false,
+                    fuseAngle: Math.random() * Math.PI * 2, // для анимации фитиля
+                };
+            }
+
+            // ==================== ЧАСТИЦЫ ====================
+            function spawnParticles(x, y, count, color) {
+                for (let i = 0; i < count; i++) {
+                    particles.push({
+                        x: x,
+                        y: y,
+                        vx: (Math.random() - 0.5) * 4 * scale,
+                        vy: (Math.random() - 1) * 6 * scale,
+                        life: 25 + Math.random() * 20,
+                        maxLife: 45,
+                        size: 2 + Math.random() * 4 * scale,
+                        color: color,
+                    });
+                }
+            }
+
+            // ==================== ОТРИСОВКА ====================
+            function drawGround() {
+                // Основная земля
+                ctx.fillStyle = '#8b7d6b';
+                ctx.fillRect(0, groundY, canvas.width, groundHeight);
+
+                // Линия поверхности
+                ctx.strokeStyle = '#4a3f35';
+                ctx.lineWidth = Math.max(1, 2 * scale);
+                ctx.beginPath();
+                ctx.moveTo(0, groundY);
+                ctx.lineTo(canvas.width, groundY);
+                ctx.stroke();
+
+                // Камешки и выбоины
+                ctx.fillStyle = '#6b5e4f';
+                const rockSpacing = Math.floor(35 * scale);
+                for (let x = -groundOffset % rockSpacing; x < canvas.width; x += rockSpacing) {
+                    const rx = x + Math.sin(x * 0.3) * 8 * scale;
+                    const ry = groundY + Math.floor(12 * scale) + Math.cos(x * 0.7) * 5 * scale;
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, Math.floor(3 * scale), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function drawSoldier() {
+                const x = soldier.x;
+                const y = soldier.y;
+                const w = soldier.width;
+                const h = soldier.height;
+                const isJumping = soldier.isJumping;
+
+                ctx.save();
+
+                // Тень
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(x + w/2, groundY - Math.floor(2*scale), w*0.5, Math.floor(4*scale), 0, 0, Math.PI*2);
+                ctx.fill();
+
+                // Ноги (анимация бега)
+                ctx.fillStyle = '#2c3e2c'; // темно-зеленый камуфляж
+                const legWidth = Math.floor(7 * scale);
+                const legHeight = Math.floor(18 * scale);
+                const legY = y + h - legHeight;
+
+                if (isJumping) {
+                    // Поджатые ноги
+                    ctx.fillRect(x + w*0.2, legY + Math.floor(6*scale), legWidth, legHeight*0.6);
+                    ctx.fillRect(x + w*0.55, legY + Math.floor(6*scale), legWidth, legHeight*0.6);
+                } else {
+                    const legOffset = Math.sin(soldier.legFrame * 0.35) * Math.floor(5*scale);
+                    ctx.fillRect(x + w*0.2, legY + Math.abs(legOffset), legWidth, legHeight - Math.abs(legOffset)*0.5);
+                    ctx.fillRect(x + w*0.55, legY + Math.abs(-legOffset), legWidth, legHeight - Math.abs(-legOffset)*0.5);
+                    // Ботинки
+                    ctx.fillStyle = '#1a1a1a';
+                    ctx.fillRect(x + w*0.18, legY + legHeight - Math.floor(5*scale) + Math.abs(legOffset)*0.4, legWidth+2, Math.floor(5*scale));
+                    ctx.fillRect(x + w*0.53, legY + legHeight - Math.floor(5*scale) + Math.abs(-legOffset)*0.4, legWidth+2, Math.floor(5*scale));
+                    ctx.fillStyle = '#2c3e2c';
+                }
+
+                // Тело (бронежилет)
+                ctx.fillStyle = '#3b4a3b';
+                ctx.beginPath();
+                ctx.roundRect(x + w*0.15, y + h*0.25, w*0.7, h*0.45, Math.floor(6*scale));
+                ctx.fill();
+                // Разгрузка
+                ctx.fillStyle = '#5c6e4a';
+                ctx.fillRect(x + w*0.2, y + h*0.3, w*0.6, h*0.15);
+                ctx.fillStyle = '#4a5a3a';
+                ctx.fillRect(x + w*0.35, y + h*0.28, w*0.3, h*0.08);
+
+                // Руки
+                ctx.fillStyle = '#2c3e2c';
+                const armW = Math.floor(6*scale);
+                const armH = Math.floor(16*scale);
+                ctx.fillRect(x + w*0.05, y + h*0.35, armW, armH);
+                ctx.fillRect(x + w*0.75, y + h*0.35, armW, armH);
+                // Перчатки
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(x + w*0.04, y + h*0.48, armW+2, Math.floor(4*scale));
+                ctx.fillRect(x + w*0.74, y + h*0.48, armW+2, Math.floor(4*scale));
+
+                // Голова (шлем)
+                ctx.fillStyle = '#3b4a3b';
+                ctx.beginPath();
+                ctx.ellipse(x + w*0.5, y + h*0.2, w*0.22, h*0.18, 0, 0, Math.PI*2);
+                ctx.fill();
+                // Шлем (каска)
+                ctx.fillStyle = '#4a5a3a';
+                ctx.beginPath();
+                ctx.arc(x + w*0.5, y + h*0.15, w*0.24, Math.PI, 0);
+                ctx.fill();
+                // Забрало/очки
+                ctx.fillStyle = '#111';
+                ctx.fillRect(x + w*0.38, y + h*0.13, w*0.24, Math.floor(5*scale));
+                // Глаза
+                const eyeX = x + w*0.5;
+                const eyeY = y + h*0.18;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(eyeX - Math.floor(3*scale), eyeY, Math.floor(3*scale), 0, Math.PI*2);
+                ctx.arc(eyeX + Math.floor(3*scale), eyeY, Math.floor(3*scale), 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(eyeX - Math.floor(2*scale), eyeY, Math.floor(1.5*scale), 0, Math.PI*2);
+                ctx.arc(eyeX + Math.floor(4*scale), eyeY, Math.floor(1.5*scale), 0, Math.PI*2);
+                ctx.fill();
+
+                // Моргание (забрало темнеет)
+                if (soldier.blinkFrame > 0 && soldier.blinkFrame < 4) {
+                    ctx.fillStyle = '#3b4a3b';
+                    ctx.fillRect(x + w*0.38, y + h*0.13, w*0.24, Math.floor(5*scale));
+                }
+
+                // Оружие на спине или в руке (упрощенно)
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(x + w*0.78, y + h*0.22, Math.floor(4*scale), Math.floor(20*scale));
+                ctx.fillStyle = '#444';
+                ctx.fillRect(x + w*0.76, y + h*0.42, Math.floor(8*scale), Math.floor(4*scale));
+
+                ctx.restore();
+            }
+
+            function drawBomb(obs) {
+                const x = obs.x;
+                const y = obs.y;
+                const w = obs.width;
+                const h = obs.height;
+                const type = obs.bombType;
+
+                ctx.save();
+                ctx.translate(x + w/2, y + h/2);
+
+                if (type === 'grenade') {
+                    // Граната
+                    ctx.fillStyle = '#3a4a3a';
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#5c6e4a';
+                    ctx.beginPath();
+                    ctx.arc(0, -h*0.2, w*0.1, 0, Math.PI*2);
+                    ctx.fill();
+                    // Фитиль
+                    ctx.strokeStyle = '#8b5a2b';
+                    ctx.lineWidth = Math.floor(2*scale);
+                    ctx.beginPath();
+                    ctx.moveTo(0, -h*0.3);
+                    ctx.quadraticCurveTo(w*0.2, -h*0.5, w*0.1, -h*0.55);
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                } else if (type === 'mine') {
+                    // Противопехотная мина
+                    ctx.fillStyle = '#4a5a3a';
+                    ctx.beginPath();
+                    ctx.ellipse(0, h*0.1, w*0.4, h*0.25, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#6b7b4a';
+                    ctx.beginPath();
+                    ctx.arc(0, -h*0.1, w*0.25, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#d4a017';
+                    ctx.beginPath();
+                    ctx.arc(0, -h*0.1, w*0.08, 0, Math.PI*2);
+                    ctx.fill();
+                } else if (type === 'bigbomb') {
+                    // Большая авиабомба
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.beginPath();
+                    ctx.ellipse(0, h*0.05, w*0.4, h*0.45, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#c0392b';
+                    ctx.beginPath();
+                    ctx.ellipse(0, -h*0.15, w*0.2, h*0.15, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    // Стабилизатор
+                    ctx.fillStyle = '#555';
+                    ctx.beginPath();
+                    ctx.moveTo(-w*0.35, -h*0.35);
+                    ctx.lineTo(-w*0.45, -h*0.5);
+                    ctx.lineTo(-w*0.25, -h*0.35);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(w*0.35, -h*0.35);
+                    ctx.lineTo(w*0.45, -h*0.5);
+                    ctx.lineTo(w*0.25, -h*0.35);
+                    ctx.fill();
+                } else if (type === 'spikemine') {
+                    // Мина с шипами
+                    ctx.fillStyle = '#3a4a3a';
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, w*0.35, h*0.35, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#c0392b';
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i/6)*Math.PI*2 + obs.fuseAngle;
+                        const sx = Math.cos(angle)*w*0.4;
+                        const sy = Math.sin(angle)*h*0.4;
+                        ctx.beginPath();
+                        ctx.moveTo(0,0);
+                        ctx.lineTo(sx, sy);
+                        ctx.lineTo(sx*0.7 + Math.cos(angle+0.3)*w*0.1, sy*0.7 + Math.sin(angle+0.3)*h*0.1);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, w*0.12, 0, Math.PI*2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+
+                // Мерцание фитиля у гранаты
+                if (type === 'grenade' && Math.random() < 0.3 && frameCount % 6 < 3) {
+                    ctx.fillStyle = '#ff9900';
+                    ctx.beginPath();
+                    ctx.arc(x + w*0.55, y + h*0.15, Math.floor(3*scale), 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            function drawParticles() {
+                for (const p of particles) {
+                    const alpha = p.life / p.maxLife;
+                    ctx.fillStyle = p.color.replace('1)', `${alpha})`).replace('rgb', 'rgba');
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            function drawScore() {
+                ctx.fillStyle = '#535353';
+                ctx.font = `bold ${Math.floor(20*scale)}px 'Courier New', monospace`;
+                ctx.textAlign = 'right';
+                ctx.fillText(`СЧЁТ: ${Math.floor(score)}`, canvas.width - Math.floor(25*scale), Math.floor(35*scale));
+
+                ctx.fillStyle = '#999';
+                ctx.font = `${Math.floor(13*scale)}px 'Courier New', monospace`;
+                ctx.fillText(`РЕКОРД: ${Math.floor(highScore)}`, canvas.width - Math.floor(25*scale), Math.floor(55*scale));
+            }
+
+            function drawGameOverScreen() {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const boxW = Math.floor(320*scale);
+                const boxH = Math.floor(180*scale);
+                const boxX = canvas.width/2 - boxW/2;
+                const boxY = canvas.height/2 - boxH/2;
+
+                ctx.fillStyle = '#fff';
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = Math.floor(3*scale);
+                ctx.beginPath();
+                ctx.roundRect(boxX, boxY, boxW, boxH, Math.floor(16*scale));
+                ctx.fill();
+                ctx.stroke();
+                ctx.lineWidth = 1;
+
+                ctx.fillStyle = '#333';
+                ctx.font = `bold ${Math.floor(26*scale)}px 'Courier New', monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText('💥 МИССИЯ ПРОВАЛЕНА', canvas.width/2, boxY + Math.floor(45*scale));
+
+                ctx.fillStyle = '#555';
+                ctx.font = `${Math.floor(18*scale)}px 'Courier New', monospace`;
+                ctx.fillText(`Счёт: ${Math.floor(score)}`, canvas.width/2, boxY + Math.floor(80*scale));
+
+                if (Math.floor(score) >= Math.floor(highScore) && score > 0) {
+                    ctx.fillStyle = '#c0392b';
+                    ctx.font = `bold ${Math.floor(16*scale)}px 'Courier New', monospace`;
+                    ctx.fillText('🏆 НОВЫЙ РЕКОРД! 🏆', canvas.width/2, boxY + Math.floor(108*scale));
+                } else {
+                    ctx.fillStyle = '#888';
+                    ctx.font = `${Math.floor(14*scale)}px 'Courier New', monospace`;
+                    ctx.fillText(`Рекорд: ${Math.floor(highScore)}`, canvas.width/2, boxY + Math.floor(105*scale));
+                }
+
+                const btnW = Math.floor(180*scale);
+                const btnH = Math.floor(40*scale);
+                const btnX = canvas.width/2 - btnW/2;
+                const btnY = boxY + Math.floor(120*scale);
+
+                ctx.fillStyle = '#c0392b';
+                ctx.beginPath();
+                ctx.roundRect(btnX, btnY, btnW, btnH, Math.floor(20*scale));
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${Math.floor(15*scale)}px 'Courier New', monospace`;
+                ctx.fillText('НАЖМИ ЧТОБЫ ИГРАТЬ', canvas.width/2, btnY + Math.floor(27*scale));
+            }
+
+            function drawIdleScreen() {
+                drawGround();
+                drawSoldier();
+
+                const textY = canvas.height/2 - Math.floor(40*scale);
+                ctx.fillStyle = '#535353';
+                ctx.font = `bold ${Math.floor(22*scale)}px 'Courier New', monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText('💣 СПЕЦНАЗ: БОМБЫ 💣', canvas.width/2, textY);
+
+                ctx.fillStyle = '#777';
+                ctx.font = `${Math.floor(15*scale)}px 'Courier New', monospace`;
+                ctx.fillText('ПРОБЕЛ, ↑ или клик чтобы начать', canvas.width/2, textY + Math.floor(35*scale));
+
+                if (highScore > 0) {
+                    ctx.fillStyle = '#999';
+                    ctx.font = `${Math.floor(13*scale)}px 'Courier New', monospace`;
+                    ctx.fillText(`Рекорд: ${Math.floor(highScore)}`, canvas.width/2, textY + Math.floor(58*scale));
+                }
+                ctx.textAlign = 'start';
+            }
+
+            // ==================== ИГРОВАЯ ЛОГИКА ====================
+            function jump() {
+                if (gameState === STATE.IDLE) {
+                    startGame();
+                    soldier.vy = jumpForce;
+                    soldier.isJumping = true;
+                    gameState = STATE.RUNNING;
+                } else if (gameState === STATE.RUNNING && !soldier.isJumping) {
+                    soldier.vy = jumpForce;
+                    soldier.isJumping = true;
+                    spawnParticles(soldier.x + soldier.width/2, groundY, 8, 'rgb(180,160,140)');
+                } else if (gameState === STATE.GAME_OVER) {
+                    restartGame();
+                }
+            }
+
+            function startGame() {
+                gameState = STATE.RUNNING;
+                score = 0;
+                gameSpeed = BASE_SPEED;
+                difficultyLevel = 1;
+                obstacles = [];
+                particles = [];
+                obstacleTimer = 0;
+                minObstacleInterval = 70;
+                resetSoldier();
+                instructionsEl.style.opacity = '0.6';
+            }
+
+            function restartGame() {
+                startGame();
+                gameState = STATE.RUNNING;
+            }
+
+            function gameOver() {
+                gameState = STATE.GAME_OVER;
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('specnazHighScore', Math.floor(highScore));
+                }
+                spawnParticles(soldier.x + soldier.width/2, soldier.y + soldier.height/2, 25, 'rgb(192,57,43)');
+                instructionsEl.style.opacity = '1';
+            }
+
+            function checkCollision(obs) {
+                const soldierHitbox = {
+                    x: soldier.x + soldier.width*0.1,
+                    y: soldier.y + soldier.height*0.08,
+                    w: soldier.width*0.75,
+                    h: soldier.height*0.78,
+                };
+                const obsHitbox = {
+                    x: obs.x + obs.width*0.1,
+                    y: obs.y + obs.height*0.1,
+                    w: obs.width*0.8,
+                    h: obs.height*0.8,
+                };
+                return (
+                    soldierHitbox.x < obsHitbox.x + obsHitbox.w &&
+                    soldierHitbox.x + soldierHitbox.w > obsHitbox.x &&
+                    soldierHitbox.y < obsHitbox.y + obsHitbox.h &&
+                    soldierHitbox.y + soldierHitbox.h > obsHitbox.y
+                );
+            }
+
+            function update() {
+                if (gameState !== STATE.RUNNING) return;
+
+                frameCount++;
+                score += gameSpeed * 0.08;
+
+                difficultyLevel = Math.floor(score / 200) + 1;
+                gameSpeed = Math.min(BASE_SPEED + difficultyLevel * 1.2 * scale, MAX_SPEED);
+                minObstacleInterval = Math.max(30, 70 - difficultyLevel * 4);
+
+                if (!soldier.isJumping) {
+                    soldier.legFrame += gameSpeed * 0.3;
+                }
+
+                soldier.eyeBlinkTimer++;
+                if (soldier.eyeBlinkTimer > 80 + Math.random() * 100) {
+                    soldier.blinkFrame = 5;
+                    soldier.eyeBlinkTimer = 0;
+                }
+                if (soldier.blinkFrame > 0) soldier.blinkFrame--;
+
+                if (soldier.isJumping) {
+                    soldier.vy += gravity;
+                    soldier.y += soldier.vy;
+                    if (soldier.y >= groundY - soldier.height) {
+                        soldier.y = groundY - soldier.height;
+                        soldier.vy = 0;
+                        soldier.isJumping = false;
+                        spawnParticles(soldier.x + soldier.width/2, groundY, 6, 'rgb(160,140,120)');
+                    }
+                }
+
+                groundOffset += gameSpeed;
+
+                obstacleTimer++;
+                if (obstacleTimer > minObstacleInterval + Math.random() * 40) {
+                    obstacleTimer = 0;
+                    obstacles.push(createBomb());
+                }
+
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    obs.x -= gameSpeed;
+
+                    if (!obs.passed && obs.x + obs.width < soldier.x) {
+                        obs.passed = true;
+                        score += 15;
+                        spawnParticles(obs.x + obs.width/2, obs.y + obs.height/2, 10, 'rgb(255,165,0)');
+                    }
+
+                    if (checkCollision(obs)) {
+                        gameOver();
+                        return;
+                    }
+
+                    if (obs.x < -obs.width - 50 * scale) {
+                        obstacles.splice(i, 1);
+                    }
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.15 * scale;
+                    p.life--;
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Фон (небо)
+                const skyGradient = ctx.createLinearGradient(0, 0, 0, groundY);
+                skyGradient.addColorStop(0, '#c5d0d9');
+                skyGradient.addColorStop(0.7, '#d9dfe5');
+                skyGradient.addColorStop(1, '#bcc3ca');
+                ctx.fillStyle = skyGradient;
+                ctx.fillRect(0, 0, canvas.width, groundY);
+
+                // Облака
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                const cloudPositions = [
+                    { x: 120, y: 45, s: 1.1 },
+                    { x: 380, y: 25, s: 0.7 },
+                    { x: 620, y: 55, s: 0.9 },
+                    { x: 760, y: 20, s: 0.5 },
+                ];
+                for (const cloud of cloudPositions) {
+                    const cx = (cloud.x * scale - groundOffset * 0.1) % (canvas.width + 200*scale) - 100*scale;
+                    const cy = cloud.y * scale;
+                    const cs = cloud.s * scale;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, Math.floor(20*cs), 0, Math.PI*2);
+                    ctx.arc(cx + Math.floor(18*cs), cy - Math.floor(7*cs), Math.floor(16*cs), 0, Math.PI*2);
+                    ctx.arc(cx + Math.floor(35*cs), cy, Math.floor(18*cs), 0, Math.PI*2);
+                    ctx.fill();
+                }
+
+                drawGround();
+
+                for (const obs of obstacles) {
+                    drawBomb(obs);
+                }
+
+                drawParticles();
+                drawSoldier();
+                drawScore();
+
+                if (gameState === STATE.IDLE) {
+                    drawIdleScreen();
+                } else if (gameState === STATE.GAME_OVER) {
+                    drawGameOverScreen();
+                }
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // ==================== УПРАВЛЕНИЕ ====================
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    e.preventDefault();
+                    jump();
+                }
+                // Кнопка "вниз" больше не нужна, но оставим заглушку, чтобы не скроллилось
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    e.preventDefault();
+                }
+            });
+
+            canvas.addEventListener('click', (e) => {
+                e.preventDefault();
+                jump();
+            });
+
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                jump();
+            }, { passive: false });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                    if (document.activeElement === document.body || document.activeElement === canvas) {
+                        e.preventDefault();
+                    }
+                }
+            });
+
+            function init() {
+                resetSoldier();
+                obstacles = [];
+                particles = [];
+                score = 0;
+                gameSpeed = BASE_SPEED;
+                gameState = STATE.IDLE;
+                difficultyLevel = 1;
+                obstacleTimer = 0;
+                groundOffset = 0;
+                frameCount = 0;
+                instructionsEl.style.opacity = '1';
+                updateScaledValues();
+                resetSoldier();
+                soldier.x = soldierX;
+            }
+
+            init();
+            gameLoop();
+
+            console.log('💣 Спецназ готов к миссии!');
+            console.log('🎮 Управление: ПРОБЕЛ / ↑ — прыжок через бомбы');
+            console.log('📱 Клик/тап по экрану тоже работает');
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Скебоб: свободный полёт</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+        .game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #555;
+            border-radius: 8px;
+            background: #f0f0e0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+        .info {
+            color: #ccc;
+            margin-top: 15px;
+            font-size: 16px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .info span {
+            background: #444;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin: 0 5px;
+            font-weight: bold;
+            color: #ffaa33;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="750" height="250"></canvas>
+        <div class="info">
+            <span>↑</span> вверх &nbsp;&nbsp; <span>↓</span> вниз &nbsp;&nbsp; полёт свободный!
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // ---------- НАСТРОЙКИ ----------
+            const GROUND_Y = 210;          // визуальный уровень земли (но птица может уходить ниже)
+            const DINO_X = 80;
+
+            const DINO_WIDTH = 38;
+            const DINO_HEIGHT = 50;
+
+            const FLY_SPEED = 4.5;         // скорость вертикального полёта
+
+            const BASE_SPEED = 4.8;
+            const MAX_SPEED = 11;
+            const SPEED_INCREMENT = 0.003;
+
+            const MIN_OBSTACLE_INTERVAL = 55;
+            const MAX_OBSTACLE_INTERVAL = 130;
+
+            const CACTUS_WIDTH = 22;
+            const CACTUS_HEIGHT = 42;
+
+            const BOMB_WIDTH = 50;
+            const BOMB_HEIGHT = 28;
+            const BOMB_Y = 135;
+
+            // ---------- СОСТОЯНИЕ ----------
+            let gameOver = false;
+            let gameStarted = false;
+            let score = 0;
+
+            // Птица
+            let dino = {
+                y: GROUND_Y - DINO_HEIGHT,
+                vy: 0,               // текущая вертикальная скорость
+                width: DINO_WIDTH,
+                height: DINO_HEIGHT,
+            };
+
+            // Флаги зажатых клавиш
+            let upPressed = false;
+            let downPressed = false;
+
+            let obstacles = [];
+            let obstacleTimer = 0;
+            let nextObstacleDelay = randomRange(MIN_OBSTACLE_INTERVAL, MAX_OBSTACLE_INTERVAL);
+            let currentSpeed = BASE_SPEED;
+
+            let clouds = [
+                { x: 200, y: 40, w: 70, h: 30 },
+                { x: 500, y: 70, w: 85, h: 35 },
+                { x: 680, y: 25, w: 60, h: 25 }
+            ];
+
+            function randomRange(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            function resetGame() {
+                gameOver = false;
+                gameStarted = false;
+                score = 0;
+                currentSpeed = BASE_SPEED;
+                obstacles = [];
+                obstacleTimer = 0;
+                nextObstacleDelay = randomRange(MIN_OBSTACLE_INTERVAL, MAX_OBSTACLE_INTERVAL);
+                dino.y = GROUND_Y - DINO_HEIGHT;
+                dino.vy = 0;
+                upPressed = false;
+                downPressed = false;
+                clouds = [
+                    { x: 200, y: 40, w: 70, h: 30 },
+                    { x: 500, y: 70, w: 85, h: 35 },
+                    { x: 680, y: 25, w: 60, h: 25 }
+                ];
+            }
+
+            // ---------- УПРАВЛЕНИЕ ----------
+            function updateVelocity() {
+                if (upPressed && !downPressed) {
+                    dino.vy = -FLY_SPEED;
+                } else if (downPressed && !upPressed) {
+                    dino.vy = FLY_SPEED;
+                } else {
+                    dino.vy = 0;
+                }
+            }
+
+            function handleKeyDown(e) {
+                if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                    e.preventDefault();
+                }
+                if (gameOver) {
+                    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                        resetGame();
+                        gameStarted = true;
+                    }
+                    return;
+                }
+                if (!gameStarted) {
+                    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                        gameStarted = true;
+                    }
+                    return;
+                }
+
+                if (e.code === 'ArrowUp') {
+                    upPressed = true;
+                    updateVelocity();
+                } else if (e.code === 'ArrowDown') {
+                    downPressed = true;
+                    updateVelocity();
+                }
+            }
+
+            function handleKeyUp(e) {
+                if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                    e.preventDefault();
+                    if (e.code === 'ArrowUp') {
+                        upPressed = false;
+                    } else if (e.code === 'ArrowDown') {
+                        downPressed = false;
+                    }
+                    if (!gameOver && gameStarted) {
+                        updateVelocity();
+                    }
+                }
+            }
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            // ---------- ОБНОВЛЕНИЕ ----------
+            function update() {
+                if (!gameStarted || gameOver) return;
+
+                if (currentSpeed < MAX_SPEED) currentSpeed += SPEED_INCREMENT;
+                score += Math.floor(currentSpeed * 0.7);
+
+                // Вертикальное движение (без границ)
+                dino.y += dino.vy;
+
+                // Генерация препятствий
+                obstacleTimer++;
+                if (obstacleTimer >= nextObstacleDelay) {
+                    obstacleTimer = 0;
+                    nextObstacleDelay = randomRange(
+                        Math.max(40, MIN_OBSTACLE_INTERVAL - Math.floor(currentSpeed * 2)),
+                        MAX_OBSTACLE_INTERVAL
+                    );
+                    const type = Math.random() < 0.55 ? 'cactus' : 'bomb';
+                    obstacles.push({
+                        type: type,
+                        x: canvas.width,
+                        y: type === 'cactus' ? GROUND_Y - CACTUS_HEIGHT : BOMB_Y,
+                        width: type === 'cactus' ? CACTUS_WIDTH : BOMB_WIDTH,
+                        height: type === 'cactus' ? CACTUS_HEIGHT : BOMB_HEIGHT,
+                    });
+                }
+
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    obstacles[i].x -= currentSpeed;
+                    if (obstacles[i].x + obstacles[i].width < 0) obstacles.splice(i, 1);
+                }
+
+                // Столкновения
+                const dinoRect = {
+                    x: DINO_X,
+                    y: dino.y,
+                    w: dino.width,
+                    h: dino.height
+                };
+                for (let obs of obstacles) {
+                    if (rectCollide(dinoRect, { x: obs.x, y: obs.y, w: obs.width, h: obs.height })) {
+                        gameOver = true;
+                        break;
+                    }
+                }
+
+                for (let cloud of clouds) {
+                    cloud.x -= currentSpeed * 0.4;
+                    if (cloud.x + cloud.w < -20) {
+                        cloud.x = canvas.width + randomRange(20, 150);
+                        cloud.y = randomRange(25, 85);
+                    }
+                }
+            }
+
+            function rectCollide(r1, r2) {
+                return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x &&
+                       r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
+            }
+
+            // ============ РИСУЕМ СКЕБОБА (всегда в полёте) ============
+            function drawDino() {
+                const x = DINO_X;
+                const y = dino.y;
+                const w = dino.width;
+                const h = dino.height;
+                ctx.save();
+                ctx.translate(x + w/2, y + h);
+                const s = 1.1;
+
+                const vy = dino.vy;
+                // Определяем позу по вертикальной скорости
+                if (vy < -0.5) {
+                    drawFlyUp(s);      // подъём — крылья вверх
+                } else if (vy > 0.5) {
+                    drawFlyDown(s);    // спуск — крылья вниз
+                } else {
+                    drawFlyGlide(s);   // парение — крылья горизонтально
+                }
+
+                ctx.restore();
+            }
+
+            function drawFlyUp(s) {
+                // Тело
+                ctx.fillStyle = '#e8e8e0';
+                ctx.strokeStyle = '#2b2b2b';
+                ctx.lineWidth = 1.8*s;
+                ctx.beginPath();
+                ctx.ellipse(0, -20, 11*s, 10*s, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                // Голова
+                ctx.fillStyle = '#f5f5f0';
+                ctx.beginPath();
+                ctx.ellipse(14*s, -28, 6*s, 5*s, 0.1, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                // Клюв
+                ctx.fillStyle = '#e0e0d0';
+                ctx.beginPath();
+                ctx.moveTo(19*s, -28);
+                ctx.lineTo(26*s, -26);
+                ctx.lineTo(20*s, -24);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                // Глаза
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(16*s, -30, 3*s, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#2b2b2b';
+                ctx.stroke();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(17*s, -30, 1.5*s, 0, Math.PI*2);
+                ctx.fill();
+                // Крылья машут вверх
+                ctx.beginPath();
+                ctx.moveTo(-4*s, -18);
+                ctx.quadraticCurveTo(-15*s, -38, -8*s, -42);
+                ctx.moveTo(4*s, -18);
+                ctx.quadraticCurveTo(15*s, -38, 8*s, -42);
+                ctx.stroke();
+                // Ноги (поджаты)
+                ctx.beginPath();
+                ctx.moveTo(-5*s, -10);
+                ctx.lineTo(-3*s, -2);
+                ctx.lineTo(0, 4);
+                ctx.moveTo(5*s, -10);
+                ctx.lineTo(7*s, -2);
+                ctx.lineTo(10*s, 2);
+                ctx.stroke();
+                // Хвост
+                ctx.beginPath();
+                ctx.moveTo(-10*s, -20);
+                ctx.lineTo(-22*s, -28);
+                ctx.lineTo(-18*s, -18);
+                ctx.stroke();
+            }
+
+            function drawFlyDown(s) {
+                // Тело
+                ctx.fillStyle = '#e8e8e0';
+                ctx.strokeStyle = '#2b2b2b';
+                ctx.lineWidth = 1.8*s;
+                ctx.beginPath();
+                ctx.ellipse(0, -20, 11*s, 10*s, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                // Голова
+                ctx.fillStyle = '#f5f5f0';
+                ctx.beginPath();
+                ctx.ellipse(14*s, -28, 6*s, 5*s, 0.1, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#e0e0d0';
+                ctx.beginPath();
+                ctx.moveTo(19*s, -28);
+                ctx.lineTo(26*s, -26);
+                ctx.lineTo(20*s, -24);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(16*s, -30, 3*s, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(17*s, -30, 1.5*s, 0, Math.PI*2);
+                ctx.fill();
+                // Крылья вниз
+                ctx.beginPath();
+                ctx.moveTo(-4*s, -18);
+                ctx.quadraticCurveTo(-12*s, -10, -6*s, 0);
+                ctx.moveTo(4*s, -18);
+                ctx.quadraticCurveTo(12*s, -10, 6*s, 0);
+                ctx.stroke();
+                // Ноги
+                ctx.beginPath();
+                ctx.moveTo(-5*s, -10);
+                ctx.lineTo(-3*s, -2);
+                ctx.lineTo(0, 4);
+                ctx.moveTo(5*s, -10);
+                ctx.lineTo(7*s, -2);
+                ctx.lineTo(10*s, 2);
+                ctx.stroke();
+                // Хвост
+                ctx.beginPath();
+                ctx.moveTo(-10*s, -20);
+                ctx.lineTo(-22*s, -18);
+                ctx.lineTo(-18*s, -14);
+                ctx.stroke();
+            }
+
+            function drawFlyGlide(s) {
+                // Парение — крылья горизонтально
+                ctx.fillStyle = '#e8e8e0';
+                ctx.strokeStyle = '#2b2b2b';
+                ctx.lineWidth = 1.8*s;
+                ctx.beginPath();
+                ctx.ellipse(0, -20, 13*s, 9*s, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#f5f5f0';
+                ctx.beginPath();
+                ctx.ellipse(16*s, -26, 7*s, 5*s, 0.1, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#e0e0d0';
+                ctx.beginPath();
+                ctx.moveTo(21*s, -27);
+                ctx.lineTo(28*s, -25);
+                ctx.lineTo(22*s, -23);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(18*s, -29, 3.5*s, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(19*s, -29, 1.8*s, 0, Math.PI*2);
+                ctx.fill();
+                // Крылья горизонтально
+                ctx.beginPath();
+                ctx.moveTo(-5*s, -18);
+                ctx.lineTo(-22*s, -18);
+                ctx.moveTo(5*s, -18);
+                ctx.lineTo(22*s, -18);
+                ctx.stroke();
+                // Ноги
+                ctx.beginPath();
+                ctx.moveTo(-5*s, -10);
+                ctx.lineTo(-3*s, -2);
+                ctx.lineTo(0, 4);
+                ctx.moveTo(5*s, -10);
+                ctx.lineTo(7*s, -2);
+                ctx.lineTo(10*s, 2);
+                ctx.stroke();
+                // Хвост
+                ctx.beginPath();
+                ctx.moveTo(-12*s, -20);
+                ctx.lineTo(-24*s, -22);
+                ctx.lineTo(-20*s, -16);
+                ctx.stroke();
+            }
+
+            // ============ ЯДЕРНАЯ БОМБА ============
+            function drawNuclearBomb(obs) {
+                const bx = obs.x + obs.width/2;
+                const by = obs.y + obs.height/2;
+                const w = obs.width;
+                const h = obs.height;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(bx + 3, by + 3, w/2, h/2, 0, 0, Math.PI*2);
+                ctx.fill();
+
+                const gradient = ctx.createLinearGradient(bx - w/2, by, bx + w/2, by);
+                gradient.addColorStop(0, '#4d4d4d');
+                gradient.addColorStop(0.5, '#7a7a7a');
+                gradient.addColorStop(1, '#2d2d2d');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.ellipse(bx, by, w/2, h/2, 0, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = '#cc3333';
+                ctx.beginPath();
+                ctx.ellipse(bx + w/2 - 6, by, 8, h/2 - 2, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#ff4444';
+                ctx.beginPath();
+                ctx.ellipse(bx + w/2 - 4, by, 4, h/2 - 4, 0, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = '#f0c040';
+                ctx.beginPath();
+                ctx.moveTo(bx - 8, by - h/2 + 4);
+                ctx.lineTo(bx - 4, by - h/2 + 10);
+                ctx.lineTo(bx, by - h/2 + 4);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(bx + 10, by - h/2 + 4);
+                ctx.lineTo(bx + 14, by - h/2 + 10);
+                ctx.lineTo(bx + 18, by - h/2 + 4);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(bx - 2, by + h/2 - 4);
+                ctx.lineTo(bx + 2, by + h/2 - 10);
+                ctx.lineTo(bx + 6, by + h/2 - 4);
+                ctx.fill();
+
+                ctx.fillStyle = '#f0c040';
+                ctx.font = 'bold 16px "Arial"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('☢', bx, by);
+
+                ctx.strokeStyle = '#8b5a2b';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(bx, obs.y);
+                ctx.lineTo(bx + 2, obs.y - 14);
+                ctx.stroke();
+                ctx.fillStyle = '#ff6600';
+                ctx.beginPath();
+                ctx.arc(bx + 2, obs.y - 16, 7, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(bx + 2, obs.y - 16, 4, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            function drawObstacles() {
+                for (let obs of obstacles) {
+                    if (obs.type === 'cactus') {
+                        const cx = obs.x, cy = obs.y;
+                        ctx.fillStyle = '#2f6b2f';
+                        ctx.beginPath();
+                        ctx.ellipse(cx + CACTUS_WIDTH/2, cy + 10, 8, 6, 0, 0, Math.PI*2);
+                        ctx.fill();
+                        ctx.fillStyle = '#1e4a1e';
+                        ctx.fillRect(cx + 6, cy, 10, CACTUS_HEIGHT);
+                        ctx.fillStyle = '#3a7d3a';
+                        ctx.fillRect(cx + 8, cy + 5, 6, 30);
+                        ctx.fillStyle = '#1e4a1e';
+                        ctx.fillRect(cx, cy + 15, 8, 6);
+                        ctx.fillRect(cx + 14, cy + 22, 8, 6);
+                    } else if (obs.type === 'bomb') {
+                        drawNuclearBomb(obs);
+                    }
+                }
+            }
+
+            function drawGround() {
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y);
+                ctx.lineTo(canvas.width, GROUND_Y);
+                ctx.stroke();
+                ctx.strokeStyle = '#888';
+                ctx.lineWidth = 1;
+                const offset = (Date.now() * 0.3) % 30;
+                for (let x = -30 + offset; x < canvas.width; x += 30) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, GROUND_Y + 4);
+                    ctx.lineTo(x + 10, GROUND_Y + 4);
+                    ctx.stroke();
+                }
+            }
+
+            function drawClouds() {
+                ctx.fillStyle = '#e0e0e0';
+                for (let cloud of clouds) {
+                    ctx.beginPath();
+                    ctx.ellipse(cloud.x, cloud.y, cloud.w/2, cloud.h/2, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(cloud.x - cloud.w*0.3, cloud.y + 5, cloud.w*0.35, cloud.h*0.4, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(cloud.x + cloud.w*0.3, cloud.y + 5, cloud.w*0.35, cloud.h*0.4, 0, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            function drawUI() {
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 20px "Courier New"';
+                ctx.textAlign = 'right';
+                ctx.fillText('СЧЁТ: ' + score, canvas.width - 20, 35);
+
+                if (!gameStarted && !gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 26px "Courier New"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('СКЕБОБ В ПОЛЁТЕ', canvas.width/2, canvas.height/2 - 10);
+                    ctx.font = '18px "Courier New"';
+                    ctx.fillText('Стрелки ↑↓ — лететь', canvas.width/2, canvas.height/2 + 30);
+                }
+
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 30px "Courier New"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ПТИЦА ПАЛА', canvas.width/2, canvas.height/2 - 15);
+                    ctx.font = '20px "Courier New"';
+                    ctx.fillText('Счёт: ' + score, canvas.width/2, canvas.height/2 + 25);
+                    ctx.fillText('Стрелка ↑↓ — заново', canvas.width/2, canvas.height/2 + 55);
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#f7f7e8';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Холмы
+                ctx.fillStyle = '#e0e0d0';
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y);
+                ctx.lineTo(100, GROUND_Y - 45);
+                ctx.lineTo(250, GROUND_Y);
+                ctx.lineTo(400, GROUND_Y - 30);
+                ctx.lineTo(550, GROUND_Y - 55);
+                ctx.lineTo(700, GROUND_Y);
+                ctx.lineTo(canvas.width, GROUND_Y - 20);
+                ctx.lineTo(canvas.width, GROUND_Y);
+                ctx.closePath();
+                ctx.fill();
+                drawClouds();
+                drawGround();
+                drawObstacles();
+                drawDino();
+                drawUI();
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            resetGame();
+            gameLoop();
+
+            // Мобильное управление (касание: верх экрана — вверх, низ — вниз)
+            canvas.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (gameOver) {
+                    resetGame();
+                    gameStarted = true;
+                    return;
+                }
+                if (!gameStarted) {
+                    gameStarted = true;
+                    return;
+                }
+                const rect = canvas.getBoundingClientRect();
+                const touchY = e.touches[0].clientY - rect.top;
+                if (touchY < canvas.height / 2) {
+                    upPressed = true;
+                    downPressed = false;
+                } else {
+                    downPressed = true;
+                    upPressed = false;
+                }
+                updateVelocity();
+            });
+            canvas.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                upPressed = false;
+                downPressed = false;
+                updateVelocity();
+            });
+            canvas.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const touchY = e.touches[0].clientY - rect.top;
+                if (touchY < canvas.height / 2) {
+                    upPressed = true;
+                    downPressed = false;
+                } else {
+                    downPressed = true;
+                    upPressed = false;
+                }
+                updateVelocity();
+            });
+        })();
+    </script>
+</body>
+</html>

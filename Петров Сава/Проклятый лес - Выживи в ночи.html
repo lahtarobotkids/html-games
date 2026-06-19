@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ПРОКЛЯТЫЙ ЛЕС - Выживи в ночи</title>
+    <style>
+        :root {
+            --bg: #000000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            cursor: crosshair;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            height: 100vh;
+            width: 100vw;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #8b0000;
+            font-size: 2.5em;
+            text-align: center;
+            letter-spacing: 3px;
+            text-shadow: 0 0 40px #ff0000, 0 0 80px #8b0000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 20;
+            font-weight: bold;
+        }
+
+        #hint {
+            position: absolute;
+            bottom: 25%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #aaa;
+            font-size: 0.9em;
+            letter-spacing: 2px;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 15;
+            text-align: center;
+            transition: opacity 0.5s;
+        }
+
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            z-index: 30;
+            pointer-events: all;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            color: #fff;
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ctrl-btn:active {
+            background: rgba(255, 50, 50, 0.4);
+            border-color: #ff4444;
+        }
+        .ctrl-btn.attack-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(180, 0, 0, 0.5);
+            border-color: #ff3333;
+            font-size: 1.8em;
+        }
+
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 6px;
+                bottom: 15px;
+            }
+            #hint {
+                bottom: 35%;
+                font-size: 0.7em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="game"></canvas>
+    <div id="overlay"></div>
+    <div id="message"></div>
+    <div id="hint">WASD — движение • SHIFT — бег • ПРОБЕЛ — удар • E — спрятаться</div>
+
+    <div id="mobile-controls">
+        <button class="ctrl-btn" id="btn-up">▲</button>
+        <button class="ctrl-btn" id="btn-left">◄</button>
+        <button class="ctrl-btn" id="btn-down">▼</button>
+        <button class="ctrl-btn" id="btn-right">►</button>
+        <button class="ctrl-btn" id="btn-hide">E</button>
+        <button class="ctrl-btn attack-btn" id="btn-attack">⚔</button>
+        <button class="ctrl-btn" id="btn-sprint">⇧</button>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            const messageEl = document.getElementById('message');
+            const hintEl = document.getElementById('hint');
+            const overlayEl = document.getElementById('overlay');
+
+            // ─────────────────────────────────────
+            // РАЗМЕРЫ
+            // ─────────────────────────────────────
+            let W, H;
+            const WORLD_W = 2800;
+            const WORLD_H = 2800;
+
+            function resize() {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            // ─────────────────────────────────────
+            // ЗВУКОВАЯ СИСТЕМА (Web Audio API)
+            // ─────────────────────────────────────
+            let audioCtx = null;
+
+            function initAudio() {
+                if (!audioCtx) {
+                    audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            }
+
+            function playTone(freq, type, duration, vol = 0.1, detune = 0) {
+                if (!audioCtx) return;
+                try {
+                    const t = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = type;
+                    osc.frequency.value = freq;
+                    osc.detune.value = detune;
+                    gain.gain.setValueAtTime(vol, t);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(t);
+                    osc.stop(t + duration);
+                } catch (e) { /* тихо */ }
+            }
+
+            function playNoise(duration, vol = 0.08, filterFreq = 200) {
+                if (!audioCtx) return;
+                try {
+                    const t = audioCtx.currentTime;
+                    const bufferSize = audioCtx.sampleRate * duration;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = (Math.random() * 2 - 1);
+                    }
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.value = filterFreq;
+                    const gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(vol, t);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+                    source.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    source.start(t);
+                    source.stop(t + duration);
+                } catch (e) { /* тихо */ }
+            }
+
+            function heartBeat(intensity = 0.5) {
+                if (!audioCtx) return;
+                const t = audioCtx.currentTime;
+                const freq = 40 + intensity * 30;
+                playTone(freq, 'sine', 0.15, 0.15 * intensity, 0);
+                setTimeout(() => playTone(freq * 1.3, 'sine', 0.1, 0.08 * intensity, 0), 120);
+            }
+
+            // ─────────────────────────────────────
+            // СОСТОЯНИЕ ИГРЫ
+            // ─────────────────────────────────────
+            const STATE = {
+                MENU: 'menu',
+                PLAYING: 'playing',
+                GAMEOVER: 'gameover',
+                WIN: 'win',
+            };
+
+            let gameState = STATE.MENU;
+            let gameTime = 0;
+            let score = 0;
+            let kills = 0;
+            let difficulty = 1;
+            let shakeAmount = 0;
+            let shakeDuration = 0;
+            let globalFlash = 0;
+            let whisperTimer = 0;
+            let whisperText = '';
+            let whisperAlpha = 0;
+
+            // ─────────────────────────────────────
+            // КАМЕРА
+            // ─────────────────────────────────────
+            let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+            function updateCamera(px, py) {
+                camera.targetX = px - W / 2;
+                camera.targetY = py - H / 2;
+                camera.targetX = Math.max(0, Math.min(WORLD_W - W, camera.targetX));
+                camera.targetY = Math.max(0, Math.min(WORLD_H - H, camera.targetY));
+                camera.x += (camera.targetX - camera.x) * 0.12;
+                camera.y += (camera.targetY - camera.y) * 0.12;
+            }
+
+            function screenShake(amount, dur) {
+                shakeAmount = Math.max(shakeAmount, amount);
+                shakeDuration = Math.max(shakeDuration, dur);
+            }
+
+            // ─────────────────────────────────────
+            // ИГРОК
+            // ─────────────────────────────────────
+            const player = {
+                x: WORLD_W / 2,
+                y: WORLD_H / 2 + 200,
+                vx: 0,
+                vy: 0,
+                radius: 14,
+                speed: 140,
+                sprintSpeed: 260,
+                health: 100,
+                maxHealth: 100,
+                stamina: 100,
+                maxStamina: 100,
+                flashlightBattery: 100,
+                maxBattery: 100,
+                attackCooldown: 0,
+                attackDuration: 0,
+                attackAngle: 0,
+                isHiding: false,
+                hidingSpot: null,
+                hideTransition: 0,
+                alive: true,
+                invincibleTimer: 0,
+                footstepTimer: 0,
+            };
+
+            function resetPlayer() {
+                player.x = WORLD_W / 2 + (Math.random() - 0.5) * 400;
+                player.y = WORLD_H / 2 + (Math.random() - 0.5) * 400;
+                player.vx = 0;
+                player.vy = 0;
+                player.health = player.maxHealth;
+                player.stamina = player.maxStamina;
+                player.flashlightBattery = player.maxBattery;
+                player.attackCooldown = 0;
+                player.attackDuration = 0;
+                player.isHiding = false;
+                player.hidingSpot = null;
+                player.hideTransition = 0;
+                player.alive = true;
+                player.invincibleTimer = 0;
+                player.footstepTimer = 0;
+            }
+
+            // ─────────────────────────────────────
+            // ДЕРЕВЬЯ
+            // ─────────────────────────────────────
+            let trees = [];
+
+            function generateTrees() {
+                trees = [];
+                const count = 100;
+                const minDist = 55;
+                const attempts = count * 8;
+                for (let i = 0; i < attempts && trees.length < count; i++) {
+                    const x = 80 + Math.random() * (WORLD_W - 160);
+                    const y = 80 + Math.random() * (WORLD_H - 160);
+                    let tooClose = false;
+                    for (const t of trees) {
+                        const dx = x - t.x;
+                        const dy = y - t.y;
+                        if (Math.sqrt(dx * dx + dy * dy) < minDist) {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+                    // Не слишком близко к стартовой позиции игрока
+                    const dsx = x - WORLD_W / 2;
+                    const dsy = y - (WORLD_H / 2 + 200);
+                    if (Math.sqrt(dsx * dsx + dsy * dsy) < 150) tooClose = true;
+
+                    if (!tooClose) {
+                        trees.push({
+                            x,
+                            y,
+                            radius: 22 + Math.random() * 35,
+                            type: Math.floor(Math.random() * 3),
+                            creep: Math.random() * Math.PI * 2,
+                        });
+                    }
+                }
+                // Кластеры (густые участки)
+                for (let c = 0; c < 6; c++) {
+                    const cx = 200 + Math.random() * (WORLD_W - 400);
+                    const cy = 200 + Math.random() * (WORLD_H - 400);
+                    for (let i = 0; i < 15; i++) {
+                        const x = cx + (Math.random() - 0.5) * 250;
+                        const y = cy + (Math.random() - 0.5) * 250;
+                        if (x < 30 || x > WORLD_W - 30 || y < 30 || y > WORLD_H - 30) continue;
+                        let tooClose = false;
+                        for (const t of trees) {
+                            if (Math.hypot(x - t.x, y - t.y) < 40) { tooClose = true; break; }
+                        }
+                        if (!tooClose) {
+                            trees.push({
+                                x,
+                                y,
+                                radius: 18 + Math.random() * 40,
+                                type: Math.floor(Math.random() * 3),
+                                creep: Math.random() * Math.PI * 2,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // ─────────────────────────────────────
+            // УКРЫТИЯ (кусты)
+            // ─────────────────────────────────────
+            let hidingSpots = [];
+
+            function generateHidingSpots() {
+                hidingSpots = [];
+                const count = 20;
+                for (let i = 0; i < count * 5 && hidingSpots.length < count; i++) {
+                    const x = 60 + Math.random() * (WORLD_W - 120);
+                    const y = 60 + Math.random() * (WORLD_H - 120);
+                    let tooClose = false;
+                    for (const t of trees) {
+                        if (Math.hypot(x - t.x, y - t.y) < t.radius + 25) { tooClose = true; break; }
+                    }
+                    for (const hs of hidingSpots) {
+                        if (Math.hypot(x - hs.x, y - hs.y) < 80) { tooClose = true; break; }
+                    }
+                    if (!tooClose) {
+                        hidingSpots.push({
+                            x,
+                            y,
+                            radius: 20 + Math.random() * 18,
+                            discovered: false,
+                        });
+                    }
+                }
+            }
+
+            // ─────────────────────────────────────
+            // ПРЕДМЕТЫ
+            // ─────────────────────────────────────
+            let items = [];
+
+            function generateItems() {
+                items = [];
+                const types = ['battery', 'battery', 'battery', 'medkit', 'medkit', 'medkit', 'battery', 'medkit',
+                    'battery', 'battery'
+                ];
+                for (const type of types) {
+                    let placed = false;
+                    for (let attempt = 0; attempt < 40 && !placed; attempt++) {
+                        const x = 80 + Math.random() * (WORLD_W - 160);
+                        const y = 80 + Math.random() * (WORLD_H - 160);
+                        let ok = true;
+                        for (const t of trees) {
+                            if (Math.hypot(x - t.x, y - t.y) < t.radius + 15) { ok = false; break; }
+                        }
+                        for (const it of items) {
+                            if (Math.hypot(x - it.x, y - it.y) < 50) { ok = false; break; }
+                        }
+                        if (ok) {
+                            items.push({ x, y, type, collected: false, glow: Math.random() * Math.PI * 2 });
+                        }
+                    }
+                }
+            }
+
+            function spawnExtraItem() {
+                const type = Math.random() < 0.55 ? 'battery' : 'medkit';
+                let placed = false;
+                for (let attempt = 0; attempt < 30 && !placed; attempt++) {
+                    const x = 80 + Math.random() * (WORLD_W - 160);
+                    const y = 80 + Math.random() * (WORLD_H - 160);
+                    let ok = true;
+                    for (const t of trees) {
+                        if (Math.hypot(x - t.x, y - t.y) < t.radius + 15) { ok = false; break; }
+                    }
+                    for (const it of items) {
+                        if (!it.collected && Math.hypot(x - it.x, y - it.y) < 50) { ok = false; break; }
+                    }
+                    const dp = Math.hypot(x - player.x, y - player.y);
+                    if (dp < 100 || dp > 900) ok = false;
+                    if (ok) {
+                        items.push({ x, y, type, collected: false, glow: Math.random() * Math.PI * 2 });
+                        placed = true;
+                    }
+                }
+            }
+
+            // ─────────────────────────────────────
+            // МОНСТРЫ
+            // ─────────────────────────────────────
+            let monsters = [];
+            const MONSTER_STATES = { PATROL: 'patrol', ALERT: 'alert', CHASE: 'chase', STUNNED: 'stunned' };
+
+            function spawnMonster(nearPlayer = false) {
+                let x, y;
+                if (nearPlayer) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 350 + Math.random() * 250;
+                    x = player.x + Math.cos(angle) * dist;
+                    y = player.y + Math.sin(angle) * dist;
+                } else {
+                    x = 100 + Math.random() * (WORLD_W - 200);
+                    y = 100 + Math.random() * (WORLD_H - 200);
+                }
+                // Проверка столкновений с деревьями
+                let ok = true;
+                for (const t of trees) {
+                    if (Math.hypot(x - t.x, y - t.y) < t.radius + 20) { ok = false; break; }
+                }
+                if (!ok && nearPlayer) {
+                    x = player.x + (Math.random() - 0.5) * 600;
+                    y = player.y + (Math.random() - 0.5) * 600;
+                }
+                x = Math.max(40, Math.min(WORLD_W - 40, x));
+                y = Math.max(40, Math.min(WORLD_H - 40, y));
+
+                const types = ['stalker', 'runner', 'phantom'];
+                const mtype = types[Math.floor(Math.random() * 3)];
+                const baseSpeed = 60 + difficulty * 18 + Math.random() * 40;
+                const speedMap = { stalker: baseSpeed * 0.7, runner: baseSpeed * 1.5, phantom: baseSpeed * 1.0 };
+
+                monsters.push({
+                    x,
+                    y,
+                    vx: 0,
+                    vy: 0,
+                    radius: 16 + Math.random() * 12,
+                    speed: speedMap[mtype],
+                    health: mtype === 'phantom' ? 2 : 3,
+                    maxHealth: mtype === 'phantom' ? 2 : 3,
+                    state: MONSTER_STATES.PATROL,
+                    patrolTarget: { x, y },
+                    patrolTimer: 0,
+                    alertTimer: 0,
+                    stunTimer: 0,
+                    detectionRange: 180 + (mtype === 'runner' ? 60 : 0),
+                    chaseRange: 500,
+                    sawPlayerHide: false,
+                    playerLastSeenPos: null,
+                    type: mtype,
+                    eyeGlow: 0.5 + Math.random() * 0.5,
+                    growlTimer: 2 + Math.random() * 5,
+                    phaseCooldown: 0,
+                });
+            }
+
+            function resetMonsters() {
+                monsters = [];
+                const initialCount = 3;
+                for (let i = 0; i < initialCount; i++) {
+                    spawnMonster(false);
+                }
+            }
+
+            function spawnWave() {
+                const extra = Math.min(difficulty, 6);
+                for (let i = 0; i < extra; i++) {
+                    spawnMonster(true);
+                }
+                if (Math.random() < 0.3) spawnMonster(true);
+            }
+
+            // ─────────────────────────────────────
+            // ЧАСТИЦЫ
+            // ─────────────────────────────────────
+            let particles = [];
+            let fogParticles = [];
+
+            function spawnParticle(x, y, color, life = 0.6, speed = 80) {
+                const angle = Math.random() * Math.PI * 2;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed * (0.3 + Math.random()),
+                    vy: Math.sin(angle) * speed * (0.3 + Math.random()),
+                    life,
+                    maxLife: life,
+                    color,
+                    radius: 2 + Math.random() * 4,
+                });
+            }
+
+            function spawnBlood(x, y, count = 12) {
+                for (let i = 0; i < count; i++) {
+                    spawnParticle(x, y, '#8b0000', 0.5 + Math.random() * 0.7, 100 + Math.random() * 180);
+                }
+            }
+
+            function generateFogParticles() {
+                fogParticles = [];
+                for (let i = 0; i < 60; i++) {
+                    fogParticles.push({
+                        x: Math.random() * WORLD_W,
+                        y: Math.random() * WORLD_H,
+                        radius: 3 + Math.random() * 8,
+                        alpha: 0.15 + Math.random() * 0.35,
+                        speed: 8 + Math.random() * 25,
+                        angle: Math.random() * Math.PI * 2,
+                        wobble: Math.random() * Math.PI * 2,
+                        wobbleSpeed: 0.3 + Math.random() * 1.2,
+                    });
+                }
+            }
+
+            // ─────────────────────────────────────
+            // ИНИЦИАЛИЗАЦИЯ МИРА
+            // ─────────────────────────────────────
+            function generateWorld() {
+                generateTrees();
+                generateHidingSpots();
+                generateItems();
+                generateFogParticles();
+                resetPlayer();
+                resetMonsters();
+                particles = [];
+                gameTime = 0;
+                score = 0;
+                kills = 0;
+                difficulty = 1;
+                shakeAmount = 0;
+                shakeDuration = 0;
+                globalFlash = 0;
+                whisperTimer = 0;
+                whisperText = '';
+                whisperAlpha = 0;
+                player.flashlightBattery = player.maxBattery;
+                player.health = player.maxHealth;
+                player.stamina = player.maxStamina;
+                player.alive = true;
+                player.isHiding = false;
+                player.hidingSpot = null;
+            }
+
+            // ─────────────────────────────────────
+            // КОЛЛИЗИИ
+            // ─────────────────────────────────────
+            function resolveCircleCollision(cx, cy, cr, treesArr) {
+                let resolvedX = cx;
+                let resolvedY = cy;
+                for (const t of treesArr) {
+                    const dx = resolvedX - t.x;
+                    const dy = resolvedY - t.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = cr + t.radius;
+                    if (dist < minDist && dist > 0.001) {
+                        const overlap = minDist - dist;
+                        resolvedX += (dx / dist) * overlap;
+                        resolvedY += (dy / dist) * overlap;
+                    }
+                }
+                // Границы мира
+                resolvedX = Math.max(cr, Math.min(WORLD_W - cr, resolvedX));
+                resolvedY = Math.max(cr, Math.min(WORLD_H - cr, resolvedY));
+                return { x: resolvedX, y: resolvedY };
+            }
+
+            function lineOfSight(x1, y1, x2, y2, treesArr) {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const totalDist = Math.sqrt(dx * dx + dy * dy);
+                if (totalDist < 1) return true;
+                const steps = Math.ceil(totalDist / 20);
+                for (let i = 0; i <= steps; i++) {
+                    const t = i / steps;
+                    const px = x1 + dx * t;
+                    const py = y1 + dy * t;
+                    for (const tree of treesArr) {
+                        if (Math.hypot(px - tree.x, py - tree.y) < tree.radius - 2) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // ─────────────────────────────────────
+            // ОБНОВЛЕНИЕ ИГРЫ
+            // ─────────────────────────────────────
+            function update(dt) {
+                if (gameState !== STATE.PLAYING) return;
+                if (!player.alive) return;
+
+                gameTime += dt;
+                const realDt = Math.min(dt, 0.1); // кап дельты
+
+                // Сложность растёт
+                difficulty = 1 + Math.floor(gameTime / 45);
+
+                // Таймеры игрока
+                if (player.attackCooldown > 0) player.attackCooldown -= realDt;
+                if (player.attackDuration > 0) player.attackDuration -= realDt;
+                if (player.invincibleTimer > 0) player.invincibleTimer -= realDt;
+                if (shakeDuration > 0) {
+                    shakeDuration -= realDt;
+                    shakeAmount *= 0.85;
+                } else {
+                    shakeAmount = 0;
+                }
+                if (globalFlash > 0) globalFlash -= realDt * 2.5;
+
+                // Шёпот
+                if (whisperTimer > 0) {
+                    whisperTimer -= realDt;
+                    whisperAlpha = Math.min(1, whisperTimer * 3);
+                } else {
+                    whisperAlpha = Math.max(0, whisperAlpha - realDt * 2);
+                    if (whisperAlpha <= 0) whisperText = '';
+                }
+
+                // Фонарик разряжается
+                if (!player.isHiding) {
+                    player.flashlightBattery -= realDt * 1.8;
+                } else {
+                    player.flashlightBattery -= realDt * 0.3;
+                }
+                player.flashlightBattery = Math.max(0, player.flashlightBattery);
+
+                // Стамина
+                const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'] || keys['sprint'];
+                if (isSprinting && !player.isHiding && player.stamina > 0) {
+                    player.stamina -= realDt * 22;
+                } else if (!isSprinting || player.isHiding) {
+                    player.stamina += realDt * (player.isHiding ? 18 : 10);
+                }
+                player.stamina = Math.max(0, Math.min(player.maxStamina, player.stamina));
+
+                // Движение игрока
+                if (!player.isHiding) {
+                    let mx = 0,
+                        my = 0;
+                    if (keys['KeyW'] || keys['ArrowUp'] || keys['up']) my -= 1;
+                    if (keys['KeyS'] || keys['ArrowDown'] || keys['down']) my += 1;
+                    if (keys['KeyA'] || keys['ArrowLeft'] || keys['left']) mx -= 1;
+                    if (keys['KeyD'] || keys['ArrowRight'] || keys['right']) mx += 1;
+                    const mag = Math.sqrt(mx * mx + my * my);
+                    if (mag > 1) { mx /= mag;
+                        my /= mag; }
+
+                    const canSprint = isSprinting && player.stamina > 0;
+                    const spd = canSprint ? player.sprintSpeed : player.speed;
+                    player.vx = mx * spd;
+                    player.vy = my * spd;
+                    player.x += player.vx * realDt;
+                    player.y += player.vy * realDt;
+
+                    const resolved = resolveCircleCollision(player.x, player.y, player.radius, trees);
+                    player.x = resolved.x;
+                    player.y = resolved.y;
+
+                    // Звук шагов
+                    if (mag > 0.3) {
+                        player.footstepTimer -= realDt;
+                        const stepInterval = canSprint ? 0.25 : 0.45;
+                        if (player.footstepTimer <= 0) {
+                            player.footstepTimer = stepInterval;
+                            playNoise(0.04, 0.015, 300);
+                        }
+                    } else {
+                        player.footstepTimer = 0;
+                    }
+                } else {
+                    player.vx = 0;
+                    player.vy = 0;
+                    player.footstepTimer = 0;
+                }
+
+                // Атака
+                if (player.attackDuration > 0) {
+                    const attackRange = 55;
+                    const attackAngle = player.attackAngle;
+                    const ax = player.x + Math.cos(attackAngle) * attackRange;
+                    const ay = player.y + Math.sin(attackAngle) * attackRange;
+                    for (const m of monsters) {
+                        if (m.health <= 0) continue;
+                        const dist = Math.hypot(m.x - ax, m.y - ay);
+                        if (dist < m.radius + 30 && m.state !== MONSTER_STATES.STUNNED) {
+                            m.health -= 1;
+                            m.state = MONSTER_STATES.STUNNED;
+                            m.stunTimer = 0.6;
+                            m.vx = Math.cos(attackAngle) * 200;
+                            m.vy = Math.sin(attackAngle) * 200;
+                            spawnBlood(m.x, m.y, 10);
+                            playTone(70, 'sawtooth', 0.2, 0.2, -20);
+                            screenShake(5, 0.25);
+                            if (m.health <= 0) {
+                                spawnBlood(m.x, m.y, 25);
+                                kills++;
+                                score += 100;
+                                playNoise(0.3, 0.15, 100);
+                                screenShake(10, 0.5);
+                                if (Math.random() < 0.35) spawnExtraItem();
+                            }
+                        }
+                    }
+                }
+
+                // Спрятаться / выйти
+                const nearHideSpot = findNearestHideSpot();
+                if (keys['KeyE'] && !keysPrev['KeyE'] || keys['hide'] && !keysPrev['hide']) {
+                    if (player.isHiding) {
+                        player.isHiding = false;
+                        player.hidingSpot = null;
+                        player.hideTransition = 0;
+                        playNoise(0.08, 0.03, 500);
+                    } else if (nearHideSpot && player.stamina > 10) {
+                        player.isHiding = true;
+                        player.hidingSpot = nearHideSpot;
+                        player.hideTransition = 1;
+                        player.x = nearHideSpot.x;
+                        player.y = nearHideSpot.y;
+                        nearHideSpot.discovered = true;
+                        playNoise(0.06, 0.04, 400);
+                    }
+                }
+                if (player.isHiding) {
+                    player.hideTransition = Math.max(0, player.hideTransition - realDt * 3);
+                }
+
+                // Подбор предметов
+                for (const item of items) {
+                    if (item.collected) continue;
+                    if (Math.hypot(player.x - item.x, player.y - item.y) < 35) {
+                        item.collected = true;
+                        if (item.type === 'battery') {
+                            player.flashlightBattery = Math.min(player.maxBattery, player.flashlightBattery + 35);
+                            playTone(800, 'sine', 0.15, 0.08);
+                            showMessage('+ БАТАРЕЯ', '#ffcc00');
+                        } else if (item.type === 'medkit') {
+                            player.health = Math.min(player.maxHealth, player.health + 30);
+                            playTone(500, 'sine', 0.2, 0.1);
+                            showMessage('+ АПТЕЧКА', '#ff4444');
+                        }
+                        score += 25;
+                    }
+                }
+                // Очистка собранных предметов и респавн
+                const activeItems = items.filter(it => !it.collected);
+                if (activeItems.length < 8 && Math.random() < 0.004) {
+                    spawnExtraItem();
+                }
+
+                // ─────────────────────────────────────
+                // ОБНОВЛЕНИЕ МОНСТРОВ
+                // ─────────────────────────────────────
+                const playerNoise = (Math.abs(player.vx) + Math.abs(player.vy)) / 2;
+                const playerIsNoisy = playerNoise > player.speed * 0.6;
+
+                for (const m of monsters) {
+                    if (m.health <= 0) continue;
+
+                    // Стан
+                    if (m.state === MONSTER_STATES.STUNNED) {
+                        m.stunTimer -= realDt;
+                        m.x += m.vx * realDt * 0.7;
+                        m.y += m.vy * realDt * 0.7;
+                        m.vx *= 0.9;
+                        m.vy *= 0.9;
+                        const res = resolveCircleCollision(m.x, m.y, m.radius, trees);
+                        m.x = res.x;
+                        m.y = res.y;
+                        if (m.stunTimer <= 0) {
+                            m.state = MONSTER_STATES.PATROL;
+                            m.vx = 0;
+                            m.vy = 0;
+                        }
+                        continue;
+                    }
+
+                    // Фантом: фазировка сквозь деревья
+                    if (m.type === 'phantom' && m.state === MONSTER_STATES.CHASE) {
+                        m.phaseCooldown -= realDt;
+                    }
+
+                    const distToPlayer = Math.hypot(m.x - player.x, m.y - player.y);
+                    const canSeePlayer = lineOfSight(m.x, m.y, player.x, player.y, trees) && !player.isHiding;
+                    const playerHidden = player.isHiding && !m.sawPlayerHide;
+
+                    // Определение состояния
+                    if (m.state === MONSTER_STATES.CHASE) {
+                        if (distToPlayer > m.chaseRange || playerHidden) {
+                            m.state = MONSTER_STATES.ALERT;
+                            m.alertTimer = 3 + Math.random() * 4;
+                            m.playerLastSeenPos = { x: player.x, y: player.y };
+                            m.sawPlayerHide = false;
+                        }
+                    } else if (m.state === MONSTER_STATES.ALERT) {
+                        m.alertTimer -= realDt;
+                        if (canSeePlayer && distToPlayer < m.detectionRange * 1.3 && !playerHidden) {
+                            m.state = MONSTER_STATES.CHASE;
+                            m.sawPlayerHide = false;
+                        } else if (m.alertTimer <= 0) {
+                            m.state = MONSTER_STATES.PATROL;
+                            m.playerLastSeenPos = null;
+                            m.sawPlayerHide = false;
+                        }
+                    } else if (m.state === MONSTER_STATES.PATROL) {
+                        const effectiveRange = playerIsNoisy ? m.detectionRange * 1.6 : m.detectionRange;
+                        if (canSeePlayer && distToPlayer < effectiveRange && !playerHidden) {
+                            m.state = MONSTER_STATES.CHASE;
+                            m.sawPlayerHide = false;
+                            if (distToPlayer < m.detectionRange * 0.5) {
+                                // Внезапное обнаружение — скример
+                                playNoise(0.25, 0.2, 150);
+                                screenShake(8, 0.4);
+                                globalFlash = 0.3;
+                            }
+                        } else if (playerIsNoisy && distToPlayer < m.detectionRange * 1.4 && !playerHidden && Math.random() <
+                            0.03) {
+                            m.state = MONSTER_STATES.ALERT;
+                            m.alertTimer = 2 + Math.random() * 3;
+                            m.playerLastSeenPos = { x: player.x, y: player.y };
+                        }
+                    }
+
+                    // Если игрок прячется на глазах монстра
+                    if (player.isHiding && m.state === MONSTER_STATES.CHASE && distToPlayer < m.detectionRange) {
+                        m.sawPlayerHide = true;
+                    }
+
+                    // Движение
+                    if (m.state === MONSTER_STATES.CHASE && !playerHidden) {
+                        const dx = player.x - m.x;
+                        const dy = player.y - m.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const spd = m.speed * (1 + difficulty * 0.06);
+                        m.vx = (dx / dist) * spd;
+                        m.vy = (dy / dist) * spd;
+                    } else if (m.state === MONSTER_STATES.ALERT && m.playerLastSeenPos) {
+                        const dx = m.playerLastSeenPos.x - m.x;
+                        const dy = m.playerLastSeenPos.y - m.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const spd = m.speed * 0.7;
+                        m.vx = (dx / dist) * spd;
+                        m.vy = (dy / dist) * spd;
+                        if (dist < 30) {
+                            m.playerLastSeenPos = null;
+                            m.state = MONSTER_STATES.PATROL;
+                        }
+                    } else if (m.state === MONSTER_STATES.PATROL) {
+                        const dx = m.patrolTarget.x - m.x;
+                        const dy = m.patrolTarget.y - m.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const spd = m.speed * 0.35;
+                        m.vx = (dx / dist) * spd;
+                        m.vy = (dy / dist) * spd;
+                        m.patrolTimer -= realDt;
+                        if (dist < 25 || m.patrolTimer <= 0) {
+                            m.patrolTarget = {
+                                x: m.x + (Math.random() - 0.5) * 500,
+                                y: m.y + (Math.random() - 0.5) * 500,
+                            };
+                            m.patrolTarget.x = Math.max(50, Math.min(WORLD_W - 50, m.patrolTarget.x));
+                            m.patrolTarget.y = Math.max(50, Math.min(WORLD_H - 50, m.patrolTarget.y));
+                            m.patrolTimer = 3 + Math.random() * 7;
+                        }
+                    }
+
+                    m.x += m.vx * realDt;
+                    m.y += m.vy * realDt;
+
+                    // Коллизия с деревьями (фантом может проходить)
+                    if (m.type !== 'phantom' || m.phaseCooldown > 0 || m.state !== MONSTER_STATES.CHASE) {
+                        const res = resolveCircleCollision(m.x, m.y, m.radius, trees);
+                        m.x = res.x;
+                        m.y = res.y;
+                    } else if (m.type === 'phantom' && m.state === MONSTER_STATES.CHASE && m.phaseCooldown <= 0) {
+                        // Фантом проходит сквозь деревья, но получает кулдаун
+                        let hitTree = false;
+                        for (const t of trees) {
+                            if (Math.hypot(m.x - t.x, m.y - t.y) < t.radius + m.radius) {
+                                hitTree = true;
+                                break;
+                            }
+                        }
+                        if (hitTree) m.phaseCooldown = 2;
+                    }
+                    m.x = Math.max(m.radius, Math.min(WORLD_W - m.radius, m.x));
+                    m.y = Math.max(m.radius, Math.min(WORLD_H - m.radius, m.y));
+
+                    // Рычание
+                    m.growlTimer -= realDt;
+                    if (m.growlTimer <= 0 && distToPlayer < 700) {
+                        m.growlTimer = 4 + Math.random() * 8;
+                        const vol = Math.max(0.02, 0.12 - distToPlayer / 3000);
+                        playNoise(0.2 + Math.random() * 0.4, vol, 80 + Math.random() * 150);
+                    }
+
+                    // Урон игроку
+                    if (distToPlayer < player.radius + m.radius + 8 && !player.isHiding && player.invincibleTimer <=
+                        0 && m.state !== MONSTER_STATES.STUNNED) {
+                        const dmg = 18 + Math.floor(difficulty * 4);
+                        player.health -= dmg;
+                        player.invincibleTimer = 0.8;
+                        spawnBlood(player.x, player.y, 15);
+                        screenShake(14, 0.6);
+                        globalFlash = 0.7;
+                        playNoise(0.35, 0.25, 60);
+                        playTone(45, 'square', 0.3, 0.3, 10);
+                        // Отбрасывание игрока
+                        const pushAngle = Math.atan2(player.y - m.y, player.x - m.x);
+                        player.x += Math.cos(pushAngle) * 70;
+                        player.y += Math.sin(pushAngle) * 70;
+                        const res = resolveCircleCollision(player.x, player.y, player.radius, trees);
+                        player.x = res.x;
+                        player.y = res.y;
+                        if (player.isHiding) {
+                            player.isHiding = false;
+                            player.hidingSpot = null;
+                        }
+                        if (player.health <= 0) {
+                            player.alive = false;
+                            player.health = 0;
+                            gameState = STATE.GAMEOVER;
+                            spawnBlood(player.x, player.y, 40);
+                            screenShake(25, 1.5);
+                            globalFlash = 1.5;
+                            playNoise(0.8, 0.5, 40);
+                            playTone(30, 'sawtooth', 1.0, 0.5, -30);
+                            showMessage('ТЫ ПОГИБ...', '#ff0000');
+                            setTimeout(() => {
+                                hintEl.textContent =
+                                    'Нажми ПРОБЕЛ чтобы попробовать снова... | Убито: ' + kills + ' | Счёт: ' +
+                                    score;
+                                hintEl.style.opacity = '1';
+                            }, 1500);
+                        }
+                    }
+
+                    // Сердцебиение при близости монстра
+                    if (distToPlayer < 350 && m.state === MONSTER_STATES.CHASE && player.alive) {
+                        const intensity = 1 - distToPlayer / 350;
+                        if (Math.random() < intensity * 0.3) heartBeat(intensity);
+                    }
+                }
+
+                // Очистка мёртвых монстров и спавн новых
+                const aliveMonsters = monsters.filter(m => m.health > 0);
+                const deadCount = monsters.length - aliveMonsters.length;
+                monsters = aliveMonsters;
+                // Спавн новых монстров со временем
+                const targetMonsterCount = 3 + Math.floor(gameTime / 40);
+                if (monsters.length < targetMonsterCount && Math.random() < 0.008) {
+                    spawnMonster(true);
+                }
+                if (monsters.length < 2) {
+                    spawnMonster(true);
+                    spawnMonster(true);
+                }
+
+                // Шёпот в темноте
+                if (whisperTimer <= 0 && Math.random() < 0.002 && player.flashlightBattery < 40) {
+                    const whispers = [
+                        '...ты не один...',
+                        '...уходи...',
+                        '...они близко...',
+                        '...не смотри назад...',
+                        '...темнота смотрит...',
+                        '...беги...',
+                        '...прячься...',
+                        '...он дышит...',
+                    ];
+                    whisperText = whispers[Math.floor(Math.random() * whispers.length)];
+                    whisperTimer = 2.5;
+                    whisperAlpha = 1;
+                    playTone(120, 'sine', 0.8, 0.03, Math.random() * 20 - 10);
+                }
+
+                // Обновление частиц
+                for (const p of particles) {
+                    p.x += p.vx * realDt;
+                    p.y += p.vy * realDt;
+                    p.life -= realDt;
+                }
+                particles = particles.filter(p => p.life > 0);
+
+                // Обновление тумана
+                for (const fp of fogParticles) {
+                    fp.wobble += fp.wobbleSpeed * realDt;
+                    fp.x += Math.cos(fp.angle) * fp.speed * realDt + Math.sin(fp.wobble) * 0.4;
+                    fp.y += Math.sin(fp.angle) * fp.speed * realDt + Math.cos(fp.wobble) * 0.4;
+                    if (fp.x < -50) fp.x = WORLD_W + 50;
+                    if (fp.x > WORLD_W + 50) fp.x = -50;
+                    if (fp.y < -50) fp.y = WORLD_H + 50;
+                    if (fp.y > WORLD_H + 50) fp.y = -50;
+                }
+
+                // Обновление камеры
+                updateCamera(player.x, player.y);
+
+                // Счёт
+                score += realDt * 1;
+            }
+
+            function findNearestHideSpot() {
+                let best = null;
+                let bestDist = 50;
+                for (const hs of hidingSpots) {
+                    const dist = Math.hypot(player.x - hs.x, player.y - hs.y);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        best = hs;
+                    }
+                }
+                return best;
+            }
+
+            function showMessage(text, color = '#ff4444') {
+                messageEl.textContent = text;
+                messageEl.style.color = color;
+                messageEl.style.textShadow = `0 0 30px ${color}, 0 0 60px ${color}`;
+                messageEl.style.opacity = '1';
+                clearTimeout(messageEl._timeout);
+                messageEl._timeout = setTimeout(() => {
+                    messageEl.style.opacity = '0';
+                }, 1800);
+            }
+
+            // ─────────────────────────────────────
+            // РЕНДЕРИНГ
+            // ─────────────────────────────────────
+            function drawTree(tree, sx, sy) {
+                const x = tree.x - sx;
+                const y = tree.y - sy;
+                const r = tree.radius;
+
+                // Тень
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.beginPath();
+                ctx.arc(x + 4, y + 4, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ствол
+                const trunkGrad = ctx.createRadialGradient(x - r * 0.2, y - r * 0.2, r * 0.1, x, y, r);
+                trunkGrad.addColorStop(0, '#4a3728');
+                trunkGrad.addColorStop(0.5, '#2d1f14');
+                trunkGrad.addColorStop(1, '#1a0f08');
+                ctx.fillStyle = trunkGrad;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Крона (неровная)
+                ctx.fillStyle = 'rgba(8,20,8,0.85)';
+                ctx.beginPath();
+                const crownR = r * 1.6;
+                const bumps = 8 + tree.type * 4;
+                for (let i = 0; i < bumps; i++) {
+                    const angle = (i / bumps) * Math.PI * 2 + tree.creep;
+                    const cr = crownR * (0.7 + Math.sin(i * 3.7 + tree.creep) * 0.35);
+                    const cx = x + Math.cos(angle) * cr * 0.7;
+                    const cy = y + Math.sin(angle) * cr * 0.7;
+                    if (i === 0) ctx.moveTo(cx, cy);
+                    else ctx.lineTo(cx, cy);
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // Детали кроны
+                ctx.fillStyle = 'rgba(4,14,4,0.7)';
+                ctx.beginPath();
+                ctx.arc(x, y - r * 0.2, crownR * 0.55, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function render() {
+                ctx.clearRect(0, 0, W, H);
+
+                // Дрожание экрана
+                let shakeX = 0,
+                    shakeY = 0;
+                if (shakeAmount > 0.3) {
+                    shakeX = (Math.random() - 0.5) * shakeAmount * 2;
+                    shakeY = (Math.random() - 0.5) * shakeAmount * 2;
+                }
+
+                const sx = camera.x + shakeX;
+                const sy = camera.y + shakeY;
+
+                // Фон леса
+                const bgGrad = ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 1.2);
+                bgGrad.addColorStop(0, '#1a2a0f');
+                bgGrad.addColorStop(0.5, '#0d1a08');
+                bgGrad.addColorStop(1, '#050d03');
+                ctx.fillStyle = bgGrad;
+                ctx.fillRect(0, 0, W, H);
+
+                // Текстура земли
+                ctx.fillStyle = 'rgba(20,30,12,0.3)';
+                const tileSize = 80;
+                const startTX = -((sx % tileSize) + tileSize) % tileSize;
+                const startTY = -((sy % tileSize) + tileSize) % tileSize;
+                for (let tx = startTX; tx < W + tileSize; tx += tileSize) {
+                    for (let ty = startTY; ty < H + tileSize; ty += tileSize) {
+                        if (Math.random() < 0.15) {
+                            ctx.fillRect(tx, ty, tileSize * 0.3, tileSize * 0.3);
+                        }
+                    }
+                }
+
+                // Трава/почва
+                ctx.fillStyle = '#111a08';
+                ctx.fillRect(0, 0, W, H);
+                // Лёгкая текстура
+                const seed = 42;
+                for (let i = 0; i < 200; i++) {
+                    const gx = ((i * 137 + seed * 79) % W);
+                    const gy = ((i * 251 + seed * 131) % H);
+                    ctx.fillStyle = `rgba(${18+Math.random()*10},${22+Math.random()*8},${6+Math.random()*6},0.5)`;
+                    ctx.fillRect(gx, gy, 2 + Math.random() * 6, 2 + Math.random() * 6);
+                }
+
+                // Деревья (только видимые)
+                const visibleTrees = trees.filter(t => {
+                    const dx = t.x - (sx + W / 2);
+                    const dy = t.y - (sy + H / 2);
+                    return Math.sqrt(dx * dx + dy * dy) < W * 0.9;
+                });
+                for (const tree of visibleTrees) {
+                    drawTree(tree, sx, sy);
+                }
+
+                // Кусты-укрытия
+                for (const hs of hidingSpots) {
+                    const x = hs.x - sx;
+                    const y = hs.y - sy;
+                    if (x < -60 || x > W + 60 || y < -60 || y > H + 60) continue;
+                    const isNear = Math.hypot(player.x - hs.x, player.y - hs.y) < 50;
+                    const alpha = isNear ? 0.9 : 0.55;
+                    ctx.fillStyle = `rgba(25,45,18,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, hs.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = `rgba(35,60,22,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(x - 3, y - 3, hs.radius * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Иконка укрытия если близко
+                    if (isNear && !player.isHiding) {
+                        ctx.strokeStyle = 'rgba(200,200,200,0.5)';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([4, 4]);
+                        ctx.beginPath();
+                        ctx.arc(x, y, hs.radius + 10, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.lineWidth = 1;
+                    }
+                    if (player.isHiding && player.hidingSpot === hs) {
+                        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(x, y, hs.radius + 8, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.lineWidth = 1;
+                    }
+                }
+
+                // Предметы
+                for (const item of items) {
+                    if (item.collected) continue;
+                    const x = item.x - sx;
+                    const y = item.y - sy;
+                    if (x < -30 || x > W + 30 || y < -30 || y > H + 30) continue;
+                    item.glow += 0.03;
+                    const glowAlpha = 0.5 + Math.sin(item.glow) * 0.35;
+                    if (item.type === 'battery') {
+                        ctx.fillStyle = `rgba(255,200,30,${glowAlpha})`;
+                        ctx.shadowColor = '#ffcc00';
+                        ctx.shadowBlur = 15;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = '#ffdd55';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillStyle = `rgba(255,60,40,${glowAlpha})`;
+                        ctx.shadowColor = '#ff3333';
+                        ctx.shadowBlur = 15;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Крестик
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(x - 3, y);
+                        ctx.lineTo(x + 3, y);
+                        ctx.moveTo(x, y - 3);
+                        ctx.lineTo(x, y + 3);
+                        ctx.stroke();
+                        ctx.lineWidth = 1;
+                    }
+                }
+
+                // Монстры
+                for (const m of monsters) {
+                    if (m.health <= 0) continue;
+                    const x = m.x - sx;
+                    const y = m.y - sy;
+                    const distToPlayer = Math.hypot(m.x - player.x, m.y - player.y);
+                    const lightRadius = player.isHiding ? 80 : 150 + (player.flashlightBattery / player.maxBattery) * 100;
+
+                    // Видимость монстра
+                    const inLight = distToPlayer < lightRadius && lineOfSight(player.x, player.y, m.x, m.y, trees);
+
+                    if (inLight) {
+                        // Полное тело монстра
+                        const bodyGrad = ctx.createRadialGradient(x, y, m.radius * 0.2, x, y, m.radius);
+                        bodyGrad.addColorStop(0, '#1a0a0a');
+                        bodyGrad.addColorStop(0.7, '#0d0404');
+                        bodyGrad.addColorStop(1, '#000000');
+                        ctx.fillStyle = bodyGrad;
+                        ctx.beginPath();
+                        // Искажённая форма
+                        const shapePoints = 7;
+                        for (let i = 0; i < shapePoints; i++) {
+                            const angle = (i / shapePoints) * Math.PI * 2 + m.eyeGlow;
+                            const rr = m.radius * (0.75 + Math.sin(i * 4.5 + gameTime * 2) * 0.3);
+                            const px = x + Math.cos(angle) * rr;
+                            const py = y + Math.sin(angle) * rr;
+                            if (i === 0) ctx.moveTo(px, py);
+                            else ctx.lineTo(px, py);
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+
+                        // Щупальца/искажения
+                        ctx.strokeStyle = 'rgba(30,5,5,0.6)';
+                        ctx.lineWidth = 2;
+                        for (let t = 0; t < 5; t++) {
+                            const ta = (t / 5) * Math.PI * 2 + gameTime * 0.5;
+                            ctx.beginPath();
+                            ctx.moveTo(x + Math.cos(ta) * m.radius * 0.7, y + Math.sin(ta) * m.radius * 0.7);
+                            const ex = x + Math.cos(ta + 0.3) * m.radius * 1.6;
+                            const ey = y + Math.sin(ta + 0.3) * m.radius * 1.6;
+                            ctx.quadraticCurveTo(
+                                x + Math.cos(ta) * m.radius * 1.2,
+                                y + Math.sin(ta) * m.radius * 1.2,
+                                ex, ey
+                            );
+                            ctx.stroke();
+                        }
+                        ctx.lineWidth = 1;
+
+                        // Глаза
+                        const eyeDist = m.radius * 0.45;
+                        const eyeAngle = Math.atan2(player.y - m.y, player.x - m.x);
+                        for (const side of [-1, 1]) {
+                            const ex = x + Math.cos(eyeAngle) * eyeDist + Math.cos(eyeAngle + Math.PI / 2) * side * eyeDist *
+                                0.6;
+                            const ey = y + Math.sin(eyeAngle) * eyeDist + Math.sin(eyeAngle + Math.PI / 2) * side * eyeDist *
+                                0.6;
+                            const eyeGrad = ctx.createRadialGradient(ex, ey, 1, ex, ey, m.radius * 0.35);
+                            eyeGrad.addColorStop(0, '#ff2200');
+                            eyeGrad.addColorStop(0.4, '#cc0000');
+                            eyeGrad.addColorStop(1, 'rgba(100,0,0,0)');
+                            ctx.fillStyle = eyeGrad;
+                            ctx.beginPath();
+                            ctx.arc(ex, ey, m.radius * 0.35, 0, Math.PI * 2);
+                            ctx.fill();
+                            // Зрачок
+                            ctx.fillStyle = '#000';
+                            ctx.beginPath();
+                            ctx.arc(ex, ey, m.radius * 0.12, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    } else if (distToPlayer < lightRadius * 2.5) {
+                        // Только светящиеся глаза в темноте
+                        const eyeDist = m.radius * 0.45;
+                        const eyeAngle = Math.atan2(player.y - m.y, player.x - m.x);
+                        const eyeGlowIntensity = Math.max(0, 1 - distToPlayer / (lightRadius * 2.5));
+                        for (const side of [-1, 1]) {
+                            const ex = x + Math.cos(eyeAngle) * eyeDist + Math.cos(eyeAngle + Math.PI / 2) * side * eyeDist *
+                                0.6;
+                            const ey = y + Math.sin(eyeAngle) * eyeDist + Math.sin(eyeAngle + Math.PI / 2) * side * eyeDist *
+                                0.6;
+                            if (ex < -20 || ex > W + 20 || ey < -20 || ey > H + 20) continue;
+                            const eyeGrad = ctx.createRadialGradient(ex, ey, 0.5, ex, ey, 7 * eyeGlowIntensity);
+                            eyeGrad.addColorStop(0, `rgba(255,30,0,${eyeGlowIntensity})`);
+                            eyeGrad.addColorStop(0.5, `rgba(200,0,0,${eyeGlowIntensity*0.7})`);
+                            eyeGrad.addColorStop(1, 'rgba(100,0,0,0)');
+                            ctx.fillStyle = eyeGrad;
+                            ctx.beginPath();
+                            ctx.arc(ex, ey, 7 * eyeGlowIntensity, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+
+                // Игрок
+                if (player.alive) {
+                    const px = player.x - sx;
+                    const py = player.y - sy;
+                    if (player.isHiding) {
+                        // Скрыт — едва видим
+                        const hideAlpha = Math.max(0.15, player.hideTransition);
+                        ctx.fillStyle = `rgba(30,40,20,${hideAlpha})`;
+                        ctx.beginPath();
+                        ctx.arc(px, py, player.radius * 0.6, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        // Тело игрока
+                        const bodyGrad = ctx.createRadialGradient(px, py, player.radius * 0.2, px, py, player.radius);
+                        bodyGrad.addColorStop(0, '#5a6a4a');
+                        bodyGrad.addColorStop(1, '#2a3a1a');
+                        ctx.fillStyle = bodyGrad;
+                        ctx.beginPath();
+                        ctx.arc(px, py, player.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Голова
+                        ctx.fillStyle = '#d4c4a8';
+                        ctx.beginPath();
+                        ctx.arc(px, py - player.radius - 5, player.radius * 0.55, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Фонарик (маленький луч на модели)
+                        if (player.flashlightBattery > 5) {
+                            const fAngle = Math.atan2(
+                                (keys['KeyW'] || keys['ArrowUp'] ? -1 : 0) + (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0),
+                                (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) + (keys['KeyA'] || keys['ArrowLeft'] ? -1 : 0)
+                            ) || player.attackAngle || 0;
+                            ctx.fillStyle = '#ffffaa';
+                            ctx.beginPath();
+                            ctx.arc(
+                                px + Math.cos(fAngle) * player.radius,
+                                py + Math.sin(fAngle) * player.radius,
+                                4, 0, Math.PI * 2
+                            );
+                            ctx.fill();
+                        }
+                    }
+
+                    // Атака (визуальный эффект)
+                    if (player.attackDuration > 0 && !player.isHiding) {
+                        const attackRange = 55;
+                        const ax = px + Math.cos(player.attackAngle) * attackRange;
+                        const ay = py + Math.sin(player.attackAngle) * attackRange;
+                        const swingProgress = 1 - player.attackDuration / 0.25;
+                        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(ax, ay, 25, player.attackAngle - swingProgress * 1.5, player.attackAngle + swingProgress *
+                            1.5);
+                        ctx.stroke();
+                        ctx.lineWidth = 1;
+                        // Лезвие
+                        ctx.strokeStyle = 'rgba(200,200,220,0.9)';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(px + Math.cos(player.attackAngle) * player.radius,
+                            py + Math.sin(player.attackAngle) * player.radius);
+                        ctx.lineTo(ax, ay);
+                        ctx.stroke();
+                        ctx.lineWidth = 1;
+                    }
+
+                    // Индикатор неуязвимости
+                    if (player.invincibleTimer > 0 && Math.floor(player.invincibleTimer * 15) % 2 === 0) {
+                        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(px, py, player.radius + 8, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.lineWidth = 1;
+                    }
+                }
+
+                // Частицы
+                for (const p of particles) {
+                    const px = p.x - sx;
+                    const py = p.y - sy;
+                    const alpha = p.life / p.maxLife;
+                    ctx.fillStyle = p.color.replace(')', `,${alpha})`).replace('rgb',
+                        'rgba');
+                    if (p.color.startsWith('#')) {
+                        const hex = p.color;
+                        const r = parseInt(hex.slice(1, 3), 16);
+                        const g = parseInt(hex.slice(3, 5), 16);
+                        const b = parseInt(hex.slice(5, 7), 16);
+                        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+                    }
+                    ctx.beginPath();
+                    ctx.arc(px, py, p.radius * alpha, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // ─────────────────────────────────────
+                // СЛОЙ ТЕМНОТЫ (фонарик)
+                // ─────────────────────────────────────
+                const lightCX = player.x - sx;
+                const lightCY = player.y - sy;
+
+                // Создаём оффскрин-канвас для темноты
+                if (!render._darkCanvas || render._darkCanvas.width !== W || render._darkCanvas.height !== H) {
+                    render._darkCanvas = document.createElement('canvas');
+                    render._darkCanvas.width = W;
+                    render._darkCanvas.height = H;
+                    render._darkCtx = render._darkCanvas.getContext('2d');
+                }
+                const dCtx = render._darkCtx;
+                const dCanvas = render._darkCanvas;
+                dCtx.clearRect(0, 0, W, H);
+
+                // Заливаем чёрным с высокой непрозрачностью
+                dCtx.fillStyle = 'rgba(0,0,0,0.88)';
+                dCtx.fillRect(0, 0, W, H);
+
+                // Вырезаем свет фонарика
+                const batteryRatio = player.flashlightBattery / player.maxBattery;
+                const lightRadius = player.isHiding ?
+                    60 + batteryRatio * 20 :
+                    130 + batteryRatio * 160;
+                const flicker = batteryRatio < 0.3 && Math.random() < 0.08 ?
+                    (0.4 + Math.random() * 0.6) :
+                    1;
+
+                const lightGrad = dCtx.createRadialGradient(lightCX, lightCY, lightRadius * 0.15 * flicker,
+                    lightCX, lightCY, lightRadius * flicker);
+                lightGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                lightGrad.addColorStop(0.4, 'rgba(0,0,0,0.02)');
+                lightGrad.addColorStop(0.7, 'rgba(0,0,0,0.3)');
+                lightGrad.addColorStop(0.9, 'rgba(0,0,0,0.7)');
+                lightGrad.addColorStop(1, 'rgba(0,0,0,0.88)');
+
+                dCtx.globalCompositeOperation = 'destination-out';
+                dCtx.fillStyle = lightGrad;
+                dCtx.beginPath();
+                dCtx.arc(lightCX, lightCY, lightRadius * flicker, 0, Math.PI * 2);
+                dCtx.fill();
+                dCtx.globalCompositeOperation = 'source-over';
+
+                // Рисуем слой темноты
+                ctx.drawImage(dCanvas, 0, 0);
+
+                // Виньетка (красная при низком здоровье)
+                const healthRatio = player.health / player.maxHealth;
+                if (healthRatio < 0.4) {
+                    const vignetteGrad = ctx.createRadialGradient(W / 2, H / 2, W * 0.4, W / 2, H / 2, W * 0.85);
+                    const redIntensity = (0.4 - healthRatio) * 1.5;
+                    vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                    vignetteGrad.addColorStop(1, `rgba(${Math.floor(80+redIntensity*150)},0,0,${0.25+redIntensity*0.5})`);
+                    ctx.fillStyle = vignetteGrad;
+                    ctx.fillRect(0, 0, W, H);
+                }
+
+                // Глобальная вспышка
+                if (globalFlash > 0) {
+                    ctx.fillStyle = `rgba(255,30,10,${globalFlash*0.5})`;
+                    ctx.fillRect(0, 0, W, H);
+                }
+
+                // Частицы тумана (только в свете фонарика)
+                for (const fp of fogParticles) {
+                    const fx = fp.x - sx;
+                    const fy = fp.y - sy;
+                    const distToLight = Math.hypot(fx - lightCX, fy - lightCY);
+                    if (distToLight < lightRadius && fx > -10 && fx < W + 10 && fy > -10 && fy < H + 10) {
+                        const alpha = fp.alpha * (1 - distToLight / lightRadius) * flicker;
+                        ctx.fillStyle = `rgba(180,190,200,${alpha})`;
+                        ctx.beginPath();
+                        ctx.arc(fx, fy, fp.radius * (0.6 + Math.sin(fp.wobble) * 0.4), 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // ─────────────────────────────────────
+                // UI
+                // ─────────────────────────────────────
+                const uiX = 20;
+                const uiY = 20;
+                const barWidth = 200;
+                const barHeight = 18;
+                const barGap = 8;
+
+                function drawBar(x, y, w, h, value, maxValue, colorLow, colorMid, colorHigh, label, icon) {
+                    // Фон
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, w, h, 4);
+                    ctx.fill();
+                    ctx.stroke();
+                    // Заполнение
+                    const ratio = Math.max(0, Math.min(1, value / maxValue));
+                    let color;
+                    if (ratio < 0.3) color = colorLow;
+                    else if (ratio < 0.6) color = colorMid;
+                    else color = colorHigh;
+                    const grad = ctx.createLinearGradient(x, y, x, y + h);
+                    grad.addColorStop(0, color);
+                    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.roundRect(x + 1, y + 1, (w - 2) * ratio, h - 2, 3);
+                    ctx.fill();
+                    // Иконка и текст
+                    ctx.fillStyle = '#ddd';
+                    ctx.font = '11px "Courier New", monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${icon} ${label}: ${Math.floor(value)}`, x + 6, y + h / 2 + 4);
+                    ctx.textAlign = 'start';
+                }
+
+                drawBar(uiX, uiY, barWidth, barHeight, player.health, player.maxHealth,
+                    '#ff2222', '#ff6644', '#44cc44', 'Здоровье', '❤️');
+                drawBar(uiX, uiY + barHeight + barGap, barWidth, barHeight, player.stamina, player.maxStamina,
+                    '#ff8800', '#ffaa33', '#ffcc66', 'Выносл.', '⚡');
+                drawBar(uiX, uiY + (barHeight + barGap) * 2, barWidth, barHeight, player.flashlightBattery, player
+                    .maxBattery,
+                    '#666600', '#999900', '#ccdd00', 'Фонарь', '🔦');
+
+                // Счёт
+                ctx.fillStyle = '#ccc';
+                ctx.font = '13px "Courier New", monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(`Счёт: ${Math.floor(score)} | Убито: ${kills} | Сложность: ${difficulty}`, W - 20, uiY + 25);
+                ctx.textAlign = 'start';
+
+                // Статус укрытия
+                if (player.isHiding) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.font = 'bold 16px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🫣 В УКРЫТИИ', W / 2, H - 40);
+                    ctx.textAlign = 'start';
+                } else if (findNearestHideSpot() && !player.isHiding) {
+                    ctx.fillStyle = 'rgba(200,200,200,0.6)';
+                    ctx.font = '12px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Нажми E чтобы спрятаться', W / 2, H - 40);
+                    ctx.textAlign = 'start';
+                }
+
+                // Шёпот
+                if (whisperAlpha > 0.05 && whisperText) {
+                    ctx.fillStyle = `rgba(180,30,30,${whisperAlpha})`;
+                    ctx.font = 'italic 20px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(whisperText, W / 2 + (Math.random() - 0.5) * 6, H * 0.65);
+                    ctx.textAlign = 'start';
+                }
+
+                // Предупреждение о низком заряде
+                if (player.flashlightBattery < 20 && player.flashlightBattery > 0 && Math.floor(gameTime * 3) % 2 === 0) {
+                    ctx.fillStyle = 'rgba(255,200,0,0.6)';
+                    ctx.font = 'bold 13px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚠ ФОНАРЬ САДИТСЯ! НАЙДИ БАТАРЕИ! ⚠', W / 2, uiY + (barHeight + barGap) * 3 + 25);
+                    ctx.textAlign = 'start';
+                }
+            }
+
+            // ─────────────────────────────────────
+            // ИГРОВОЙ ЦИКЛ
+            // ─────────────────────────────────────
+            let lastTime = performance.now();
+            let monsterSpawnAccum = 0;
+
+            function gameLoop(timestamp) {
+                let dt = (timestamp - lastTime) / 1000;
+                if (dt <= 0) dt = 0.016;
+                if (dt > 0.2) dt = 0.2; // кап при зависании
+                lastTime = timestamp;
+
+                if (gameState === STATE.PLAYING) {
+                    update(dt);
+                    // Периодический спавн монстров
+                    monsterSpawnAccum += dt;
+                    if (monsterSpawnAccum > 25 + Math.random() * 20 && monsters.length < 3 + difficulty * 2) {
+                        monsterSpawnAccum = 0;
+                        if (Math.random() < 0.6) spawnMonster(true);
+                    }
+                }
+
+                render();
+
+                // Меню / Game Over
+                if (gameState === STATE.MENU) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                    ctx.fillRect(0, 0, W, H);
+                    ctx.fillStyle = '#cc2222';
+                    ctx.font = 'bold 42px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ПРОКЛЯТЫЙ ЛЕС', W / 2, H / 2 - 40);
+                    ctx.fillStyle = '#ddd';
+                    ctx.font = '16px "Courier New", monospace';
+                    ctx.fillText('Выживи в ночи... если сможешь', W / 2, H / 2 + 10);
+                    ctx.fillText('Нажми ПРОБЕЛ чтобы начать', W / 2, H / 2 + 55);
+                    ctx.fillText('WASD — движение | SHIFT — бег | E — укрытие | ПРОБЕЛ — удар', W / 2, H / 2 + 80);
+                    ctx.textAlign = 'start';
+                }
+
+                if (gameState === STATE.GAMEOVER) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                    ctx.fillRect(0, 0, W, H);
+                    // Кровавые потёки
+                    for (let i = 0; i < 8; i++) {
+                        ctx.fillStyle = 'rgba(100,5,5,0.5)';
+                        ctx.beginPath();
+                        const bx = W * 0.3 + i * 55;
+                        ctx.moveTo(bx, 0);
+                        ctx.lineTo(bx + 30, H);
+                        ctx.lineTo(bx - 20, H);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    ctx.fillStyle = '#ff1111';
+                    ctx.font = 'bold 50px "Courier New", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ТЫ ПОГИБ', W / 2, H / 2 - 30);
+                    ctx.fillStyle = '#ddd';
+                    ctx.font = '18px "Courier New", monospace';
+                    ctx.fillText(`Счёт: ${Math.floor(score)} | Убито монстров: ${kills} | Сложность: ${difficulty}`,
+                        W / 2, H / 2 + 25);
+                    ctx.fillText('Нажми ПРОБЕЛ чтобы попробовать снова', W / 2, H / 2 + 60);
+                    ctx.textAlign = 'start';
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            // ─────────────────────────────────────
+            // УПРАВЛЕНИЕ
+            // ─────────────────────────────────────
+            const keys = {};
+            const keysPrev = {};
+
+            window.addEventListener('keydown', (e) => {
+                keysPrev[e.code] = keys[e.code] || false;
+                keys[e.code] = true;
+                keys[e.key] = true;
+
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (gameState === STATE.MENU) {
+                        initAudio();
+                        generateWorld();
+                        gameState = STATE.PLAYING;
+                        hintEl.style.opacity = '0.6';
+                        showMessage('БЕГИ!', '#ff4444');
+                        playNoise(0.5, 0.3, 50);
+                    } else if (gameState === STATE.GAMEOVER) {
+                        initAudio();
+                        generateWorld();
+                        gameState = STATE.PLAYING;
+                        hintEl.style.opacity = '0.6';
+                        messageEl.style.opacity = '0';
+                        showMessage('СНОВА В ЛЕС...', '#ffaa00');
+                    } else if (gameState === STATE.PLAYING && player.alive && player.attackCooldown <= 0 && !player
+                        .isHiding) {
+                        player.attackCooldown = 0.7;
+                        player.attackDuration = 0.25;
+                        let ax = 0,
+                            ay = 0;
+                        if (keys['KeyW'] || keys['ArrowUp']) ay = -1;
+                        if (keys['KeyS'] || keys['ArrowDown']) ay = 1;
+                        if (keys['KeyA'] || keys['ArrowLeft']) ax = -1;
+                        if (keys['KeyD'] || keys['ArrowRight']) ax = 1;
+                        if (ax === 0 && ay === 0) {
+                            // Атака в последнем направлении движения или вверх
+                            const mouseDx = player.vx || 0;
+                            const mouseDy = player.vy || -1;
+                            const mag = Math.sqrt(mouseDx * mouseDx + mouseDy * mouseDy) || 1;
+                            ax = mouseDx / mag;
+                            ay = mouseDy / mag;
+                        }
+                        player.attackAngle = Math.atan2(ay, ax);
+                        playNoise(0.1, 0.1, 200);
+                        playTone(200, 'square', 0.12, 0.06, 0);
+                    }
+                }
+                if (e.code === 'KeyE' && gameState === STATE.PLAYING && player.alive) {
+                    keys['KeyE'] = true;
+                }
+                if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    keys['sprint'] = true;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keysPrev[e.code] = keys[e.code] || false;
+                keys[e.code] = false;
+                keys[e.key] = false;
+                if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    keys['sprint'] = false;
+                }
+                if (e.code === 'KeyE') {
+                    keys['KeyE'] = false;
+                }
+            });
+
+            // ─────────────────────────────────────
+            // МОБИЛЬНОЕ УПРАВЛЕНИЕ
+            // ─────────────────────────────────────
+            function setupMobileButton(id, keyName) {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    initAudio();
+                    keys[keyName] = true;
+                    if (keyName === 'attack' && gameState === STATE.PLAYING && player.alive && player
+                        .attackCooldown <= 0 && !player.isHiding) {
+                        player.attackCooldown = 0.7;
+                        player.attackDuration = 0.25;
+                        let ax = 0,
+                            ay = 0;
+                        if (keys['up']) ay = -1;
+                        if (keys['down']) ay = 1;
+                        if (keys['left']) ax = -1;
+                        if (keys['right']) ax = 1;
+                        if (ax === 0 && ay === 0) { ax = 0;
+                            ay = -1; }
+                        player.attackAngle = Math.atan2(ay, ax);
+                        playNoise(0.1, 0.1, 200);
+                        playTone(200, 'square', 0.12, 0.06, 0);
+                    }
+                    if (keyName === 'sprint') keys['sprint'] = true;
+                    if (keyName === 'hide') {
+                        keys['KeyE'] = true;
+                        // Триггерим мгновенно
+                        setTimeout(() => {
+                            const nhs = findNearestHideSpot();
+                            if (player.isHiding) {
+                                player.isHiding = false;
+                                player.hidingSpot = null;
+                                player.hideTransition = 0;
+                            } else if (nhs && player.stamina > 10 && player.alive) {
+                                player.isHiding = true;
+                                player.hidingSpot = nhs;
+                                player.hideTransition = 1;
+                                player.x = nhs.x;
+                                player.y = nhs.y;
+                                nhs.discovered = true;
+                                playNoise(0.06, 0.04, 400);
+                            }
+                        }, 30);
+                    }
+                    if (keyName === 'attack' && gameState === STATE.MENU) {
+                        initAudio();
+                        generateWorld();
+                        gameState = STATE.PLAYING;
+                        hintEl.style.opacity = '0.6';
+                        showMessage('БЕГИ!', '#ff4444');
+                    }
+                    if (keyName === 'attack' && gameState === STATE.GAMEOVER) {
+                        initAudio();
+                        generateWorld();
+                        gameState = STATE.PLAYING;
+                        hintEl.style.opacity = '0.6';
+                        messageEl.style.opacity = '0';
+                    }
+                });
+                btn.addEventListener('pointerup', (e) => {
+                    e.preventDefault();
+                    keys[keyName] = false;
+                    if (keyName === 'sprint') keys['sprint'] = false;
+                    if (keyName === 'hide') keys['KeyE'] = false;
+                });
+                btn.addEventListener('pointerleave', (e) => {
+                    keys[keyName] = false;
+                    if (keyName === 'sprint') keys['sprint'] = false;
+                    if (keyName === 'hide') keys['KeyE'] = false;
+                });
+                btn.addEventListener('touchstart', (e) => e.preventDefault());
+            }
+
+            setupMobileButton('btn-up', 'up');
+            setupMobileButton('btn-down', 'down');
+            setupMobileButton('btn-left', 'left');
+            setupMobileButton('btn-right', 'right');
+            setupMobileButton('btn-hide', 'hide');
+            setupMobileButton('btn-attack', 'attack');
+            setupMobileButton('btn-sprint', 'sprint');
+
+            // Клик по канвасу для атаки (десктоп)
+            canvas.addEventListener('click', (e) => {
+                initAudio();
+                if (gameState === STATE.MENU) {
+                    generateWorld();
+                    gameState = STATE.PLAYING;
+                    hintEl.style.opacity = '0.6';
+                    showMessage('БЕГИ!', '#ff4444');
+                    playNoise(0.5, 0.3, 50);
+                } else if (gameState === STATE.GAMEOVER) {
+                    generateWorld();
+                    gameState = STATE.PLAYING;
+                    hintEl.style.opacity = '0.6';
+                    messageEl.style.opacity = '0';
+                    showMessage('СНОВА В ЛЕС...', '#ffaa00');
+                } else if (gameState === STATE.PLAYING && player.alive && player.attackCooldown <= 0 && !player.isHiding) {
+                    player.attackCooldown = 0.7;
+                    player.attackDuration = 0.25;
+                    const mouseX = e.clientX;
+                    const mouseY = e.clientY;
+                    const worldMX = mouseX + camera.x;
+                    const worldMY = mouseY + camera.y;
+                    const dx = worldMX - player.x;
+                    const dy = worldMY - player.y;
+                    const mag = Math.sqrt(dx * dx + dy * dy) || 1;
+                    player.attackAngle = Math.atan2(dy, dx);
+                    playNoise(0.1, 0.1, 200);
+                    playTone(200, 'square', 0.12, 0.06, 0);
+                }
+            });
+
+            // Контекстное меню отключено
+            window.addEventListener('contextmenu', e => e.preventDefault());
+
+            // ─────────────────────────────────────
+            // СТАРТ
+            // ─────────────────────────────────────
+            function init() {
+                generateWorld();
+                gameState = STATE.MENU;
+                hintEl.style.opacity = '1';
+                hintEl.textContent = 'WASD — движение • SHIFT — бег • ПРОБЕЛ/Клик — удар • E — спрятаться';
+                messageEl.style.opacity = '0';
+                lastTime = performance.now();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Проверка мобильного
+            if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768) {
+                document.getElementById('mobile-controls').style.display = 'flex';
+                hintEl.textContent = 'Кнопки внизу • Прячься в кустах • Бей монстров';
+            }
+
+            init();
+
+            console.log('🕯️ ПРОКЛЯТЫЙ ЛЕС загружен...');
+            console.log('   WASD — движение | SHIFT — бег | ПРОБЕЛ/Клик — удар | E — укрытие');
+            console.log('   Найди батареи и аптечки. Выживи как можно дольше.');
+            console.log('   Темнота скрывает монстров... но их глаза видны.');
+            console.log('   Удачи. Ты не один в этом лесу.');
+        })();
+    </script>
+</body>
+</html>

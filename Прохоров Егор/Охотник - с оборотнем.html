@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Охотник — с оборотнем</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 24px; height: 24px; opacity: 0.65; transition: opacity 0.2s;
+        }
+        #crosshair.hidden { opacity: 0; }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); border-radius: 1px;
+        }
+        #crosshair::before { width: 1.5px; height: 100%; left: 50%; transform: translateX(-50%); }
+        #crosshair::after { height: 1.5px; width: 100%; top: 50%; transform: translateY(-50%); }
+
+        #score { position: absolute; top: 25px; right: 40px; color: #fff; font-size: 26px; font-weight: bold; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); }
+        #health { position: absolute; top: 25px; left: 40px; color: #ff5555; font-size: 20px; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); }
+        #health-bar { position: absolute; top: 55px; left: 40px; width: 200px; height: 10px; background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; border: 1px solid #555; }
+        #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff3333, #ff6666); border-radius: 5px; transition: width 0.3s; }
+
+        #ammo-info {
+            position: absolute; bottom: 40px; right: 40px;
+            color: #fff; font-size: 22px; font-weight: bold;
+            text-shadow: 2px 2px 6px rgba(0,0,0,0.8);
+            display: flex; align-items: center; gap: 15px;
+        }
+        #weapon-name { font-size: 16px; opacity: 0.9; }
+        #ammo-count { background: rgba(0,0,0,0.6); padding: 5px 12px; border-radius: 6px; }
+
+        #message {
+            position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; font-size: 22px; font-weight: bold; text-shadow: 2px 2px 8px rgba(0,0,0,0.9);
+            opacity: 0; transition: opacity 0.3s; text-align: center; pointer-events: none;
+        }
+        #info {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,0.75); font-size: 13px; text-align: center;
+            text-shadow: 1px 1px 4px rgba(0,0,0,0.7); letter-spacing: 0.5px; line-height: 1.5;
+        }
+        #ads-hint {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, 20px);
+            color: rgba(255,255,255,0.4); font-size: 12px; text-align: center;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7); opacity: 0.7; pointer-events: none;
+        }
+
+        /* МАГАЗИН */
+        #shop {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 420px; background: rgba(20,20,20,0.92); border: 2px solid #8b6b3c;
+            border-radius: 16px; padding: 25px; color: #eee; z-index: 20;
+            display: none; flex-direction: column; gap: 20px;
+            backdrop-filter: blur(8px); pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+        #shop h2 { text-align: center; font-size: 28px; margin-bottom: 5px; color: #e0b050; }
+        .weapon-card {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(50,50,50,0.7); padding: 14px 16px; border-radius: 10px;
+            border: 1px solid #555; transition: 0.2s;
+        }
+        .weapon-card.current { border-color: #e0b050; background: rgba(70,60,40,0.8); }
+        .weapon-info { display: flex; flex-direction: column; }
+        .weapon-info h3 { font-size: 18px; margin-bottom: 4px; }
+        .weapon-info span { font-size: 12px; color: #aaa; }
+        .weapon-card button {
+            padding: 8px 18px; border: none; border-radius: 6px;
+            background: #5a8a3c; color: white; font-weight: bold; cursor: pointer;
+            transition: 0.2s; font-size: 14px;
+        }
+        .weapon-card button:disabled { background: #444; color: #888; cursor: default; }
+        .weapon-card button:hover:not(:disabled) { background: #7ab04c; }
+        #close-shop {
+            margin-top: 5px; background: #aa4444; color: white; padding: 10px;
+            border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
+        }
+        #close-shop:hover { background: #cc5555; }
+    </style>
+</head>
+<body>
+<div id="ui">
+    <div id="score">Очки: 0</div>
+    <div id="health">❤️ 100%</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="crosshair"></div>
+    <div id="ammo-info">
+        <span id="weapon-name">Двустволка</span>
+        <span id="ammo-count">2/2</span>
+    </div>
+    <div id="message"></div>
+    <div id="info">
+        🎯 WASD — движение &nbsp;|&nbsp; Мышь — обзор &nbsp;|&nbsp; ЛКМ — выстрел &nbsp;|&nbsp; ПКМ — прицелиться &nbsp;|&nbsp; R — перезарядка &nbsp;|&nbsp; B — магазин<br>
+        🦌 Лось +100 &nbsp; 🐻 Медведь +300 &nbsp; 🐇 Кролик +25 &nbsp; 🐺 Оборотень +500 (Очень опасен!)
+    </div>
+    <div id="ads-hint">ПКМ — прицелиться</div>
+</div>
+
+<!-- МАГАЗИН -->
+<div id="shop">
+    <h2>🔫 Оружейный магазин</h2>
+    <div id="shop-list"></div>
+    <button id="close-shop">Закрыть магазин</button>
+</div>
+
+<script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+
+    // ==================== АУДИО ====================
+    const audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+    function playTone(freq, type, duration, vol = 0.3) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+    function soundShotgun() {
+        playTone(70, 'square', 0.35, 0.55);
+        const len = audioCtx.sampleRate * 0.35;
+        const buffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.04));
+        const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.45, audioCtx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        noise.connect(noiseGain); noiseGain.connect(audioCtx.destination); noise.start();
+    }
+    function soundReload(short = false) {
+        const t1 = short ? 0.08 : 0.12, t2 = short ? 0.08 : 0.12;
+        setTimeout(() => playTone(280, 'triangle', t1, 0.18), 0);
+        setTimeout(() => playTone(380, 'triangle', t2, 0.18), 400);
+        setTimeout(() => playTone(180, 'triangle', 0.18, 0.22), short ? 650 : 850);
+    }
+    function soundClick() { playTone(900, 'sine', 0.04, 0.08); }
+    function soundBearHit() { playTone(55, 'sawtooth', 0.4, 0.5); }
+    function soundWerewolfHowl() {
+        playTone(200, 'sawtooth', 0.6, 0.5);
+        setTimeout(() => playTone(150, 'sawtooth', 0.5, 0.4), 200);
+    }
+
+    // ==================== СЦЕНА ====================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.Fog(0x9ec5e0, 55, 130);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 1.7, 0);
+    camera.rotation.order = 'YXZ';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0x8899aa, 0.7); scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xfff5e8, 1.4);
+    sun.position.set(60, 90, 30); sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 220;
+    sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+    sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
+    sun.shadow.bias = -0.0004; scene.add(sun);
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 180), new THREE.MeshStandardMaterial({ color: 0x5a8a3c, roughness: 0.95 }));
+    ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+    for (let i = 0; i < 50; i++) {
+        const patch = new THREE.Mesh(new THREE.CircleGeometry(Math.random()*4.5+1.2, 8),
+            new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.22+Math.random()*0.12,0.65,0.32+Math.random()*0.25), roughness:0.9 }));
+        patch.rotation.x = -Math.PI/2; patch.position.set((Math.random()-0.5)*140, 0.02, (Math.random()-0.5)*140);
+        patch.receiveShadow = true; scene.add(patch);
+    }
+
+    function createTree(x, z) {
+        const group = new THREE.Group();
+        const h = 4.5 + Math.random()*5;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.38,h,8), new THREE.MeshStandardMaterial({ color:0x6b4226, roughness:0.85 }));
+        trunk.position.y = h/2; trunk.castShadow = trunk.receiveShadow = true; group.add(trunk);
+        const colors = [0x2d5a1e,0x3a6b2a,0x1e4a12,0x2f6b22];
+        for (let i=0; i<3; i++) {
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(2.0-i*0.45, 2.8-i*0.3, 10), new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random()*4)], roughness:0.7 }));
+            cone.position.y = h-0.4+i*1.6; cone.castShadow = cone.receiveShadow = true; group.add(cone);
+        }
+        group.position.set(x,0,z); group.scale.setScalar(0.75+Math.random()*0.7); return group;
+    }
+    for (let i=0; i<65; i++) {
+        const x=(Math.random()-0.5)*160, z=(Math.random()-0.5)*160;
+        if (Math.sqrt(x*x+z*z)>9) scene.add(createTree(x,z));
+    }
+    for (let i=0; i<30; i++) {
+        const x=(Math.random()-0.5)*150, z=(Math.random()-0.5)*150;
+        if (Math.sqrt(x*x+z*z)>10) {
+            const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5+Math.random()*1.4,1), new THREE.MeshStandardMaterial({ color:0x7a7a7a, roughness:0.65 }));
+            rock.position.set(x,0.15,z); rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+            rock.scale.set(1,0.35+Math.random()*0.55,1); rock.castShadow=rock.receiveShadow=true; scene.add(rock);
+        }
+    }
+
+    // ==================== ЖИВОТНЫЕ (включая оборотня) ====================
+    const animals = [];
+    class Animal {
+        constructor(type, position) {
+            this.type = type;
+            this.mesh = new THREE.Group();
+            this.mesh.position.copy(position);
+            if (type === 'werewolf') {
+                this.health = 3; // требуется 3 выстрела
+            } else if (type === 'bear') {
+                this.health = 2;
+            } else {
+                this.health = 1;
+            }
+            this.maxHealth = this.health;
+            this.alive = true;
+            this.state = 'walking';
+            this.stateTimer = 2+Math.random()*5;
+            this.targetPosition = this.randomPoint(position, 15, 40);
+            this.speed = type === 'elk' ? 5.5 : (type === 'bear' ? 3.8 : (type === 'rabbit' ? 9 : 12)); // оборотень быстрый
+            this.fleeSpeed = type === 'elk' ? 15 : (type === 'bear' ? 10 : (type === 'rabbit' ? 18 : 18));
+            this.chargeSpeed = type === 'bear' ? 11 : (type === 'werewolf' ? 15 : 12);
+            this.lastHitTime = 0;
+            this.deathTimer = 0;
+            this.ragdollAngle = 0;
+            this.hitRadius = type === 'elk' ? 1.3 : (type === 'bear' ? 1.6 : (type === 'rabbit' ? 0.5 : 2.0));
+            this.hitCenterOffset = new THREE.Vector3(0, type==='elk'?1.7:(type==='bear'?1.4:(type==='rabbit'?0.5:1.8)), 0);
+            this.buildMesh();
+            scene.add(this.mesh);
+            if (type === 'werewolf') {
+                this.lastHowl = 0;
+            }
+        }
+        buildMesh() {
+            const g = this.mesh;
+            if (this.type === 'elk') {
+                const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55,1.3,4,8), new THREE.MeshStandardMaterial({ color:0x9b7928, roughness:0.55 }));
+                body.position.y=1.7; body.rotation.x=Math.PI/2; body.castShadow=true; g.add(body);
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.28,1.3,8), body.material);
+                neck.position.set(0,2.4,0.95); neck.rotation.x=-0.35; neck.castShadow=true; g.add(neck);
+                const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.2,0.4,4,8), new THREE.MeshStandardMaterial({ color:0xb8933c, roughness:0.5 }));
+                head.position.set(0,3.0,1.6); head.rotation.x=Math.PI/2; head.castShadow=true; g.add(head);
+                const antlerMat = new THREE.MeshStandardMaterial({ color:0xead8a8, roughness:0.35 });
+                [-0.18,0.18].forEach(s=>{
+                    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.07,1.6,6), antlerMat);
+                    a.position.set(s,3.1,1.75); a.rotation.z=s>0?0.55:-0.55; a.rotation.x=-0.25; a.castShadow=true; g.add(a);
+                });
+                const legMat = new THREE.MeshStandardMaterial({ color:0x6b4f1a, roughness:0.7 });
+                [[0.38,0.75,0.5],[-0.38,0.75,0.5],[0.38,0.75,-0.5],[-0.38,0.75,-0.5]].forEach(([x,y,z])=>{
+                    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.11,1.5,6), legMat);
+                    l.position.set(x,y,z); l.castShadow=true; g.add(l);
+                });
+            } else if (this.type === 'bear') {
+                const bodyMat = new THREE.MeshStandardMaterial({ color:0x3e2723, roughness:0.7 });
+                const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.75,1.6,6,8), bodyMat);
+                body.position.y=1.4; body.rotation.x=Math.PI/2; body.scale.set(1,1,1.2); body.castShadow=true; g.add(body);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.48,8,6), new THREE.MeshStandardMaterial({ color:0x4e342e, roughness:0.55 }));
+                head.position.set(0,1.5,1.4); head.scale.set(1,0.85,0.75); head.castShadow=true; g.add(head);
+                const snout = new THREE.Mesh(new THREE.SphereGeometry(0.27,6,6), new THREE.MeshStandardMaterial({ color:0x2c1a12, roughness:0.45 }));
+                snout.position.set(0,1.35,1.75); snout.castShadow=true; g.add(snout);
+                [-0.28,0.28].forEach(ex=>{
+                    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.16,6,4), new THREE.MeshStandardMaterial({ color:0x3e2723, roughness:0.6 }));
+                    ear.position.set(ex,1.85,1.15); ear.scale.set(0.7,0.8,0.5); ear.castShadow=true; g.add(ear);
+                });
+                const legMat = new THREE.MeshStandardMaterial({ color:0x2c1a12, roughness:0.7 });
+                [[0.48,0.65,0.55],[-0.48,0.65,0.55],[0.48,0.65,-0.55],[-0.48,0.65,-0.55]].forEach(([x,y,z])=>{
+                    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.24,1.3,6), legMat);
+                    l.position.set(x,y,z); l.castShadow=true; g.add(l);
+                });
+            } else if (this.type === 'rabbit') {
+                const fur = new THREE.MeshStandardMaterial({ color:0xb0a090, roughness:0.8 });
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.22,6,6), fur);
+                body.position.y=0.3; body.castShadow=true; g.add(body);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.14,5,5), fur);
+                head.position.set(0,0.5,0.2); head.castShadow=true; g.add(head);
+                const earGeo = new THREE.CylinderGeometry(0.06,0.08,0.3,5);
+                [-0.1,0.1].forEach(s=>{
+                    const ear = new THREE.Mesh(earGeo, new THREE.MeshStandardMaterial({ color:0xd4a888, roughness:0.7 }));
+                    ear.position.set(s,0.65,0.15); ear.rotation.z=s>0?0.3:-0.3; ear.castShadow=true; g.add(ear);
+                });
+                const tail = new THREE.Mesh(new THREE.SphereGeometry(0.09,4,4), new THREE.MeshStandardMaterial({ color:0xf5f5dc }));
+                tail.position.set(0,0.3,-0.2); g.add(tail);
+                const legGeo = new THREE.CylinderGeometry(0.04,0.04,0.15,4);
+                [[0.1,0.15,0.1],[-0.1,0.15,0.1],[0.1,0.15,-0.1],[-0.1,0.15,-0.1]].forEach(([x,y,z])=>{
+                    const l = new THREE.Mesh(legGeo, fur); l.position.set(x,y,z); l.castShadow=true; g.add(l);
+                });
+            } else if (this.type === 'werewolf') {
+                // Оборотень: гуманоидный волк
+                const furMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c, roughness: 0.7 });
+                const darkFur = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+                const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.2, emissive: new THREE.Color(0x330000) });
+
+                // Торс
+                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 1.8, 8), darkFur);
+                torso.position.y = 1.1; torso.castShadow = true; g.add(torso);
+                // Голова
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), furMat);
+                head.position.set(0, 2.15, 0.1); head.castShadow = true; g.add(head);
+                // Морда
+                const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.45, 8), darkFur);
+                snout.position.set(0, 2.1, 0.45); snout.rotation.x = Math.PI/2; snout.castShadow = true; g.add(snout);
+                const nose = new THREE.Mesh(new THREE.SphereGeometry(0.1, 4, 4), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+                nose.position.set(0, 2.1, 0.7); g.add(nose);
+                // Глаза (красные)
+                [-0.12, 0.12].forEach(s => {
+                    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 4, 4), eyeMat);
+                    eye.position.set(s, 2.3, 0.42); g.add(eye);
+                });
+                // Уши
+                [-0.2, 0.2].forEach(s => {
+                    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 6), darkFur);
+                    ear.position.set(s, 2.5, -0.1); ear.rotation.z = s > 0 ? 0.5 : -0.5; g.add(ear);
+                });
+                // Руки
+                const armGeo = new THREE.CylinderGeometry(0.13, 0.16, 1.3, 6);
+                [-0.5, 0.5].forEach(s => {
+                    const arm = new THREE.Mesh(armGeo, darkFur);
+                    arm.position.set(s, 1.3, 0.1); arm.rotation.z = s > 0 ? -0.3 : 0.3; arm.castShadow = true; g.add(arm);
+                    // Когти
+                    const clawGeo = new THREE.ConeGeometry(0.06, 0.2, 4);
+                    for (let i = 0; i < 3; i++) {
+                        const claw = new THREE.Mesh(clawGeo, new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3 }));
+                        claw.position.set(s, 0.55, 0.3 + i*0.1); claw.rotation.x = -0.5; g.add(claw);
+                    }
+                });
+                // Ноги
+                const legGeo = new THREE.CylinderGeometry(0.18, 0.22, 1.2, 6);
+                [-0.25, 0.25].forEach(s => {
+                    const leg = new THREE.Mesh(legGeo, darkFur);
+                    leg.position.set(s, 0.3, -0.1); leg.castShadow = true; g.add(leg);
+                });
+                // Хвост
+                const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.8, 6), furMat);
+                tail.position.set(0, 0.9, -0.7); tail.rotation.x = -0.7; g.add(tail);
+            }
+            this.allMeshes = []; this.mesh.traverse(c=>{ if(c.isMesh) this.allMeshes.push(c); });
+        }
+        getWorldCenter() { const c = this.hitCenterOffset.clone(); this.mesh.localToWorld(c); return c; }
+        takeDamage(amount) {
+            if (!this.alive) return false;
+            this.health -= amount;
+            this.lastHitTime = performance.now();
+            this.allMeshes.forEach(m => {
+                m.material = m.material.clone();
+                m.material.emissive = new THREE.Color(0x440000);
+                m.material.emissiveIntensity = 2;
+            });
+            setTimeout(()=>{ if(this.alive) this.allMeshes.forEach(m=>{m.material.emissive=new THREE.Color(0); m.material.emissiveIntensity=0;}); }, 140);
+            if (this.health <= 0) { this.die(); return true; }
+            if (this.type === 'werewolf' && this.health > 0) {
+                soundWerewolfHowl();
+            }
+            return false;
+        }
+        die() { this.alive = false; this.state = 'dead'; this.deathTimer = performance.now(); this.ragdollAngle = 0; }
+        update(delta, playerPos) {
+            if (!this.alive) {
+                const elapsed = (performance.now() - this.deathTimer)/1000;
+                if (elapsed < 0.7) { this.ragdollAngle = Math.min(elapsed/0.7*Math.PI/2.2, Math.PI/2.2); this.mesh.rotation.x = this.ragdollAngle; this.mesh.position.y = -Math.sin(this.ragdollAngle)*0.8; }
+                else if (elapsed > 4) { this.mesh.visible = false; return 'remove'; }
+                return null;
+            }
+            const distToPlayer = this.mesh.position.distanceTo(playerPos);
+            const timeSinceHit = (performance.now() - this.lastHitTime)/1000;
+            if (this.type === 'rabbit') {
+                this.state = distToPlayer < 18 ? 'fleeing' : 'walking';
+            } else if (this.type === 'werewolf') {
+                // Оборотень всегда агрессивен, если игрок рядом или был атакован
+                if (distToPlayer < 25 || timeSinceHit < 8) {
+                    this.state = 'charging';
+                } else {
+                    this.state = 'walking';
+                }
+            } else {
+                if (this.type === 'bear' && this.health === 1 && timeSinceHit < 6) this.state = 'charging';
+                else if (this.type === 'bear' && distToPlayer < 9) this.state = 'charging';
+                else if (distToPlayer < 16 || (timeSinceHit < 3.5 && this.type === 'elk')) this.state = 'fleeing';
+                else if (this.state === 'fleeing' || this.state === 'charging') { this.state = 'walking'; this.targetPosition = this.randomPoint(playerPos, 35, 65); }
+            }
+            let moveSpeed = this.speed, target = this.targetPosition;
+            if (this.state === 'fleeing') {
+                moveSpeed = this.fleeSpeed;
+                const away = this.mesh.position.clone().sub(playerPos).normalize();
+                target = this.mesh.position.clone().add(away.multiplyScalar(35));
+                target.x = THREE.MathUtils.clamp(target.x, -72,72); target.z = THREE.MathUtils.clamp(target.z, -72,72);
+            } else if (this.state === 'charging') {
+                moveSpeed = this.chargeSpeed;
+                target = playerPos.clone();
+            }
+            const dir = target.clone().sub(this.mesh.position); const dist = dir.length();
+            if (dist > 0.5) {
+                dir.normalize(); this.mesh.position.add(dir.clone().multiplyScalar(moveSpeed * delta));
+                this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+            } else if ((this.state === 'walking' || this.state === 'idle') && this.type !== 'rabbit') {
+                this.targetPosition = this.randomPoint(playerPos, 25, 60); this.state = 'walking';
+            }
+            this.stateTimer -= delta;
+            if (this.stateTimer <= 0 && (this.state === 'walking' || this.state === 'idle')) {
+                this.state = Math.random()<0.35?'idle':'walking';
+                this.targetPosition = this.randomPoint(playerPos, 20, 60);
+                this.stateTimer = 3+Math.random()*7;
+            }
+            if ((this.type === 'bear' || this.type === 'werewolf') && this.state === 'charging' && distToPlayer < 2.8) {
+                return 'attack';
+            }
+            // Вой время от времени
+            if (this.type === 'werewolf' && Math.random() < 0.002 && performance.now() - this.lastHowl > 8000) {
+                soundWerewolfHowl();
+                this.lastHowl = performance.now();
+            }
+            return null;
+        }
+        randomPoint(center, minR, maxR) {
+            const angle = Math.random()*Math.PI*2, r = minR+Math.random()*(maxR-minR);
+            return new THREE.Vector3(THREE.MathUtils.clamp(center.x+Math.cos(angle)*r,-72,72),0,THREE.MathUtils.clamp(center.z+Math.sin(angle)*r,-72,72));
+        }
+    }
+
+    // ==================== ОРУЖИЕ ====================
+    const weapons = {
+        double: { name: 'Двустволка', ammoCap: 2, spread: 0.055, adsSpreadMul: 0.4, fireRate: 0.6, reloadTime: 2.2, pellets: 10, damage: 1, price: 0 },
+        pump:   { name: 'Помповый дробовик', ammoCap: 5, spread: 0.048, adsSpreadMul: 0.4, fireRate: 0.55, reloadTime: 2.8, pellets: 10, damage: 1, price: 500 },
+        auto:   { name: 'Полуавтомат', ammoCap: 8, spread: 0.05, adsSpreadMul: 0.4, fireRate: 0.35, reloadTime: 3.0, pellets: 10, damage: 1, price: 1500 }
+    };
+    let currentWeaponId = 'double';
+    let currentWeapon = weapons[currentWeaponId];
+    let gunGroup = new THREE.Group();
+    let adsActive = false;
+    const defaultFOV = 75, adsFOV = 55;
+    const adsPosition = new THREE.Vector3(0.0, -0.12, 0.35);
+    const adsRotation = new THREE.Euler(0, 0, 0);
+    const gunRestPos = new THREE.Vector3(0.28, -0.22, 0.48);
+    const gunRestRot = new THREE.Euler(0, 0, 0);
+
+    function createGunModel(weaponId) {
+        const group = new THREE.Group();
+        const woodMat = new THREE.MeshStandardMaterial({ color:0x5d3a1a, roughness:0.45 });
+        const metalMat = new THREE.MeshStandardMaterial({ color:0x2a2a2a, roughness:0.25, metalness:0.9 });
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.16,0.65), woodMat);
+        stock.position.set(0,-0.11,0.32); group.add(stock);
+        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.15,0.38), metalMat);
+        receiver.position.set(0,-0.06,-0.06); group.add(receiver);
+        if (weaponId === 'pump') {
+            const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.6,8), metalMat);
+            tube.position.set(0,0.0,-0.55); tube.rotation.x=Math.PI/2; group.add(tube);
+        } else if (weaponId === 'auto') {
+            const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.18,0.09), metalMat);
+            mag.position.set(0,-0.12,-0.18); group.add(mag);
+        }
+        [0.045,-0.045].forEach(off=>{
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.026,0.032,0.85,10), metalMat);
+            barrel.position.set(off,0.04,-0.52); barrel.rotation.x=Math.PI/2; group.add(barrel);
+        });
+        const fore = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.09,0.28), woodMat);
+        fore.position.set(0,-0.03,-0.32); group.add(fore);
+        const sightMat = new THREE.MeshStandardMaterial({ color:0x111111, roughness:0.3, metalness:0.8 });
+        const rear = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.06,0.04), sightMat);
+        rear.position.set(0,0.13,-0.15); group.add(rear);
+        const front = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.02,0.08,6), sightMat);
+        front.position.set(0,0.1,-0.83); front.rotation.x=Math.PI/2; group.add(front);
+        return group;
+    }
+
+    function equipWeapon(weaponId) {
+        if (gunGroup) camera.remove(gunGroup);
+        gunGroup = createGunModel(weaponId);
+        gunGroup.position.copy(gunRestPos);
+        gunGroup.rotation.copy(gunRestRot);
+        camera.add(gunGroup);
+        currentWeaponId = weaponId;
+        currentWeapon = weapons[weaponId];
+        state.currentAmmo = currentWeapon.ammoCap;
+        state.reloading = false;
+        updateUI();
+    }
+
+    // ==================== ИГРОВОЕ СОСТОЯНИЕ ====================
+    const state = {
+        currentAmmo: 2,
+        reloading: false,
+        reloadStart: 0,
+        score: 0,
+        playerHP: 100,
+        gameOver: false,
+        recoil: 0,
+        lastFireTime: 0,
+        shopOpen: false,
+    };
+
+    // ==================== УПРАВЛЕНИЕ ====================
+    const keys = {};
+    let yaw = 0, pitch = 0;
+    const sensitivity = 0.002, baseSpeed = 10;
+
+    window.addEventListener('keydown', e => {
+        keys[e.key.toLowerCase()] = true;
+        if (e.key.toLowerCase() === 'r' && !state.reloading && state.currentAmmo < currentWeapon.ammoCap && !state.gameOver && !state.shopOpen) startReload();
+        if (e.key.toLowerCase() === 'b' && !state.gameOver) toggleShop();
+    });
+    window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+    renderer.domElement.addEventListener('click', () => { if (!state.gameOver && !state.shopOpen) renderer.domElement.requestPointerLock(); });
+    document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== renderer.domElement) adsActive = false; });
+    document.addEventListener('mousemove', e => {
+        if (document.pointerLockElement === renderer.domElement && !state.gameOver && !state.shopOpen) {
+            yaw -= e.movementX * sensitivity;
+            pitch -= e.movementY * sensitivity;
+            pitch = Math.max(-Math.PI/2.6, Math.min(Math.PI/2.6, pitch));
+        }
+    });
+    window.addEventListener('mousedown', e => {
+        if (e.button === 2 && document.pointerLockElement === renderer.domElement && !state.gameOver && !state.shopOpen) {
+            e.preventDefault(); adsActive = true; document.getElementById('crosshair').classList.add('hidden');
+        }
+        if (e.button === 0 && document.pointerLockElement === renderer.domElement && !state.gameOver && !state.shopOpen) shoot();
+    });
+    window.addEventListener('mouseup', e => { if (e.button === 2) { adsActive = false; document.getElementById('crosshair').classList.remove('hidden'); } });
+    window.addEventListener('contextmenu', e => e.preventDefault());
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ==================== МАГАЗИН ====================
+    function toggleShop() {
+        state.shopOpen = !state.shopOpen;
+        const shopEl = document.getElementById('shop');
+        if (state.shopOpen) {
+            document.exitPointerLock();
+            shopEl.style.display = 'flex';
+            renderShopItems();
+        } else {
+            shopEl.style.display = 'none';
+        }
+    }
+
+    function renderShopItems() {
+        const list = document.getElementById('shop-list');
+        list.innerHTML = '';
+        for (const [id, w] of Object.entries(weapons)) {
+            const card = document.createElement('div');
+            card.className = 'weapon-card' + (id === currentWeaponId ? ' current' : '');
+            card.innerHTML = `
+                <div class="weapon-info">
+                    <h3>${w.name}</h3>
+                    <span>Патронов: ${w.ammoCap} | Разброс: ${(w.spread*100).toFixed(1)} | Цена: ${w.price} очков</span>
+                </div>
+                <button ${id === currentWeaponId || state.score < w.price ? 'disabled' : ''}>
+                    ${id === currentWeaponId ? 'Экипировано' : (state.score >= w.price ? 'Купить' : 'Недостаточно очков')}
+                </button>
+            `;
+            if (id !== currentWeaponId && state.score >= w.price) {
+                card.querySelector('button').addEventListener('click', () => {
+                    state.score -= w.price;
+                    equipWeapon(id);
+                    renderShopItems();
+                    updateUI();
+                });
+            }
+            list.appendChild(card);
+        }
+    }
+    document.getElementById('close-shop').addEventListener('click', () => {
+        state.shopOpen = false;
+        document.getElementById('shop').style.display = 'none';
+    });
+
+    // ==================== СТРЕЛЬБА ====================
+    function shoot() {
+        if (state.reloading || state.gameOver || state.shopOpen) return;
+        if (state.currentAmmo <= 0) { soundClick(); updateUI(); return; }
+        const now = performance.now() / 1000;
+        if (now - state.lastFireTime < currentWeapon.fireRate) return;
+        state.lastFireTime = now;
+        state.currentAmmo--;
+        soundShotgun();
+        state.recoil = 0.06;
+        pitch -= 0.035;
+        gunGroup.position.z += 0.17;
+        gunGroup.rotation.x -= 0.18;
+        muzzleFlash();
+        const spread = adsActive ? currentWeapon.spread * currentWeapon.adsSpreadMul : currentWeapon.spread;
+        for (let i = 0; i < currentWeapon.pellets; i++) {
+            const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+            dir.x += (Math.random()-0.5)*spread*2;
+            dir.y += (Math.random()-0.5)*spread*2;
+            dir.z += (Math.random()-0.5)*spread*2;
+            dir.normalize();
+            checkHit(dir);
+        }
+        if (state.currentAmmo === 0 && !state.reloading) setTimeout(()=>{ if(state.currentAmmo===0 && !state.reloading && !state.gameOver) startReload(); }, 600);
+        updateUI();
+    }
+
+    function checkHit(dir) {
+        const origin = camera.position.clone();
+        let bestAnimal = null, bestDist = Infinity;
+        for (const a of animals) {
+            if (!a.alive) continue;
+            const center = a.getWorldCenter(), r = a.hitRadius;
+            const oc = origin.clone().sub(center);
+            const b = 2*oc.dot(dir), c = oc.dot(oc)-r*r, disc = b*b-4*c;
+            if (disc>=0) { const t=(-b-Math.sqrt(disc))/2; if(t>0 && t<120 && t<bestDist){ bestDist=t; bestAnimal=a; } }
+        }
+        if (bestAnimal) {
+            const killed = bestAnimal.takeDamage(currentWeapon.damage);
+            if (killed) {
+                let pts = 0;
+                if (bestAnimal.type === 'elk') pts = 100;
+                else if (bestAnimal.type === 'bear') pts = 300;
+                else if (bestAnimal.type === 'rabbit') pts = 25;
+                else if (bestAnimal.type === 'werewolf') pts = 500;
+                state.score += pts;
+                showMsg(`${bestAnimal.type==='elk'?'🦌 Лось':bestAnimal.type==='bear'?'🐻 Медведь':bestAnimal.type==='rabbit'?'🐇 Кролик':'🐺 Оборотень'} убит! +${pts}`, '#ffd700');
+            } else if (bestAnimal.type === 'bear' || bestAnimal.type === 'werewolf') {
+                showMsg(`💥 ${bestAnimal.type==='werewolf'?'Оборотень ранен! Он в ярости!':'Медведь ранен и в ярости!'}`, '#ff6600');
+                if (bestAnimal.type === 'werewolf') soundWerewolfHowl(); else soundBearHit();
+            }
+            updateUI();
+        }
+    }
+
+    function muzzleFlash() {
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6), new THREE.MeshBasicMaterial({ color:0xffdd44 }));
+        const wp = new THREE.Vector3(0,0.04,-0.95); gunGroup.localToWorld(wp); flash.position.copy(wp);
+        scene.add(flash); setTimeout(()=>scene.remove(flash), 55);
+    }
+
+    function startReload() {
+        if (state.reloading || state.currentAmmo === currentWeapon.ammoCap || state.gameOver) return;
+        state.reloading = true; state.reloadStart = performance.now();
+        soundReload(currentWeapon.ammoCap > 4);
+        const anim = () => {
+            const elapsed = (performance.now() - state.reloadStart)/1000;
+            if (elapsed < currentWeapon.reloadTime && state.reloading) {
+                const p = elapsed / currentWeapon.reloadTime;
+                gunGroup.position.y = gunRestPos.y - Math.sin(p*Math.PI)*0.35;
+                gunGroup.rotation.z = Math.sin(p*Math.PI*2)*0.25;
+                requestAnimationFrame(anim);
+            } else if (state.reloading) {
+                state.currentAmmo = currentWeapon.ammoCap;
+                state.reloading = false;
+                gunGroup.position.copy(gunRestPos); gunGroup.rotation.copy(gunRestRot);
+                updateUI();
+            }
+        };
+        anim();
+    }
+
+    function updateUI() {
+        document.getElementById('score').textContent = `Очки: ${state.score}`;
+        document.getElementById('health').textContent = `❤️ ${Math.round(state.playerHP)}%`;
+        document.getElementById('health-fill').style.width = state.playerHP + '%';
+        document.getElementById('health-fill').style.background = state.playerHP<30?'linear-gradient(90deg,#cc0000,#ff4444)':'linear-gradient(90deg,#ff3333,#ff6666)';
+        document.getElementById('weapon-name').textContent = currentWeapon.name;
+        document.getElementById('ammo-count').textContent = `${state.currentAmmo}/${currentWeapon.ammoCap}`;
+    }
+
+    function showMsg(text, color='#fff') {
+        const el = document.getElementById('message');
+        el.textContent = text; el.style.color = color; el.style.opacity = '1';
+        clearTimeout(el._t); el._t = setTimeout(()=>{el.style.opacity='0';}, 2200);
+    }
+
+    // ==================== СПАВН (теперь с оборотнем) ====================
+    function spawnAnimal() {
+        if (animals.filter(a=>a.alive).length >= 18 || state.gameOver) return;
+        const r = Math.random();
+        let type;
+        if (r < 0.45) type = 'rabbit';
+        else if (r < 0.75) type = 'elk';
+        else if (r < 0.95) type = 'bear';
+        else type = 'werewolf';  // 5% шанс
+        const angle = Math.random()*Math.PI*2, dist = 28 + Math.random()*45;
+        const pos = new THREE.Vector3(THREE.MathUtils.clamp(camera.position.x+Math.cos(angle)*dist,-72,72),0,THREE.MathUtils.clamp(camera.position.z+Math.sin(angle)*dist,-72,72));
+        animals.push(new Animal(type, pos));
+    }
+    for (let i=0; i<8; i++) spawnAnimal();
+    setInterval(()=>{ if(!state.gameOver && !state.shopOpen) spawnAnimal(); }, 3000);
+
+    // ==================== ГЛАВНЫЙ ЦИКЛ ====================
+    const clock = new THREE.Clock();
+    function update(delta) {
+        if (state.gameOver || state.shopOpen) return;
+        delta = Math.min(delta, 0.12);
+        const forward = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+        const right = new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+        const vel = new THREE.Vector3();
+        if (keys['w']) vel.add(forward); if (keys['s']) vel.sub(forward);
+        if (keys['a']) vel.sub(right); if (keys['d']) vel.add(right);
+        if (vel.length()>0) { vel.normalize().multiplyScalar((keys['shift']?baseSpeed*1.5:baseSpeed)*delta); camera.position.add(vel); }
+        camera.position.x = THREE.MathUtils.clamp(camera.position.x,-76,76);
+        camera.position.z = THREE.MathUtils.clamp(camera.position.z,-76,76);
+        camera.position.y = 1.7;
+        camera.rotation.y = yaw; camera.rotation.x = pitch;
+
+        const targetFOV = adsActive ? adsFOV : defaultFOV;
+        camera.fov += (targetFOV - camera.fov) * 0.22;
+        camera.updateProjectionMatrix();
+        const targetPos = adsActive ? adsPosition : gunRestPos;
+        const targetRot = adsActive ? adsRotation : gunRestRot;
+        gunGroup.position.lerp(targetPos, 0.2);
+        gunGroup.rotation.x += (targetRot.x - gunGroup.rotation.x)*0.2;
+        gunGroup.rotation.y += (targetRot.y - gunGroup.rotation.y)*0.2;
+        gunGroup.rotation.z += (targetRot.z - gunGroup.rotation.z)*0.2;
+        if (state.recoil>0.001) { state.recoil*=0.88; gunGroup.position.z+=(targetPos.z-gunGroup.position.z)*0.35; gunGroup.rotation.x+=(targetRot.x-gunGroup.rotation.x)*0.35; }
+
+        const ppos = camera.position.clone();
+        for (let i=animals.length-1; i>=0; i--) {
+            const res = animals[i].update(delta, ppos);
+            if (res==='remove') { scene.remove(animals[i].mesh); animals.splice(i,1); }
+            else if (res==='attack') {
+                const dmg = animals[i].type === 'werewolf' ? 70 : 45;
+                state.playerHP -= dmg;
+                showMsg(`${animals[i].type==='werewolf'?'🐺 Оборотень':'🐻 Медведь'} атакует! –${dmg} HP`, '#ff3333');
+                const push = ppos.clone().sub(animals[i].mesh.position).normalize().multiplyScalar(6);
+                camera.position.add(push);
+                if (state.playerHP <= 0) gameOverSequence();
+                updateUI();
+            }
+        }
+        if (state.playerHP < 100 && !state.gameOver) { state.playerHP = Math.min(100, state.playerHP+delta*1.8); updateUI(); }
+    }
+
+    function gameOverSequence() {
+        state.gameOver = true;
+        showMsg('💀 ВЫ ПОГИБЛИ! Обновите страницу (F5)', '#ff0000');
+        document.exitPointerLock();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        update(clock.getDelta());
+        renderer.render(scene, camera);
+    }
+
+    // Инициализация
+    equipWeapon('double');
+    updateUI();
+    animate();
+</script>
+</body>
+</html>

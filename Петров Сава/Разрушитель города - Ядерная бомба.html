@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Разрушитель города - Ядерная бомба</title>
+    <style>
+        :root { --bg: #1a1a2e; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', 'Arial', sans-serif; user-select: none; height: 100vh; width: 100vw; display: flex; justify-content: center; align-items: center; cursor: crosshair; }
+        canvas { display: block; }
+        #ui-overlay { position: fixed; top: 0; left: 0; width: 100%; pointer-events: none; padding: 15px 20px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 10; }
+        .ui-panel { background: rgba(0,0,0,0.65); border: 2px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 12px 18px; color: #fff; backdrop-filter: blur(8px); }
+        .ui-score { font-size: 1.4em; font-weight: bold; }
+        .ui-score span { color: #ff6b35; font-size: 1.3em; }
+        .ui-remaining { font-size: 0.85em; color: #ccc; margin-top: 2px; }
+        .ui-remaining span { color: #ff4444; font-weight: bold; }
+        .ui-right { text-align: right; }
+        .ui-hammer { font-size: 1.8em; transition: 0.1s; }
+        .ui-hammer.ready { color: #ffcc00; filter: drop-shadow(0 0 8px #ffcc00); }
+        .ui-hammer.cooldown { color: #666; }
+        .ui-combo { font-size: 0.9em; color: #ff6b35; font-weight: bold; min-height: 1.2em; }
+        .nuke-info { margin-top: 6px; font-size: 1em; color: #ff4444; font-weight: bold; }
+        .nuke-info .nuke-count { font-size: 1.2em; color: #ffaa00; }
+        .nuke-cooldown { color: #aaa; font-size: 0.75em; }
+        #instructions { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 0.9em; pointer-events: none; transition: opacity 1.5s; text-align: center; z-index: 10; border: 1px solid rgba(255,255,255,0.15); }
+        #instructions.fading { opacity: 0; }
+    </style>
+</head>
+<body>
+    <canvas id="game"></canvas>
+    <div id="ui-overlay">
+        <div class="ui-panel">
+            <div class="ui-score">🏚️ <span id="score">0</span></div>
+            <div class="ui-remaining">Осталось: <span id="remaining">14</span> зданий</div>
+            <div class="ui-combo" id="combo"></div>
+            <div class="nuke-info">
+                ☢️ <span class="nuke-count" id="nuke-count">3</span>
+                <span class="nuke-cooldown" id="nuke-cooldown-text"></span>
+            </div>
+        </div>
+        <div class="ui-panel ui-right">
+            <div class="ui-hammer ready" id="hammer-icon">🔨</div>
+        </div>
+    </div>
+    <div id="instructions">
+        🏃 WASD — бегать | 🖱️ Мышь — направление | 🖱️ Клик / Пробел — удар молотом | ☢️ E — ядерная бомба
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+            const scoreEl = document.getElementById('score');
+            const remainingEl = document.getElementById('remaining');
+            const comboEl = document.getElementById('combo');
+            const hammerIcon = document.getElementById('hammer-icon');
+            const instructionsEl = document.getElementById('instructions');
+            const nukeCountEl = document.getElementById('nuke-count');
+            const nukeCooldownText = document.getElementById('nuke-cooldown-text');
+
+            const WORLD_W = 1800, WORLD_H = 1400, ROAD_W = 55;
+
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            const camera = { x: 0, y: 0, tx: 0, ty: 0 };
+            function updateCamera(playerX, playerY, dt) {
+                camera.tx = playerX - canvas.width/2;
+                camera.ty = playerY - canvas.height/2;
+                camera.tx = Math.max(0, Math.min(WORLD_W - canvas.width, camera.tx));
+                camera.ty = Math.max(0, Math.min(WORLD_H - canvas.height, camera.ty));
+                const lerp = 8;
+                camera.x += (camera.tx - camera.x) * Math.min(lerp * dt, 1);
+                camera.y += (camera.ty - camera.y) * Math.min(lerp * dt, 1);
+                camera.x = Math.max(0, Math.min(WORLD_W - canvas.width, camera.x));
+                camera.y = Math.max(0, Math.min(WORLD_H - canvas.height, camera.y));
+            }
+            function worldToScreen(wx, wy) { return { x: wx - camera.x, y: wy - camera.y }; }
+            function screenToWorld(sx, sy) { return { x: sx + camera.x, y: sy + camera.y }; }
+
+            const player = {
+                x: WORLD_W/2, y: WORLD_H/2, radius: 16, speed: 220, angle: 0,
+                hammerCooldown: 0, hammerSwingTimer: 0, hammerSwingDuration: 0.35,
+                hammerCooldownDuration: 0.4, hammerRange: 58, hammerArcHalf: Math.PI/3.2,
+                moving: false, moveX: 0, moveY: 0,
+            };
+
+            const NUKE_MAX_COUNT = 3;
+            const NUKE_COOLDOWN = 20;
+            const NUKE_REGEN_TIME = 30;
+            const NUKE_EXPLOSION_RADIUS = 480;
+            let nukesLeft = NUKE_MAX_COUNT;
+            let nukeCooldownTimer = 0;
+            let nukeRegenTimer = NUKE_REGEN_TIME;
+            let activeNuke = null;
+
+            const buildings = [];
+            const rubblePiles = [];
+
+            function createBuilding(x, y, w, h, hp, color) {
+                return { x, y, w, h, hp, maxHp: hp, color: color || '#c4956b', roofColor: '#8b4513', destroyed: false, flashTimer: 0, crackSeed: Math.random() * 10000 };
+            }
+            function initBuildings() {
+                buildings.length = 0; rubblePiles.length = 0;
+                const defs = [
+                    {x:30,y:30,w:130,h:100,hp:3,col:'#d4a574'},{x:200,y:25,w:160,h:110,hp:4,col:'#e8c9a0'},{x:420,y:35,w:110,h:95,hp:3,col:'#c4956b'},{x:600,y:20,w:180,h:120,hp:5,col:'#b8845c'},{x:850,y:30,w:140,h:105,hp:3,col:'#d4a574'},{x:1050,y:25,w:200,h:115,hp:6,col:'#e8c9a0'},{x:1320,y:35,w:150,h:100,hp:4,col:'#c4956b'},{x:1530,y:30,w:170,h:110,hp:5,col:'#b8845c'},{x:50,y:220,w:190,h:130,hp:6,col:'#d4a574'},{x:310,y:230,w:120,h:90,hp:3,col:'#e8c9a0'},{x:500,y:215,w:160,h:140,hp:5,col:'#c4956b'},{x:730,y:225,w:140,h:100,hp:4,col:'#b8845c'},{x:950,y:220,w:180,h:125,hp:5,col:'#d4a574'},{x:1200,y:230,w:150,h:110,hp:4,col:'#e8c9a0'},{x:1420,y:220,w:200,h:135,hp:7,col:'#c4956b'},{x:30,y:430,w:140,h:100,hp:3,col:'#b8845c'},{x:240,y:420,w:170,h:115,hp:5,col:'#d4a574'},{x:480,y:435,w:130,h:95,hp:3,col:'#e8c9a0'},{x:680,y:425,w:190,h:120,hp:6,col:'#c4956b'},{x:940,y:430,w:160,h:110,hp:4,col:'#b8845c'},{x:1170,y:420,w:140,h:100,hp:3,col:'#d4a574'},{x:1380,y:435,w:180,h:125,hp:5,col:'#e8c9a0'},{x:1620,y:425,w:150,h:105,hp:4,col:'#c4956b'},{x:60,y:620,w:160,h:110,hp:4,col:'#e8c9a0'},{x:290,y:615,w:200,h:130,hp:7,col:'#c4956b'},{x:560,y:625,w:140,h:100,hp:3,col:'#b8845c'},{x:770,y:620,w:170,h:115,hp:5,col:'#d4a574'},{x:1010,y:630,w:150,h:105,hp:4,col:'#e8c9a0'},{x:1230,y:620,w:180,h:120,hp:6,col:'#c4956b'},{x:1480,y:625,w:160,h:110,hp:5,col:'#b8845c'},{x:40,y:820,w:150,h:105,hp:4,col:'#d4a574'},{x:260,y:815,w:170,h:120,hp:5,col:'#e8c9a0'},{x:500,y:825,w:140,h:100,hp:3,col:'#c4956b'},{x:710,y:820,w:190,h:125,hp:6,col:'#b8845c'},{x:970,y:830,w:160,h:110,hp:4,col:'#d4a574'},{x:1200,y:820,w:180,h:115,hp:5,col:'#e8c9a0'},{x:1450,y:825,w:200,h:130,hp:7,col:'#c4956b'},{x:80,y:1020,w:170,h:115,hp:5,col:'#b8845c'},{x:320,y:1015,w:140,h:100,hp:3,col:'#d4a574'},{x:530,y:1025,w:180,h:120,hp:5,col:'#e8c9a0'},{x:780,y:1020,w:160,h:110,hp:4,col:'#c4956b'},{x:1010,y:1030,w:190,h:125,hp:6,col:'#b8845c'},{x:1270,y:1020,w:150,h:105,hp:4,col:'#d4a574'},{x:1490,y:1025,w:170,h:115,hp:5,col:'#e8c9a0'},
+                ];
+                defs.forEach(d => buildings.push(createBuilding(d.x,d.y,d.w,d.h,d.hp,d.col)));
+            }
+            function getAliveBuildings() { return buildings.filter(b => !b.destroyed); }
+
+            const npcs = [];
+            function createNPC(x,y) {
+                return { x,y,radius:7,speed:50+Math.random()*70,angle:Math.random()*Math.PI*2,changeTimer:1.5+Math.random()*3,panicTimer:0,panicAngle:0,color:['#ffcc99','#ffb380','#ff9966','#e8a87c','#f4c7a0'][Math.floor(Math.random()*5)],shirtColor:['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'][Math.floor(Math.random()*6)] };
+            }
+            function initNPCs() {
+                npcs.length=0;
+                for(let i=0;i<25;i++){
+                    let x=40+Math.random()*(WORLD_W-80),y=40+Math.random()*(WORLD_H-80),blocked=false;
+                    for(const b of buildings) if(!b.destroyed&&x>b.x-5&&x<b.x+b.w+5&&y>b.y-5&&y<b.y+b.h+5){blocked=true;break;}
+                    npcs.push(createNPC(blocked?40+Math.random()*200:x, blocked?40+Math.random()*200:y));
+                }
+            }
+            function updateNPCs(dt){
+                for(const npc of npcs){
+                    if(npc.panicTimer>0){
+                        npc.panicTimer-=dt;
+                        const sp=180;
+                        npc.x+=Math.cos(npc.panicAngle)*sp*dt;
+                        npc.y+=Math.sin(npc.panicAngle)*sp*dt;
+                        npc.x=Math.max(npc.radius,Math.min(WORLD_W-npc.radius,npc.x));
+                        npc.y=Math.max(npc.radius,Math.min(WORLD_H-npc.radius,npc.y));
+                        for(const b of buildings) if(!b.destroyed&&npc.x>b.x-npc.radius&&npc.x<b.x+b.w+npc.radius&&npc.y>b.y-npc.radius&&npc.y<b.y+b.h+npc.radius){ const cx=b.x+b.w/2,cy=b.y+b.h/2,dx=npc.x-cx,dy=npc.y-cy,dist=Math.sqrt(dx*dx+dy*dy)||1; npc.x=cx+(dx/dist)*(Math.max(b.w,b.h)/2+npc.radius+2); npc.y=cy+(dy/dist)*(Math.max(b.w,b.h)/2+npc.radius+2); }
+                        if(npc.panicTimer<=0){npc.angle=Math.random()*Math.PI*2; npc.changeTimer=1+Math.random()*2;}
+                        continue;
+                    }
+                    npc.changeTimer-=dt;
+                    if(npc.changeTimer<=0){npc.angle+=(Math.random()-0.5)*Math.PI*1.2; npc.changeTimer=1.5+Math.random()*3.5;}
+                    const nx=npc.x+Math.cos(npc.angle)*npc.speed*dt, ny=npc.y+Math.sin(npc.angle)*npc.speed*dt;
+                    let blocked=false;
+                    for(const b of buildings) if(!b.destroyed&&nx>b.x-npc.radius&&nx<b.x+b.w+npc.radius&&ny>b.y-npc.radius&&ny<b.y+b.h+npc.radius){blocked=true;break;}
+                    if(blocked||nx<npc.radius||nx>WORLD_W-npc.radius||ny<npc.radius||ny>WORLD_H-npc.radius){npc.angle+=Math.PI*(0.5+Math.random()*0.5)*(Math.random()>0.5?1:-1); npc.changeTimer=0.8+Math.random()*1.5;}
+                    else {npc.x=nx; npc.y=ny;}
+                }
+            }
+            function panicNPCs(px,py,radius){
+                for(const npc of npcs){
+                    const dx=npc.x-px,dy=npc.y-py,dist=Math.sqrt(dx*dx+dy*dy);
+                    if(dist<radius&&npc.panicTimer<=0){npc.panicTimer=2+Math.random()*2.5; npc.panicAngle=Math.atan2(dy,dx); if(dist<5)npc.panicAngle+=(Math.random()-0.5)*0.5;}
+                }
+            }
+
+            const particles = [];
+            function spawnParticles(x,y,count,color,speed,life,sizeRange){
+                for(let i=0;i<count;i++){
+                    const a=Math.random()*Math.PI*2,spd=speed*(0.4+Math.random()*0.6);
+                    particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-Math.random()*80,life:life*(0.5+Math.random()*0.5),maxLife:life,color,size:sizeRange[0]+Math.random()*(sizeRange[1]-sizeRange[0]),gravity:true});
+                }
+            }
+            function spawnDestructionParticles(x,y,w,h){
+                const cx=x+w/2,cy=y+h/2;
+                spawnParticles(cx,cy,40,'#c4956b',250,1.2,[3,9]); spawnParticles(cx,cy,25,'#8b4513',200,1.0,[4,10]);
+                spawnParticles(cx,cy,30,'#d4a574',180,1.5,[2,6]); spawnParticles(cx,cy,20,'#ccc',120,2.0,[1,4]);
+                spawnParticles(cx,cy,15,'#ff9933',300,0.4,[2,5]);
+            }
+            function spawnNukeExplosionParticles(x,y){
+                spawnParticles(x,y,200,'#ff4400',500,2.5,[5,20]); spawnParticles(x,y,150,'#ff8800',450,2.8,[8,25]);
+                spawnParticles(x,y,100,'#ffcc00',350,3.0,[6,18]); spawnParticles(x,y,80,'#ffffff',300,1.5,[3,12]);
+                spawnParticles(x,y,60,'#aaaaaa',250,4.0,[2,8]); spawnParticles(x,y,40,'#000000',200,5.0,[4,10]);
+                for(let i=0;i<30;i++){ const angle=-Math.PI/2+(Math.random()-0.5)*0.8,spd=150+Math.random()*200; particles.push({x:x+(Math.random()-0.5)*40,y,vx:Math.cos(angle)*spd*0.4,vy:Math.sin(angle)*spd,life:2.5+Math.random()*1.5,maxLife:3.0,color:'#555',size:12+Math.random()*25,gravity:false});}
+            }
+            let screenShake=0,shakeX=0,shakeY=0;
+            function triggerShake(i){ screenShake=Math.max(screenShake,i); }
+
+            let score=0,destroyedCount=0,comboTimer=0,comboCount=0;
+            const COMBO_WINDOW=3.0;
+
+            function updateUI(){
+                const alive=getAliveBuildings().length;
+                scoreEl.textContent=score; remainingEl.textContent=alive;
+                comboEl.textContent=(comboCount>=2&&comboTimer>0)?`🔥 Комбо x${comboCount}!`:'';
+                hammerIcon.className=(player.hammerCooldown<=0&&player.hammerSwingTimer<=0)?'ui-hammer ready':'ui-hammer cooldown';
+                nukeCountEl.textContent=nukesLeft;
+                if(nukeCooldownTimer>0) nukeCooldownText.textContent=`Перезарядка ${Math.ceil(nukeCooldownTimer)}с`;
+                else if(nukesLeft<NUKE_MAX_COUNT) nukeCooldownText.textContent=`Бомба через ${Math.ceil(nukeRegenTimer)}с`;
+                else nukeCooldownText.textContent='';
+            }
+
+            const keys={};
+            let mouseWorldX=player.x+50,mouseWorldY=player.y;
+            window.addEventListener('keydown',e=>{
+                keys[e.key.toLowerCase()]=true;
+                if(e.key===' '||e.key==='Spacebar'){e.preventDefault();trySwingHammer();}
+                if(e.key.toLowerCase()==='e'){e.preventDefault();tryDeployNuke();}
+            });
+            window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+            canvas.addEventListener('mousemove',e=>{const w=screenToWorld(e.clientX,e.clientY);mouseWorldX=w.x;mouseWorldY=w.y;});
+            canvas.addEventListener('click',e=>{const w=screenToWorld(e.clientX,e.clientY);mouseWorldX=w.x;mouseWorldY=w.y;trySwingHammer();});
+
+            function getInputDirection(){
+                let mx=0,my=0;
+                if(keys['w']||keys['arrowup']||keys['ц']) my-=1;
+                if(keys['s']||keys['arrowdown']||keys['ы']) my+=1;
+                if(keys['a']||keys['arrowleft']||keys['ф']) mx-=1;
+                if(keys['d']||keys['arrowright']||keys['в']) mx+=1;
+                const mag=Math.sqrt(mx*mx+my*my);
+                if(mag>1){mx/=mag;my/=mag;}
+                return {mx,my,mag:Math.min(mag,1)};
+            }
+
+            function trySwingHammer(){
+                if(player.hammerCooldown<=0&&player.hammerSwingTimer<=0){
+                    player.hammerSwingTimer=player.hammerSwingDuration;
+                    player.hammerCooldown=player.hammerCooldownDuration;
+                    checkHammerHit();
+                }
+            }
+            function tryDeployNuke(){
+                if(nukeCooldownTimer>0||nukesLeft<=0||activeNuke) return;
+                nukesLeft--; nukeCooldownTimer=NUKE_COOLDOWN;
+                activeNuke={x:player.x,y:player.y,timer:3.0,maxTimer:3.0};
+                updateUI();
+            }
+
+            function checkHammerHit(){
+                const px=player.x,py=player.y,fa=player.angle;
+                for(const b of buildings){
+                    if(b.destroyed)continue;
+                    const cx=Math.max(b.x,Math.min(px,b.x+b.w)),cy=Math.max(b.y,Math.min(py,b.y+b.h));
+                    const dx=cx-px,dy=cy-py,dist=Math.sqrt(dx*dx+dy*dy);
+                    if(dist<player.hammerRange+5){
+                        let ad=Math.atan2(dy,dx)-fa;
+                        while(ad>Math.PI)ad-=Math.PI*2; while(ad<-Math.PI)ad+=Math.PI*2;
+                        if(Math.abs(ad)<player.hammerArcHalf){
+                            b.hp--; b.flashTimer=0.15;
+                            spawnParticles(cx,cy,8,'#ffe0b0',150,0.5,[2,5]); triggerShake(3);
+                            if(b.hp<=0) destroyBuilding(b);
+                        }
+                    }
+                }
+            }
+            function destroyBuilding(b){
+                b.destroyed=true; b.flashTimer=0; destroyedCount++; triggerShake(14);
+                spawnDestructionParticles(b.x,b.y,b.w,b.h);
+                rubblePiles.push({x:b.x,y:b.y,w:b.w,h:b.h,rubbleParts:generateRubble(b.x,b.y,b.w,b.h),age:0});
+                panicNPCs(b.x+b.w/2,b.y+b.h/2,250);
+                comboCount++; comboTimer=COMBO_WINDOW;
+                score+=b.maxHp*30+Math.min(comboCount-1,8)*25;
+                if(getAliveBuildings().length===0) setTimeout(()=>alert(`🎉 Город уничтожен! Очки: ${score}`),400);
+            }
+            function generateRubble(x,y,w,h){
+                const p=[]; const n=12+Math.floor(w*h/800);
+                for(let i=0;i<n;i++) p.push({rx:x+Math.random()*w,ry:y+Math.random()*h,rw:5+Math.random()*Math.min(w,h)*0.4,rh:4+Math.random()*Math.min(w,h)*0.3,angle:Math.random()*Math.PI*2,color:['#8b7355','#a0845c','#7a6a50','#9b8a6b','#6b5b45'][Math.floor(Math.random()*5)]});
+                return p;
+            }
+            function explodeNuke(nuke){
+                for(const b of buildings){
+                    if(b.destroyed)continue;
+                    const cx=b.x+b.w/2,cy=b.y+b.h/2,dx=cx-nuke.x,dy=cy-nuke.y;
+                    if(Math.sqrt(dx*dx+dy*dy)<NUKE_EXPLOSION_RADIUS){ b.hp=0; destroyBuilding(b); }
+                }
+                panicNPCs(nuke.x,nuke.y,1200);
+                spawnNukeExplosionParticles(nuke.x,nuke.y);
+                triggerShake(35);
+                activeNuke=null;
+            }
+
+            function resolvePlayerCollision(px,py,radius){
+                for(const b of buildings){
+                    if(b.destroyed)continue;
+                    const cx=Math.max(b.x,Math.min(px,b.x+b.w)),cy=Math.max(b.y,Math.min(py,b.y+b.h));
+                    const dx=px-cx,dy=py-cy;
+                    if(dx*dx+dy*dy<radius*radius){
+                        const dist=Math.sqrt(dx*dx+dy*dy)||1;
+                        const overlap=radius-dist;
+                        if(overlap>0) return {x:px+(dx/dist)*overlap,y:py+(dy/dist)*overlap};
+                    }
+                }
+                return {x:px,y:py};
+            }
+
+            function update(dt){
+                const cappedDt=Math.min(dt,0.1);
+                if(comboTimer>0){comboTimer-=cappedDt; if(comboTimer<=0)comboCount=0;}
+                if(nukeCooldownTimer>0){
+                    nukeCooldownTimer-=cappedDt;
+                    if(nukeCooldownTimer<0)nukeCooldownTimer=0;
+                }
+                if(nukesLeft<NUKE_MAX_COUNT && nukeCooldownTimer<=0){
+                    nukeRegenTimer -= cappedDt;
+                    if(nukeRegenTimer<=0){
+                        nukesLeft++;
+                        nukeRegenTimer = NUKE_REGEN_TIME;
+                    }
+                } else {
+                    nukeRegenTimer = NUKE_REGEN_TIME;
+                }
+                if(activeNuke&&activeNuke.timer>0){
+                    activeNuke.timer-=cappedDt;
+                    if(activeNuke.timer<=0) explodeNuke(activeNuke);
+                }
+
+                const input=getInputDirection();
+                player.moving=input.mag>0.15; player.moveX=input.mx; player.moveY=input.my;
+                const dxMouse=mouseWorldX-player.x,dyMouse=mouseWorldY-player.y;
+                if(Math.abs(dxMouse)>3||Math.abs(dyMouse)>3) player.angle=Math.atan2(dyMouse,dxMouse);
+                else if(player.moving) player.angle=Math.atan2(player.moveY,player.moveX);
+                let nx=player.x,ny=player.y;
+                if(player.moving){ nx+=player.moveX*player.speed*cappedDt; ny+=player.moveY*player.speed*cappedDt; }
+                nx=Math.max(player.radius,Math.min(WORLD_W-player.radius,nx));
+                ny=Math.max(player.radius,Math.min(WORLD_H-player.radius,ny));
+                const res=resolvePlayerCollision(nx,ny,player.radius);
+                player.x=res.x; player.y=res.y;
+                if(player.hammerSwingTimer>0) player.hammerSwingTimer-=cappedDt;
+                if(player.hammerCooldown>0) player.hammerCooldown-=cappedDt;
+                for(const b of buildings) if(b.flashTimer>0) b.flashTimer-=cappedDt;
+                updateNPCs(cappedDt);
+                for(let i=particles.length-1;i>=0;i--){
+                    const p=particles[i];
+                    p.x+=p.vx*cappedDt; p.y+=p.vy*cappedDt;
+                    if(p.gravity) p.vy+=350*cappedDt;
+                    p.life-=cappedDt;
+                    if(p.life<=0) particles.splice(i,1);
+                }
+                if(screenShake>0){ shakeX=(Math.random()-0.5)*screenShake*2; shakeY=(Math.random()-0.5)*screenShake*2; screenShake-=cappedDt*18; if(screenShake<0){screenShake=0;shakeX=0;shakeY=0;}}
+                updateCamera(player.x,player.y,cappedDt);
+                updateUI();
+            }
+
+            // ---------- DRAWING FUNCTIONS ----------
+            function drawGrass(){
+                const grad=ctx.createLinearGradient(0,0,0,WORLD_H);
+                grad.addColorStop(0,'#7ec850'); grad.addColorStop(0.5,'#6db840'); grad.addColorStop(1,'#5da830');
+                ctx.fillStyle=grad; ctx.fillRect(0,0,WORLD_W,WORLD_H);
+            }
+            function drawRoads(){
+                ctx.fillStyle='#555';
+                [160,400,650,900,1150].forEach(y=>{
+                    ctx.fillRect(0,y-ROAD_W/2,WORLD_W,ROAD_W);
+                    ctx.strokeStyle='#ddd'; ctx.lineWidth=2; ctx.setLineDash([25,20]);
+                    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD_W,y); ctx.stroke();
+                });
+                [140,420,720,1020,1350,1650].forEach(x=>{
+                    ctx.fillRect(x-ROAD_W/2,0,ROAD_W,WORLD_H);
+                    ctx.strokeStyle='#ddd'; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD_H); ctx.stroke();
+                });
+                ctx.setLineDash([]);
+            }
+            function drawTrees(){
+                const treePos=[[70,75],[350,80],[550,70],[750,85],[1000,75],[1250,80],[1500,70],[1700,85],[80,290],[400,300],[650,295],[900,290],[1150,300],[1400,295],[1650,290],[60,530],[350,540],[600,535],[850,530],[1100,540],[1350,535],[1600,530],[90,760],[380,770],[630,765],[880,760],[1130,770],[1380,765],[1630,760],[70,980],[350,990],[600,985],[850,980],[1100,990],[1350,985],[1600,980]];
+                treePos.forEach(([tx,ty])=>{
+                    let blocked=false;
+                    for(const b of buildings) if(!b.destroyed&&tx>b.x-15&&tx<b.x+b.w+15&&ty>b.y-15&&ty<b.y+b.h+15){blocked=true;break;}
+                    if(blocked)return;
+                    ctx.fillStyle='#8b6914'; ctx.fillRect(tx-4,ty-5,8,22);
+                    ctx.fillStyle='#3a8c3f'; ctx.beginPath(); ctx.arc(tx,ty-8,14,0,Math.PI*2); ctx.fill();
+                    ctx.fillStyle='#4aa84f'; ctx.beginPath(); ctx.arc(tx+4,ty-5,10,0,Math.PI*2); ctx.fill();
+                    ctx.fillStyle='#2d7030'; ctx.beginPath(); ctx.arc(tx-3,ty-10,9,0,Math.PI*2); ctx.fill();
+                });
+            }
+            function drawBuilding(b){
+                if(b.destroyed)return;
+                const{x,y,w,h}=b,hpRatio=b.hp/b.maxHp;
+                let bodyCol=b.color,roofCol=b.roofColor;
+                if(b.flashTimer>0){ const fa=b.flashTimer/0.15; bodyCol=lerpColor(bodyCol,'#ffffff',fa*0.7); roofCol=lerpColor(roofCol,'#ffffff',fa*0.7); }
+                if(hpRatio<0.5){ const d=(0.5-hpRatio)*0.6; bodyCol=lerpColor(bodyCol,'#3a3a3a',d); roofCol=lerpColor(roofCol,'#2a1a0a',d); }
+                ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x+4,y+4,w,h);
+                ctx.fillStyle=bodyCol; ctx.fillRect(x,y,w,h);
+                ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=2; ctx.strokeRect(x,y,w,h);
+                const roofH=Math.min(h*0.35,w*0.4,40);
+                ctx.fillStyle=roofCol; ctx.beginPath(); ctx.moveTo(x-6,y); ctx.lineTo(x+w/2,y-roofH); ctx.lineTo(x+w+6,y); ctx.closePath(); ctx.fill(); ctx.stroke();
+                const winW=Math.min(w*0.16,22),winH=Math.min(h*0.22,26),gapX=winW+10,gapY=winH+16;
+                const startX=x+(w-Math.floor((w-14)/gapX)*gapX)/2, startY=y+roofH*0.3+8;
+                for(let wx=startX;wx+winW<x+w-4;wx+=gapX){
+                    for(let wy=startY;wy+winH<y+h-8;wy+=gapY){
+                        ctx.fillStyle='#fefae0'; ctx.fillRect(wx,wy,winW,winH);
+                        ctx.strokeStyle='#5c4033'; ctx.lineWidth=1.5; ctx.strokeRect(wx,wy,winW,winH);
+                        ctx.beginPath(); ctx.moveTo(wx+winW/2,wy); ctx.lineTo(wx+winW/2,wy+winH); ctx.moveTo(wx,wy+winH/2); ctx.lineTo(wx+winW,wy+winH/2); ctx.stroke();
+                        if(hpRatio<0.35&&Math.random()<0.5){ ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(wx+1,wy+1,winW-2,winH-2); }
+                    }
+                }
+                const doorW=Math.min(w*0.22,28),doorH=Math.min(h*0.35,42),doorX=x+w/2-doorW/2,doorY=y+h-doorH;
+                ctx.fillStyle='#5c3a1e'; ctx.fillRect(doorX,doorY,doorW,doorH); ctx.strokeStyle='#3a2010'; ctx.strokeRect(doorX,doorY,doorW,doorH);
+                if(hpRatio<0.7){
+                    const ci=(0.7-hpRatio)/0.7, numCracks=Math.floor(ci*8);
+                    ctx.strokeStyle='rgba(0,0,0,0.6)'; ctx.lineWidth=1+ci*2;
+                    for(let i=0;i<numCracks;i++){
+                        const cx1=x+((b.crackSeed*(i+1)*73+i*41)%w), cy1=y+((b.crackSeed*(i+1)*137+i*59)%h);
+                        const cx2=cx1+((b.crackSeed*i*31+17)%30-15)*ci, cy2=cy1+((b.crackSeed*i*47+23)%30-15)*ci;
+                        ctx.beginPath(); ctx.moveTo(cx1,cy1); ctx.lineTo(cx2,cy2); ctx.stroke();
+                    }
+                }
+                if(hpRatio<1&&hpRatio>0){
+                    const barW=w*0.7,barH=5,barX=x+(w-barW)/2,barY=y-14;
+                    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(barX-1,barY-1,barW+2,barH+2);
+                    ctx.fillStyle='#333'; ctx.fillRect(barX,barY,barW,barH);
+                    ctx.fillStyle=hpRatio>0.5?'#4caf50':hpRatio>0.25?'#ff9800':'#f44336';
+                    ctx.fillRect(barX,barY,barW*hpRatio,barH);
+                }
+            }
+            function drawRubble(rubble){
+                rubble.rubbleParts.forEach(p=>{
+                    ctx.save(); ctx.translate(p.rx,p.ry); ctx.rotate(p.angle);
+                    ctx.fillStyle=p.color; ctx.fillRect(-p.rw/2,-p.rh/2,p.rw,p.rh);
+                    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.strokeRect(-p.rw/2,-p.rh/2,p.rw,p.rh);
+                    ctx.restore();
+                });
+            }
+            function drawPlayer(){
+                const {x:px,y:py,angle,radius:r}=player;
+                ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(px+2,py+4,r,r*0.5,0,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle='#3b7dd8'; ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#1a4a8a'; ctx.lineWidth=2; ctx.stroke();
+                const headR=r*0.6, headX=px+Math.cos(angle)*r*0.35, headY=py+Math.sin(angle)*r*0.35-r*0.2;
+                ctx.fillStyle='#fddcb5'; ctx.beginPath(); ctx.arc(headX,headY,headR,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#c9a47a'; ctx.stroke();
+                ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(headX,headY-headR*0.55,headR*1.05,Math.PI,Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle='#ffcc00'; ctx.fillRect(headX-headR*1.15,headY-headR*0.5,headR*2.3,headR*0.3);
+                const swingProg=player.hammerSwingTimer>0?1-(player.hammerSwingTimer/player.hammerSwingDuration):0;
+                const restAngle=angle-Math.PI/2.5;
+                let hammerAngle;
+                if(player.hammerSwingTimer>0){
+                    hammerAngle=restAngle-Math.PI*0.75*Math.sin(swingProg*Math.PI);
+                }else{ hammerAngle=restAngle; }
+                const hpX=px+Math.cos(angle)*r*0.5, hpY=py+Math.sin(angle)*r*0.5;
+                const handleLen=r*1.8, hEndX=hpX+Math.cos(hammerAngle)*handleLen, hEndY=hpY+Math.sin(hammerAngle)*handleLen;
+                ctx.strokeStyle='#6b3a1f'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(hpX,hpY); ctx.lineTo(hEndX,hEndY); ctx.stroke();
+                ctx.save(); ctx.translate(hEndX,hEndY); ctx.rotate(hammerAngle+Math.PI/2);
+                ctx.fillStyle='#555'; ctx.fillRect(-7,-10,14,20); ctx.strokeStyle='#333'; ctx.strokeRect(-7,-10,14,20);
+                ctx.restore();
+            }
+            function drawNPC(npc){
+                const {x,y,radius:r}=npc;
+                ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x+1,y+2,r,r*0.4,0,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle=npc.shirtColor; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
+                ctx.fillStyle=npc.color; ctx.beginPath(); ctx.arc(x,y-r*0.55,r*0.55,0,Math.PI*2); ctx.fill(); ctx.stroke();
+                if(npc.panicTimer>0){ ctx.fillStyle='rgba(255,0,0,0.7)'; ctx.font=`${r*1.2}px sans-serif`; ctx.textAlign='center'; ctx.fillText('!',x,y-r*1.4); }
+            }
+            function drawNukeBomb(nuke){
+                const {x,y,timer}=nuke;
+                const pulse=Math.sin(timer*8)*0.3+0.7;
+                ctx.fillStyle=`rgba(255,50,0,${pulse*0.6})`; ctx.beginPath(); ctx.arc(x,y,18+pulse*8,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle='#000'; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+                ctx.fillText(Math.ceil(timer),x,y);
+                ctx.strokeStyle='#ff0'; ctx.lineWidth=2;
+                for(let i=0;i<3;i++){ const ang=(i/3)*Math.PI*2-Math.PI/2; ctx.beginPath(); ctx.arc(x,y,25,ang-0.3,ang+0.3); ctx.stroke(); }
+            }
+            function drawParticles(){
+                particles.forEach(p=>{
+                    const alpha=Math.max(0,p.life/p.maxLife);
+                    const r=parseInt(p.color.slice(1,3),16),g=parseInt(p.color.slice(3,5),16),b=parseInt(p.color.slice(5,7),16);
+                    ctx.fillStyle=`rgba(${r},${g},${b},${alpha})`; ctx.beginPath();
+                    ctx.arc(p.x,p.y,p.size*alpha,0,Math.PI*2); ctx.fill();
+                });
+            }
+            function lerpColor(c1,c2,t){
+                const r1=parseInt(c1.slice(1,3),16),g1=parseInt(c1.slice(3,5),16),b1=parseInt(c1.slice(5,7),16);
+                const r2=parseInt(c2.slice(1,3),16),g2=parseInt(c2.slice(3,5),16),b2=parseInt(c2.slice(5,7),16);
+                return `rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`;
+            }
+
+            function render(){
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                ctx.save();
+                ctx.translate(-camera.x-shakeX, -camera.y-shakeY);
+                drawGrass();
+                drawRoads();
+                drawTrees();
+                buildings.forEach(b=>drawBuilding(b));
+                rubblePiles.forEach(r=>drawRubble(r));
+                npcs.forEach(n=>drawNPC(n));
+                drawParticles();
+                if(activeNuke) drawNukeBomb(activeNuke);
+                drawPlayer();
+                ctx.restore();
+            }
+
+            function init(){
+                initBuildings(); destroyedCount=0; score=0; comboCount=0; comboTimer=0;
+                nukesLeft=NUKE_MAX_COUNT; nukeCooldownTimer=0; nukeRegenTimer=NUKE_REGEN_TIME; activeNuke=null;
+                initNPCs(); particles.length=0; rubblePiles.length=0;
+                player.x=WORLD_W/2; player.y=WORLD_H/2;
+                updateUI();
+            }
+            init();
+
+            let lastTime=performance.now();
+            function loop(ts){
+                let dt=(ts-lastTime)/1000; if(dt>0.2)dt=0.2; lastTime=ts;
+                update(dt); render(); requestAnimationFrame(loop);
+            }
+            requestAnimationFrame(loop);
+            window.addEventListener('blur',()=>{ for(let k in keys) keys[k]=false; });
+            console.log('Игра готова! E - ядерная бомба, восстанавливается каждые 30с.');
+        })();
+    </script>
+</body>
+</html>

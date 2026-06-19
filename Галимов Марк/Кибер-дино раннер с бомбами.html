@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>КИБЕР-ДИНО РАННЕР С БОМБАМИ</title>
+    <style>
+        :root {
+            --bg: #0a0a12;
+            --neon-cyan: #00f0ff;
+            --neon-magenta: #d900ff;
+            --neon-yellow: #ffe600;
+            --neon-orange: #ff6600;
+            --dark-surface: #12121a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a12 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .game-wrapper {
+            position: relative;
+            background: #0d0d16;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), 0 0 15px rgba(217, 0, 255, 0.4), 0 0 0 2px rgba(0, 240, 255, 0.6);
+            overflow: hidden;
+            max-width: 95vw;
+            max-height: 95vh;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 10px;
+            cursor: pointer;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Кнопка бомбы для мобильных */
+        .bomb-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 64px;
+            height: 64px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid var(--neon-orange);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: var(--neon-orange);
+            text-shadow: 0 0 12px var(--neon-orange);
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 20;
+            box-shadow: 0 0 20px rgba(255, 102, 0, 0.5);
+            transition: transform 0.1s, box-shadow 0.1s;
+            touch-action: manipulation;
+        }
+
+        .bomb-btn:active {
+            transform: scale(0.9);
+            box-shadow: 0 0 30px rgba(255, 102, 0, 0.9);
+        }
+
+        .bomb-btn.cooldown {
+            border-color: #555;
+            color: #555;
+            text-shadow: none;
+            box-shadow: 0 0 8px rgba(100, 100, 100, 0.3);
+            pointer-events: none;
+        }
+
+        .mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .mobile-controls .tap-zone {
+            position: absolute;
+            pointer-events: auto;
+        }
+
+        .mobile-controls .jump-zone {
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 45%;
+            cursor: pointer;
+        }
+
+        .mobile-controls .duck-zone {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40%;
+            cursor: pointer;
+            background: rgba(0, 240, 255, 0.05);
+            border-radius: 0 0 12px 12px;
+            border-top: 1px solid rgba(0, 240, 255, 0.2);
+        }
+
+        .mobile-controls .duck-zone::after {
+            content: '⬇ УКЛОН';
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(0, 240, 255, 0.6);
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 8px var(--neon-cyan);
+            pointer-events: none;
+        }
+
+        .mobile-controls .jump-zone::after {
+            content: '⬆ ПРЫЖОК';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(217, 0, 255, 0.7);
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--neon-magenta);
+            pointer-events: none;
+        }
+
+        @media (max-width: 850px) or (hover: none) {
+            .mobile-controls {
+                display: block;
+            }
+            .bomb-btn {
+                width: 56px;
+                height: 56px;
+                bottom: 15px;
+                right: 15px;
+                font-size: 28px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .game-wrapper {
+                max-width: 98vw;
+                border-radius: 8px;
+                box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), 0 0 10px rgba(217, 0, 255, 0.4), 0 0 0 2px rgba(0, 240, 255, 0.6);
+            }
+            canvas {
+                border-radius: 6px;
+            }
+            .bomb-btn {
+                width: 48px;
+                height: 48px;
+                bottom: 10px;
+                right: 10px;
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper" id="gameWrapper">
+        <canvas id="gameCanvas"></canvas>
+        <!-- Кнопка бомбы (видна всегда, но на мобильных работает как триггер) -->
+        <div class="bomb-btn" id="bombBtn">💣</div>
+        <div class="mobile-controls" id="mobileControls">
+            <div class="jump-zone" id="jumpZone"></div>
+            <div class="duck-zone" id="duckZone"></div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const mobileControls = document.getElementById('mobileControls');
+            const jumpZone = document.getElementById('jumpZone');
+            const duckZone = document.getElementById('duckZone');
+            const bombBtn = document.getElementById('bombBtn');
+
+            // --- Игровые константы ---
+            const GROUND_HEIGHT = 55;
+            const GRAVITY = 0.75;
+            const JUMP_FORCE = -13.5;
+            const FAST_FALL_GRAVITY = 1.6;
+            const INITIAL_SPEED = 5.5;
+            const MAX_SPEED = 14;
+            const SPEED_INCREMENT = 0.003;
+            const MIN_OBSTACLE_SPACING = 350;
+            const MIN_OBSTACLE_SPACING_FAST = 220;
+
+            const GAME_WIDTH = 800;
+            const GAME_HEIGHT = 320;
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+            const GROUND_Y = GAME_HEIGHT - GROUND_HEIGHT;
+
+            // Цвета киберпанк
+            const NEON_CYAN = '#00f0ff';
+            const NEON_MAGENTA = '#d900ff';
+            const NEON_YELLOW = '#ffe600';
+            const NEON_ORANGE = '#ff6600';
+            const DARK_BG = '#0a0a12';
+            const DINO_BODY = '#1a1a2e';
+            const DINO_ACCENT = NEON_CYAN;
+            const BIRD_COLOR = '#ff3355';
+            const CACTUS_COLOR = NEON_MAGENTA;
+            const ROCK_COLOR = '#4444ff';
+
+            // --- Состояния игры ---
+            const STATE = { WAITING: 'waiting', PLAYING: 'playing', GAME_OVER: 'gameOver' };
+            let gameState = STATE.WAITING;
+            let score = 0;
+            let highScore = 0;
+            let gameSpeed = INITIAL_SPEED;
+            let frameCount = 0;
+
+            // --- Бомба ---
+            const BOMB_COOLDOWN_MAX = 90; // кадров (1.5 сек при 60 fps)
+            let bombAvailable = true;
+            let bombCooldown = 0;
+            let bombActive = false;
+            let bombX = 0;
+            let bombY = 0;
+            let bombVx = 8;
+            let bombRadius = 70;
+            let explosionParticles = [];
+            let explosionRing = 0; // для анимации расширяющегося кольца
+
+            function resetBomb() {
+                bombAvailable = true;
+                bombCooldown = 0;
+                bombActive = false;
+                explosionParticles = [];
+                explosionRing = 0;
+                updateBombButtonVisual();
+            }
+
+            function throwBomb() {
+                if (!bombAvailable || bombActive || gameState !== STATE.PLAYING) return;
+                bombAvailable = false;
+                bombCooldown = BOMB_COOLDOWN_MAX;
+                bombActive = true;
+                bombX = DINO.x + DINO.width;
+                bombY = DINO.y + DINO.height / 2;
+                bombVx = 8 + gameSpeed * 0.3; // скорость зависит от игровой скорости
+                explosionParticles = [];
+                explosionRing = 0;
+                updateBombButtonVisual();
+                // Звуковой эффект? Просто частицы
+                for (let i = 0; i < 8; i++) {
+                    DINO.trailParticles.push({
+                        x: bombX,
+                        y: bombY,
+                        vx: (Math.random() - 0.5) * 3,
+                        vy: (Math.random() - 0.5) * 3,
+                        life: 0.5,
+                        decay: 0.06,
+                        size: 2 + Math.random() * 3,
+                        color: NEON_ORANGE,
+                    });
+                }
+            }
+
+            function updateBombButtonVisual() {
+                if (bombAvailable && gameState === STATE.PLAYING) {
+                    bombBtn.classList.remove('cooldown');
+                } else {
+                    bombBtn.classList.add('cooldown');
+                }
+            }
+
+            // --- Динозавр ---
+            const DINO = {
+                x: 85,
+                standHeight: 52,
+                duckHeight: 26,
+                standWidth: 44,
+                duckWidth: 56,
+                y: GROUND_Y - 52,
+                width: 44,
+                height: 52,
+                velocityY: 0,
+                isJumping: false,
+                isDucking: false,
+                isFastFalling: false,
+                eyeBlinkTimer: 0,
+                legPhase: 0,
+                trailParticles: [],
+            };
+
+            function resetDino() {
+                DINO.y = GROUND_Y - DINO.standHeight;
+                DINO.height = DINO.standHeight;
+                DINO.width = DINO.standWidth;
+                DINO.velocityY = 0;
+                DINO.isJumping = false;
+                DINO.isDucking = false;
+                DINO.isFastFalling = false;
+                DINO.eyeBlinkTimer = 0;
+                DINO.legPhase = 0;
+                DINO.trailParticles = [];
+            }
+
+            let obstacles = [];
+            function clearObstacles() { obstacles = []; }
+
+            function spawnGroundObstacle(x) {
+                const types = [
+                    { name: 'cactus_small', width: 22, height: 38, color: CACTUS_COLOR },
+                    { name: 'cactus_tall', width: 26, height: 52, color: CACTUS_COLOR },
+                    { name: 'cactus_group', width: 36, height: 44, color: CACTUS_COLOR },
+                    { name: 'rock', width: 28, height: 32, color: ROCK_COLOR },
+                    { name: 'rock_large', width: 34, height: 40, color: ROCK_COLOR },
+                ];
+                const type = types[Math.floor(Math.random() * types.length)];
+                obstacles.push({ x, y: GROUND_Y - type.height, width: type.width, height: type.height, type: 'ground', subType: type, passed: false });
+            }
+
+            function spawnBird(x) {
+                const birdHeight = 28;
+                const birdWidth = 44;
+                const birdYOptions = [
+                    GROUND_Y - DINO.standHeight - 4,
+                    GROUND_Y - DINO.standHeight + 6,
+                    GROUND_Y - DINO.standHeight - 2,
+                ];
+                const birdY = birdYOptions[Math.floor(Math.random() * birdYOptions.length)];
+                obstacles.push({ x, y: birdY, width: birdWidth, height: birdHeight, type: 'bird', wingPhase: Math.random() * Math.PI * 2, wingSpeed: 0.15 + Math.random() * 0.2, passed: false });
+            }
+
+            // --- Ввод ---
+            const keys = {};
+            let jumpPressed = false;
+            let duckActive = false;
+
+            window.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    e.preventDefault();
+                    jumpPressed = true;
+                }
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    e.preventDefault();
+                    duckActive = true;
+                }
+                if (e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    e.preventDefault();
+                    throwBomb();
+                }
+                if (e.code === 'Space' || e.code === 'ArrowUp') {
+                    if (gameState === STATE.WAITING) startGame();
+                    if (gameState === STATE.GAME_OVER) restartGame();
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') duckActive = false;
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') jumpPressed = false;
+            });
+
+            function isMobileDevice() {
+                return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 850;
+            }
+            if (isMobileDevice()) {
+                mobileControls.style.display = 'block';
+            }
+
+            let mobileJumpActive = false, mobileDuckActive = false;
+            jumpZone.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                mobileJumpActive = true;
+                jumpPressed = true;
+                if (gameState === STATE.WAITING) startGame();
+                if (gameState === STATE.GAME_OVER) restartGame();
+            });
+            jumpZone.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                mobileJumpActive = false;
+                jumpPressed = false;
+            });
+            jumpZone.addEventListener('pointerleave', () => {
+                mobileJumpActive = false;
+                jumpPressed = false;
+            });
+
+            duckZone.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                mobileDuckActive = true;
+                duckActive = true;
+            });
+            duckZone.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                mobileDuckActive = false;
+                duckActive = false;
+            });
+            duckZone.addEventListener('pointerleave', () => {
+                mobileDuckActive = false;
+                duckActive = false;
+            });
+
+            // Кнопка бомбы
+            bombBtn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                throwBomb();
+            });
+
+            document.addEventListener('touchstart', (e) => {
+                if (e.target.closest('.game-wrapper')) e.preventDefault();
+            }, { passive: false });
+
+            // --- Игровая логика ---
+            function startGame() {
+                gameState = STATE.PLAYING;
+                score = 0;
+                gameSpeed = INITIAL_SPEED;
+                clearObstacles();
+                resetDino();
+                resetBomb();
+                frameCount = 0;
+                updateBombButtonVisual();
+            }
+
+            function restartGame() {
+                startGame();
+            }
+
+            function endGame() {
+                gameState = STATE.GAME_OVER;
+                if (score > highScore) {
+                    highScore = score;
+                    try { localStorage.setItem('cyberDinoHighScore', highScore); } catch (e) {}
+                }
+                for (let i = 0; i < 30; i++) {
+                    DINO.trailParticles.push({
+                        x: DINO.x + DINO.width / 2,
+                        y: DINO.y + DINO.height / 2,
+                        vx: (Math.random() - 0.5) * 14,
+                        vy: (Math.random() - 0.8) * 14,
+                        life: 1,
+                        decay: 0.02 + Math.random() * 0.06,
+                        size: 2 + Math.random() * 6,
+                        color: Math.random() < 0.5 ? NEON_CYAN : NEON_MAGENTA,
+                    });
+                }
+                bombActive = false;
+                updateBombButtonVisual();
+            }
+
+            function explodeBomb() {
+                if (!bombActive) return;
+                // Создаем частицы взрыва
+                for (let i = 0; i < 40; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 7;
+                    explosionParticles.push({
+                        x: bombX,
+                        y: bombY,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        decay: 0.02 + Math.random() * 0.04,
+                        size: 2 + Math.random() * 5,
+                        color: Math.random() < 0.5 ? NEON_ORANGE : NEON_YELLOW,
+                    });
+                }
+                explosionRing = 1; // максимальный радиус для анимации
+                // Уничтожаем препятствия в радиусе
+                let destroyedCount = 0;
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    const obsCenterX = obs.x + obs.width / 2;
+                    const obsCenterY = obs.y + obs.height / 2;
+                    const dx = obsCenterX - bombX;
+                    const dy = obsCenterY - bombY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < bombRadius + Math.max(obs.width, obs.height) * 0.5) {
+                        obstacles.splice(i, 1);
+                        destroyedCount++;
+                        score += 20; // бонус за уничтожение
+                        // Частицы от уничтоженного препятствия
+                        for (let j = 0; j < 10; j++) {
+                            explosionParticles.push({
+                                x: obsCenterX,
+                                y: obsCenterY,
+                                vx: (Math.random() - 0.5) * 5,
+                                vy: (Math.random() - 0.8) * 5,
+                                life: 0.8,
+                                decay: 0.04,
+                                size: 2 + Math.random() * 4,
+                                color: obs.type === 'bird' ? BIRD_COLOR : (obs.subType?.color || NEON_MAGENTA),
+                            });
+                        }
+                    }
+                }
+                bombActive = false;
+                // Если уничтожили много, добавляем бонусные очки
+                if (destroyedCount > 1) score += (destroyedCount - 1) * 10;
+            }
+
+            function updateBomb() {
+                // Перезарядка
+                if (!bombAvailable && bombCooldown > 0) {
+                    bombCooldown--;
+                    if (bombCooldown === 0) {
+                        bombAvailable = true;
+                        updateBombButtonVisual();
+                    }
+                }
+
+                // Движение бомбы
+                if (bombActive) {
+                    bombX += bombVx;
+                    // Проверка выхода за экран или столкновения с препятствием
+                    if (bombX > GAME_WIDTH + 30) {
+                        explodeBomb();
+                    } else {
+                        // Проверяем столкновение с любым препятствием (бомба взрывается при касании)
+                        for (let obs of obstacles) {
+                            const bombHitbox = { x: bombX - 6, y: bombY - 6, width: 12, height: 12 };
+                            const obsHitbox = { x: obs.x, y: obs.y, width: obs.width, height: obs.height };
+                            if (bombHitbox.x < obsHitbox.x + obsHitbox.width &&
+                                bombHitbox.x + bombHitbox.width > obsHitbox.x &&
+                                bombHitbox.y < obsHitbox.y + obsHitbox.height &&
+                                bombHitbox.y + bombHitbox.height > obsHitbox.y) {
+                                explodeBomb();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Обновление частиц взрыва
+                for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                    const p = explosionParticles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.1;
+                    p.life -= p.decay;
+                    if (p.life <= 0) explosionParticles.splice(i, 1);
+                }
+                // Кольцо взрыва
+                if (explosionRing > 0) {
+                    explosionRing = Math.max(0, explosionRing - 0.03);
+                }
+            }
+
+            function updateDino() {
+                if (duckActive && !DINO.isJumping) DINO.isDucking = true;
+                else if (!duckActive && DINO.isDucking && !DINO.isJumping) DINO.isDucking = false;
+
+                if (DINO.isDucking && DINO.height !== DINO.duckHeight) {
+                    DINO.height = DINO.duckHeight;
+                    DINO.width = DINO.duckWidth;
+                    DINO.y = GROUND_Y - DINO.duckHeight;
+                } else if (!DINO.isDucking && !DINO.isJumping && DINO.height !== DINO.standHeight) {
+                    DINO.height = DINO.standHeight;
+                    DINO.width = DINO.standWidth;
+                    DINO.y = GROUND_Y - DINO.standHeight;
+                }
+
+                if (jumpPressed && !DINO.isJumping) {
+                    if (DINO.isDucking) {
+                        DINO.isDucking = false;
+                        DINO.height = DINO.standHeight;
+                        DINO.width = DINO.standWidth;
+                        DINO.y = GROUND_Y - DINO.standHeight;
+                    }
+                    DINO.velocityY = JUMP_FORCE;
+                    DINO.isJumping = true;
+                    for (let i = 0; i < 10; i++) {
+                        DINO.trailParticles.push({
+                            x: DINO.x + 10 + Math.random() * 20,
+                            y: GROUND_Y,
+                            vx: -(Math.random() * 4 + 1),
+                            vy: -(Math.random() * 5 + 2),
+                            life: 0.7,
+                            decay: 0.04,
+                            size: 2 + Math.random() * 4,
+                            color: NEON_CYAN,
+                        });
+                    }
+                    jumpPressed = false;
+                    mobileJumpActive = false;
+                }
+
+                if (duckActive && DINO.isJumping) DINO.isFastFalling = true;
+                else DINO.isFastFalling = false;
+
+                if (DINO.isJumping) {
+                    const grav = DINO.isFastFalling ? FAST_FALL_GRAVITY : GRAVITY;
+                    DINO.velocityY += grav;
+                    DINO.y += DINO.velocityY;
+                    if (DINO.y >= GROUND_Y - DINO.height) {
+                        DINO.y = GROUND_Y - DINO.height;
+                        DINO.velocityY = 0;
+                        DINO.isJumping = false;
+                        DINO.isFastFalling = false;
+                        if (duckActive) {
+                            DINO.isDucking = true;
+                            DINO.height = DINO.duckHeight;
+                            DINO.width = DINO.duckWidth;
+                            DINO.y = GROUND_Y - DINO.duckHeight;
+                        } else {
+                            DINO.isDucking = false;
+                            DINO.height = DINO.standHeight;
+                            DINO.width = DINO.standWidth;
+                            DINO.y = GROUND_Y - DINO.standHeight;
+                        }
+                        for (let i = 0; i < 8; i++) {
+                            DINO.trailParticles.push({
+                                x: DINO.x + 5 + Math.random() * 25,
+                                y: GROUND_Y,
+                                vx: -(Math.random() * 3 + 0.5),
+                                vy: -(Math.random() * 4 + 1),
+                                life: 0.5,
+                                decay: 0.05,
+                                size: 1.5 + Math.random() * 3,
+                                color: NEON_MAGENTA,
+                            });
+                        }
+                    }
+                }
+
+                for (let i = DINO.trailParticles.length - 1; i >= 0; i--) {
+                    const p = DINO.trailParticles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.12;
+                    p.life -= p.decay;
+                    if (p.life <= 0) DINO.trailParticles.splice(i, 1);
+                }
+                DINO.eyeBlinkTimer++;
+                DINO.legPhase += gameSpeed * 0.12;
+            }
+
+            function updateObstacles() {
+                for (let obs of obstacles) {
+                    obs.x -= gameSpeed;
+                    if (obs.type === 'bird') obs.wingPhase += obs.wingSpeed;
+                }
+                obstacles = obstacles.filter(obs => obs.x + obs.width > -60);
+                for (let obs of obstacles) {
+                    if (!obs.passed && obs.x + obs.width < DINO.x) {
+                        obs.passed = true;
+                        score += 10;
+                    }
+                }
+                const rightmostObs = obstacles.length > 0 ? Math.max(...obstacles.map(o => o.x)) : -999;
+                const minSpacing = gameSpeed > 9 ? MIN_OBSTACLE_SPACING_FAST : MIN_OBSTACLE_SPACING;
+                if (rightmostObs < GAME_WIDTH - minSpacing) {
+                    const spawnX = Math.max(GAME_WIDTH + 20, rightmostObs + minSpacing + Math.random() * 120);
+                    const birdChance = 0.25 + (gameSpeed - INITIAL_SPEED) / (MAX_SPEED - INITIAL_SPEED) * 0.4;
+                    if (Math.random() < Math.min(birdChance, 0.55)) spawnBird(spawnX);
+                    else spawnGroundObstacle(spawnX);
+                }
+                if (gameSpeed < MAX_SPEED) gameSpeed += SPEED_INCREMENT;
+            }
+
+            function checkCollisions() {
+                const dinoHitbox = { x: DINO.x + 5, y: DINO.y + 3, width: DINO.width - 10, height: DINO.height - 6 };
+                for (let obs of obstacles) {
+                    const obsHitbox = { x: obs.x + 3, y: obs.y + 2, width: obs.width - 6, height: obs.height - 4 };
+                    if (dinoHitbox.x < obsHitbox.x + obsHitbox.width &&
+                        dinoHitbox.x + dinoHitbox.width > obsHitbox.x &&
+                        dinoHitbox.y < obsHitbox.y + obsHitbox.height &&
+                        dinoHitbox.y + dinoHitbox.height > obsHitbox.y) {
+                        endGame();
+                        return;
+                    }
+                }
+            }
+
+            function update() {
+                if (gameState !== STATE.PLAYING) return;
+                updateDino();
+                updateBomb();
+                updateObstacles();
+                checkCollisions();
+                score += Math.floor(gameSpeed * 0.15);
+                frameCount++;
+            }
+
+            // --- Отрисовка ---
+            function drawSky() {
+                const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+                grad.addColorStop(0, '#0a0a1a');
+                grad.addColorStop(0.6, '#111133');
+                grad.addColorStop(1, '#1a1a3a');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, GAME_WIDTH, GROUND_Y);
+
+                ctx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+                ctx.lineWidth = 1;
+                for (let y = 0; y < GROUND_Y; y += 30) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y + (frameCount * 0.5 % 30));
+                    ctx.lineTo(GAME_WIDTH, y + (frameCount * 0.5 % 30));
+                    ctx.stroke();
+                }
+
+                drawNeonCloud(120, 45, 1, NEON_MAGENTA);
+                drawNeonCloud(400, 30, 0.7, NEON_CYAN);
+                drawNeonCloud(620, 55, 0.9, NEON_MAGENTA);
+            }
+
+            function drawNeonCloud(x, y, scale, color) {
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 12;
+                ctx.fillStyle = 'rgba(255,255,255,0.07)';
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                const s = scale;
+                ctx.arc(x, y, 18 * s, 0, Math.PI * 2);
+                ctx.arc(x + 22 * s, y - 10 * s, 14 * s, 0, Math.PI * 2);
+                ctx.arc(x + 40 * s, y, 16 * s, 0, Math.PI * 2);
+                ctx.arc(x + 15 * s, y + 5 * s, 12 * s, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawGround() {
+                ctx.fillStyle = '#0d0d1a';
+                ctx.fillRect(0, GROUND_Y, GAME_WIDTH, GROUND_HEIGHT);
+
+                ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+                ctx.lineWidth = 1;
+                const gridSize = 30;
+                for (let x = (frameCount * 2 % gridSize); x < GAME_WIDTH; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, GROUND_Y);
+                    ctx.lineTo(x, GAME_HEIGHT);
+                    ctx.stroke();
+                }
+                for (let y = GROUND_Y; y < GAME_HEIGHT; y += gridSize / 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(GAME_WIDTH, y);
+                    ctx.stroke();
+                }
+
+                ctx.shadowColor = NEON_CYAN;
+                ctx.shadowBlur = 10;
+                ctx.strokeStyle = NEON_CYAN;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y);
+                ctx.lineTo(GAME_WIDTH, GROUND_Y);
+                ctx.stroke();
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            function drawStandingDino(x, y) {
+                const w = DINO.standWidth;
+                const h = DINO.standHeight;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.shadowColor = DINO_ACCENT;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = DINO_BODY;
+                ctx.strokeStyle = DINO_ACCENT;
+                ctx.lineWidth = 2;
+
+                const legSwing = Math.sin(DINO.legPhase) * 4;
+                ctx.fillStyle = '#0a0a1c';
+                ctx.fillRect(6, h - 14, 9, 14 + legSwing * 0.5);
+                ctx.fillRect(4, h - 2 + legSwing * 0.5, 13, 4);
+                ctx.fillRect(20, h - 14, 9, 14 - legSwing * 0.5);
+                ctx.fillRect(18, h - 2 - legSwing * 0.5, 13, 4);
+
+                ctx.beginPath();
+                ctx.moveTo(2, h - 22);
+                ctx.lineTo(-16, h - 14);
+                ctx.lineTo(-10, h - 6);
+                ctx.lineTo(4, h - 16);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.roundRect(4, 6, 28, h - 24, 8);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(18, 6);
+                ctx.lineTo(40, 4);
+                ctx.lineTo(42, 8);
+                ctx.lineTo(38, 18);
+                ctx.lineTo(22, 18);
+                ctx.lineTo(16, 10);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowColor = NEON_YELLOW;
+                ctx.fillStyle = NEON_YELLOW;
+                ctx.beginPath();
+                ctx.arc(32, 8, 4, 0, Math.PI * 2);
+                ctx.fill();
+                if ((DINO.eyeBlinkTimer % 120) < 3) {
+                    ctx.fillStyle = DINO_BODY;
+                    ctx.fill();
+                }
+                ctx.shadowColor = DINO_ACCENT;
+                ctx.restore();
+            }
+
+            function drawDuckingDino(x, y) {
+                const w = DINO.duckWidth;
+                const h = DINO.duckHeight;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.shadowColor = DINO_ACCENT;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = DINO_BODY;
+                ctx.strokeStyle = DINO_ACCENT;
+                ctx.lineWidth = 2;
+
+                ctx.fillStyle = '#0a0a1c';
+                ctx.fillRect(8, h - 8, 10, 8);
+                ctx.fillRect(6, h - 2, 14, 4);
+                ctx.fillRect(30, h - 8, 10, 8);
+                ctx.fillRect(28, h - 2, 14, 4);
+
+                ctx.beginPath();
+                ctx.roundRect(0, 0, w, h - 10, 7);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(w - 10, -4);
+                ctx.lineTo(w + 10, -2);
+                ctx.lineTo(w + 14, 6);
+                ctx.lineTo(w - 6, 10);
+                ctx.lineTo(w - 12, 2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowColor = NEON_YELLOW;
+                ctx.fillStyle = NEON_YELLOW;
+                ctx.beginPath();
+                ctx.arc(w + 4, 2, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                if ((DINO.eyeBlinkTimer % 120) < 3) {
+                    ctx.fillStyle = DINO_BODY;
+                    ctx.fill();
+                }
+                ctx.shadowColor = DINO_ACCENT;
+                ctx.restore();
+            }
+
+            function drawDinoTrail() {
+                for (let p of DINO.trailParticles) {
+                    ctx.shadowColor = p.color;
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+
+            function drawBomb() {
+                if (!bombActive) return;
+                ctx.save();
+                ctx.shadowColor = NEON_ORANGE;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = NEON_ORANGE;
+                ctx.beginPath();
+                ctx.arc(bombX, bombY, 7, 0, Math.PI * 2);
+                ctx.fill();
+                // Хвост
+                ctx.strokeStyle = NEON_ORANGE;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(bombX - 5, bombY);
+                ctx.lineTo(bombX - 15, bombY - 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawExplosion() {
+                // Кольцо взрыва
+                if (explosionRing > 0 && !bombActive) {
+                    const radius = bombRadius * (1 - explosionRing) + 10;
+                    ctx.save();
+                    ctx.globalAlpha = explosionRing * 0.6;
+                    ctx.shadowColor = NEON_ORANGE;
+                    ctx.shadowBlur = 20;
+                    ctx.strokeStyle = NEON_ORANGE;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(bombX, bombY, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                // Частицы взрыва
+                for (let p of explosionParticles) {
+                    ctx.save();
+                    ctx.shadowColor = p.color;
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            function drawGroundObstacle(obs) {
+                const st = obs.subType;
+                ctx.save();
+                ctx.translate(obs.x, obs.y);
+                ctx.shadowColor = st.color;
+                ctx.shadowBlur = 12;
+                ctx.fillStyle = '#0a0a14';
+                ctx.strokeStyle = st.color;
+                ctx.lineWidth = 2;
+
+                if (st.name.startsWith('cactus')) {
+                    ctx.fillStyle = 'rgba(10,10,20,0.8)';
+                    ctx.beginPath();
+                    ctx.roundRect(st.width * 0.25, 0, st.width * 0.5, st.height, 4);
+                    ctx.fill();
+                    ctx.stroke();
+                    for (let cy = 8; cy < st.height - 4; cy += 10) {
+                        ctx.beginPath();
+                        ctx.moveTo(st.width * 0.25 - 4, cy);
+                        ctx.lineTo(st.width * 0.25 + 4, cy);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(st.width * 0.75 + 4, cy);
+                        ctx.lineTo(st.width * 0.75 - 4, cy);
+                        ctx.stroke();
+                    }
+                    if (st.name === 'cactus_group') {
+                        ctx.beginPath();
+                        ctx.roundRect(0, st.height * 0.2, st.width * 0.3, st.height * 0.45, 4);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.roundRect(st.width * 0.7, st.height * 0.15, st.width * 0.3, st.height * 0.5, 4);
+                        ctx.stroke();
+                    }
+                } else if (st.name.startsWith('rock')) {
+                    ctx.fillStyle = 'rgba(10,10,20,0.8)';
+                    ctx.beginPath();
+                    ctx.moveTo(2, st.height - 4);
+                    ctx.quadraticCurveTo(0, st.height * 0.5, st.width * 0.2, 4);
+                    ctx.quadraticCurveTo(st.width * 0.5, -2, st.width * 0.8, 6);
+                    ctx.quadraticCurveTo(st.width, st.height * 0.4, st.width - 2, st.height - 2);
+                    ctx.quadraticCurveTo(st.width * 0.6, st.height + 2, st.width * 0.3, st.height - 3);
+                    ctx.quadraticCurveTo(4, st.height, 2, st.height - 4);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawBird(obs) {
+                ctx.save();
+                ctx.translate(obs.x, obs.y);
+                ctx.shadowColor = BIRD_COLOR;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#1a0a0a';
+                ctx.strokeStyle = BIRD_COLOR;
+                ctx.lineWidth = 2;
+
+                const wingFlap = Math.sin(obs.wingPhase);
+                ctx.beginPath();
+                ctx.ellipse(obs.width / 2, obs.height / 2, obs.width * 0.35, obs.height * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(obs.width * 0.4, obs.height * 0.35);
+                ctx.rotate(-0.3 + wingFlap * 0.7);
+                ctx.strokeStyle = BIRD_COLOR;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(obs.width * 0.5, -10);
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.save();
+                ctx.translate(obs.width * 0.4, obs.height * 0.6);
+                ctx.rotate(0.3 - wingFlap * 0.7);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(obs.width * 0.5, 10);
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.beginPath();
+                ctx.arc(obs.width * 0.75, obs.height * 0.35, obs.height * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowColor = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(obs.width * 0.8, obs.height * 0.28, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            function drawBombStatus() {
+                // Иконка бомбы и статус перезарядки в левом верхнем углу
+                const iconX = 25;
+                const iconY = 30;
+                ctx.save();
+                if (bombAvailable && gameState === STATE.PLAYING) {
+                    ctx.shadowColor = NEON_ORANGE;
+                    ctx.shadowBlur = 12;
+                    ctx.fillStyle = NEON_ORANGE;
+                    ctx.font = '24px "Courier New", monospace';
+                    ctx.fillText('💣', iconX, iconY);
+                } else if (!bombAvailable && gameState === STATE.PLAYING) {
+                    // Затемненная иконка и полоска перезарядки
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#555';
+                    ctx.font = '24px "Courier New", monospace';
+                    ctx.fillText('💣', iconX, iconY);
+                    // Полоса перезарядки
+                    const progress = 1 - (bombCooldown / BOMB_COOLDOWN_MAX);
+                    const barWidth = 30;
+                    const barHeight = 4;
+                    const barX = iconX - 5;
+                    const barY = iconY + 10;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(barX, barY, barWidth, barHeight);
+                    ctx.fillStyle = NEON_ORANGE;
+                    ctx.shadowColor = NEON_ORANGE;
+                    ctx.shadowBlur = 5;
+                    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+                }
+                ctx.restore();
+            }
+
+            function drawScore() {
+                ctx.shadowColor = NEON_CYAN;
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = NEON_CYAN;
+                ctx.font = 'bold 22px "Courier New", monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText('СЧЁТ: ' + Math.floor(score), GAME_WIDTH - 25, 35);
+                if (highScore > 0) {
+                    ctx.shadowColor = NEON_MAGENTA;
+                    ctx.fillStyle = NEON_MAGENTA;
+                    ctx.font = '14px "Courier New", monospace';
+                    ctx.fillText('РЕКОРД: ' + Math.floor(highScore), GAME_WIDTH - 25, 58);
+                }
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            function drawStartScreen() {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                ctx.shadowColor = NEON_MAGENTA;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = NEON_CYAN;
+                ctx.font = 'bold 36px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('КИБЕР-ДИНО', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30);
+                ctx.shadowColor = NEON_CYAN;
+                ctx.fillText('РАННЕР', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 10);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#aaa';
+                ctx.font = '16px "Courier New", monospace';
+                const hint = isMobileDevice() ? 'КОСНИСЬ ЭКРАНА' : 'ПРОБЕЛ / СТРЕЛКА ВВЕРХ';
+                ctx.fillText(hint, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60);
+                ctx.fillText('БОМБА: E / КНОПКА 💣', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 85);
+            }
+
+            function drawGameOverScreen() {
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                ctx.shadowColor = '#ff3355';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ff3355';
+                ctx.font = 'bold 40px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+                ctx.shadowColor = NEON_CYAN;
+                ctx.fillStyle = NEON_CYAN;
+                ctx.font = 'bold 26px "Courier New", monospace';
+                ctx.fillText('СЧЁТ: ' + Math.floor(score), GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30);
+                if (score >= highScore && highScore > 0) {
+                    ctx.shadowColor = NEON_YELLOW;
+                    ctx.fillStyle = NEON_YELLOW;
+                    ctx.fillText('🏆 НОВЫЙ РЕКОРД 🏆', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60);
+                }
+                ctx.shadowBlur = 0;
+                const restart = isMobileDevice() ? 'КОСНИСЬ, ЧТОБЫ НАЧАТЬ ЗАНОВО' : 'ПРОБЕЛ ДЛЯ РЕСТАРТА';
+                ctx.fillStyle = '#ccc';
+                ctx.font = '16px "Courier New", monospace';
+                ctx.fillText(restart, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90);
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                let shakeX = 0,
+                    shakeY = 0;
+                if (gameState === STATE.GAME_OVER && DINO.trailParticles.length > 10) {
+                    const intensity = Math.min(6, DINO.trailParticles.length / 30 * 6);
+                    shakeX = (Math.random() - 0.5) * intensity;
+                    shakeY = (Math.random() - 0.5) * intensity;
+                }
+                ctx.save();
+                ctx.translate(shakeX, shakeY);
+                drawSky();
+                drawGround();
+                drawDinoTrail();
+                if (DINO.isDucking && !DINO.isJumping) drawDuckingDino(DINO.x, DINO.y);
+                else drawStandingDino(DINO.x, DINO.y);
+                for (let obs of obstacles) {
+                    if (obs.type === 'ground') drawGroundObstacle(obs);
+                    else if (obs.type === 'bird') drawBird(obs);
+                }
+                drawBomb();
+                drawExplosion();
+                drawBombStatus();
+                drawScore();
+                ctx.restore();
+                if (gameState === STATE.WAITING) drawStartScreen();
+                else if (gameState === STATE.GAME_OVER) drawGameOverScreen();
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            function init() {
+                try {
+                    const saved = localStorage.getItem('cyberDinoHighScore');
+                    if (saved) highScore = parseInt(saved, 10) || 0;
+                } catch (e) {}
+                resetDino();
+                clearObstacles();
+                resetBomb();
+                gameState = STATE.WAITING;
+                score = 0;
+                gameSpeed = INITIAL_SPEED;
+                frameCount = 0;
+                if (isMobileDevice()) {
+                    mobileControls.style.display = 'block';
+                }
+                updateBombButtonVisual();
+                canvas.addEventListener('click', () => {
+                    if (gameState === STATE.WAITING) startGame();
+                    if (gameState === STATE.GAME_OVER) restartGame();
+                });
+            }
+
+            if (!ctx.roundRect) {
+                ctx.roundRect = function(x, y, w, h, r) {
+                    if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+                    ctx.beginPath();
+                    ctx.moveTo(x + r.tl, y);
+                    ctx.lineTo(x + w - r.tr, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+                    ctx.lineTo(x + w, y + h - r.br);
+                    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+                    ctx.lineTo(x + r.bl, y + h);
+                    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+                    ctx.lineTo(x, y + r.tl);
+                    ctx.quadraticCurveTo(x, y, x + r.tl, y);
+                    ctx.closePath();
+                };
+            }
+
+            init();
+            gameLoop();
+            console.log('💣 КИБЕР-ДИНО РАННЕР С БОМБАМИ активирован');
+        })();
+    </script>
+</body>
+</html>
