@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Смешарики: Эффект присутствия (Серия 1)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a0a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        #container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 500px;
+            background: linear-gradient(180deg, #87CEEB 0%, #98D8C8 40%, #7EC850 60%, #5DAE3B 100%);
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+            cursor: pointer;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #dialogue-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: 4px solid #FF9800;
+            border-radius: 25px;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            min-width: 200px;
+            max-width: 80%;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            z-index: 10;
+            transition: all 0.3s ease;
+        }
+        #dialogue-box::after {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 15px solid #FF9800;
+        }
+        #title {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 3px 3px 0 #FF6B35, -1px -1px 0 #333;
+            z-index: 5;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+        #click-hint {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+            animation: pulse 1.5s infinite;
+            z-index: 5;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div id="title">ЭФФЕКТ ПРИСУТСТВИЯ</div>
+        <div id="dialogue-box">Нажмите, чтобы начать серию!</div>
+        <div id="click-hint">✨ Кликайте для продолжения ✨</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('container');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const clickHint = document.getElementById('click-hint');
+
+        // Масштабирование канваса
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawScene(currentScene);
+        });
+
+        // ============ СОСТОЯНИЯ СЦЕН ============
+        let currentScene = 0;
+        let animationFrame;
+        let time = 0;
+        let particles = [];
+        let sparkles = [];
+
+        // Сцены и диалоги
+        const scenes = [
+            {
+                id: 'intro',
+                text: 'Солнечное утро в долине Смешариков. Крош нашёл только одну монетку в копилке...',
+                characters: ['krosh'],
+                time: 'morning',
+                action: 'intro'
+            },
+            {
+                id: 'krosh_idea',
+                text: 'КРОШ: "Эх, так дело не пойдет! Нужен дар предвидения — буду знать, где монетка упадет!"',
+                characters: ['krosh'],
+                time: 'morning',
+                action: 'krosh_running'
+            },
+            {
+                id: 'losyash_lab',
+                text: 'ЛОСЯШ: "Предвидение — антинаучный вздор... Но есть гипотетический принцип — эффект присутствия!"',
+                characters: ['losyash', 'krosh'],
+                time: 'day',
+                action: 'losyash_thinking'
+            },
+            {
+                id: 'pin_hangar',
+                text: 'ПИН: "Мы сделаем Фото-Ретро-Скоп! Будет снимать то, что здесь было! Феноменально!"',
+                characters: ['pin', 'losyash', 'krosh'],
+                time: 'day',
+                action: 'pin_building'
+            },
+            {
+                id: 'test_machine',
+                text: 'На поляне испытание прибора! Все смотрят в облако над машиной и видят... себя!',
+                characters: ['krosh', 'losyash', 'pin', 'karich', 'yojik'],
+                time: 'evening',
+                action: 'machine_test'
+            },
+            {
+                id: 'wisdom',
+                text: 'КРОШ: "Может, аэро-скейт не так уж и нужен? Вон какой вечер хороший..."',
+                characters: ['krosh', 'yojik'],
+                time: 'sunset',
+                action: 'sunset_wisdom'
+            },
+            {
+                id: 'ending',
+                text: 'ЁЖИК (за кадром): "Иногда, чтобы увидеть важное, не нужно заглядывать в будущее. Достаточно просто посмотреть вокруг."',
+                characters: ['yojik'],
+                time: 'sunset',
+                action: 'ending'
+            }
+        ];
+
+        // ============ РИСОВАНИЕ ПЕРСОНАЖЕЙ ============
+        function drawKrosh(x, y, scale = 1, expression = 'normal') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Тело (голубой круг)
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#4FC3F7';
+            ctx.fill();
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Уши (длинные)
+            ctx.fillStyle = '#4FC3F7';
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            // Левое ухо
+            ctx.beginPath();
+            ctx.ellipse(-15, -40, 8, 22, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            // Правое ухо
+            ctx.beginPath();
+            ctx.ellipse(15, -40, 8, 22, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Глаза
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-12, -5, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, -5, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Зрачки
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-9, -3, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(15, -3, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Брови
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            if (expression === 'excited') {
+                ctx.beginPath();
+                ctx.moveTo(-20, -18);
+                ctx.lineTo(-6, -10);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(20, -18);
+                ctx.lineTo(6, -10);
+                ctx.stroke();
+            }
+            
+            // Рот
+            ctx.fillStyle = '#E57373';
+            ctx.beginPath();
+            if (expression === 'excited') {
+                ctx.arc(0, 8, 10, 0, Math.PI);
+            } else {
+                ctx.arc(0, 5, 6, 0, Math.PI);
+            }
+            ctx.fill();
+            
+            // Зубы
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.rect(-4, 4, 3, 5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(1, 4, 3, 5);
+            ctx.fill();
+            
+            // Нос
+            ctx.fillStyle = '#FF8A80';
+            ctx.beginPath();
+            ctx.arc(0, -8, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawLosyash(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Тело (золотистый/оранжевый)
+            ctx.beginPath();
+            ctx.arc(0, 0, 38, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD54F';
+            ctx.fill();
+            ctx.strokeStyle = '#F57F17';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Рога (ветвистые)
+            ctx.strokeStyle = '#5D4037';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-15, -35);
+            ctx.lineTo(-25, -55);
+            ctx.lineTo(-30, -50);
+            ctx.moveTo(-25, -55);
+            ctx.lineTo(-18, -60);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(15, -35);
+            ctx.lineTo(25, -55);
+            ctx.lineTo(30, -50);
+            ctx.moveTo(25, -55);
+            ctx.lineTo(18, -60);
+            ctx.stroke();
+            
+            // Очки
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-12, -5, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, -5, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(3, -5);
+            ctx.stroke();
+            
+            // Глаза за очками
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-10, -3, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(14, -3, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Нос (большой, лосиный)
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 10, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawPin(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Тело (белый пингвин)
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 32, 38, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#ECEFF1';
+            ctx.fill();
+            ctx.strokeStyle = '#37474F';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Живот белый уже есть
+            
+            // Шляпа/кепка пилота
+            ctx.fillStyle = '#5D4037';
+            ctx.beginPath();
+            ctx.ellipse(0, -30, 28, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(-20, -38, 40, 12);
+            ctx.fill();
+            
+            // Очки авиатора
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath();
+            ctx.ellipse(-12, -8, 14, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(12, -8, 14, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -8);
+            ctx.lineTo(3, -8);
+            ctx.stroke();
+            
+            // Глаза
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-10, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(14, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Клюв
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath();
+            ctx.moveTo(-5, 2);
+            ctx.lineTo(0, 15);
+            ctx.lineTo(5, 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawKarich(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Тело (тёмно-серый ворон)
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#546E7A';
+            ctx.fill();
+            ctx.strokeStyle = '#263238';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Шляпа
+            ctx.fillStyle = '#3E2723';
+            ctx.beginPath();
+            ctx.ellipse(0, -32, 25, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(-15, -45, 30, 15);
+            ctx.fill();
+            
+            // Монокль
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(10, -8, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(10, -18);
+            ctx.lineTo(15, -30);
+            ctx.stroke();
+            
+            // Глаз с моноклем
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(12, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Второй глаз
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-8, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Клюв
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath();
+            ctx.moveTo(-8, 5);
+            ctx.lineTo(0, 22);
+            ctx.lineTo(8, 5);
+            ctx.fill();
+            
+            // Бабочка
+            ctx.fillStyle = '#E53935';
+            ctx.beginPath();
+            ctx.moveTo(0, -2);
+            ctx.lineTo(-12, -12);
+            ctx.lineTo(-12, 8);
+            ctx.lineTo(0, -2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(0, -2);
+            ctx.lineTo(12, -12);
+            ctx.lineTo(12, 8);
+            ctx.lineTo(0, -2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(0, -2, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawYojik(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Тело (малиновый)
+            ctx.beginPath();
+            ctx.arc(0, 0, 33, 0, Math.PI * 2);
+            ctx.fillStyle = '#E57373';
+            ctx.fill();
+            ctx.strokeStyle = '#B71C1C';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Иголки (треугольники сверху)
+            ctx.fillStyle = '#5D4037';
+            for (let i = -3; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * 8, -33);
+                ctx.lineTo(i * 8 - 5, -48);
+                ctx.lineTo(i * 8 + 5, -48);
+                ctx.fill();
+            }
+            
+            // Очки
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-10, -5, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(10, -5, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(3, -5);
+            ctx.stroke();
+            
+            // Глаза
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -5, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(10, -5, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-8, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Нос
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(0, 5, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Улыбка
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 10, 8, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // ============ ОТРИСОВКА ФОНА ============
+        function drawBackground(timeOfDay) {
+            // Небо
+            let skyGradient;
+            if (timeOfDay === 'morning') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#87CEEB');
+                skyGradient.addColorStop(1, '#FFF9C4');
+            } else if (timeOfDay === 'day') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#64B5F6');
+                skyGradient.addColorStop(1, '#BBDEFB');
+            } else if (timeOfDay === 'evening' || timeOfDay === 'sunset') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#FF6F00');
+                skyGradient.addColorStop(0.5, '#FF8F00');
+                skyGradient.addColorStop(1, '#FFB74D');
+            }
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+            
+            // Солнце
+            if (timeOfDay === 'sunset') {
+                ctx.fillStyle = '#FF6F00';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.7, canvas.height * 0.35, 50, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FFD54F';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.7, canvas.height * 0.35, 35, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#FFF176';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.8, canvas.height * 0.2, 45, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Холмы
+            ctx.fillStyle = '#7EC850';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.3, canvas.height * 0.4, canvas.width * 0.6, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.8, canvas.height * 0.5, canvas.width, canvas.height * 0.55);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            // Трава на переднем плане
+            ctx.fillStyle = '#5DAE3B';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.7);
+            ctx.quadraticCurveTo(canvas.width * 0.5, canvas.height * 0.65, canvas.width, canvas.height * 0.7);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            // Деревья
+            drawTree(canvas.width * 0.1, canvas.height * 0.5);
+            drawTree(canvas.width * 0.85, canvas.height * 0.52);
+            
+            // Облака
+            drawCloud(canvas.width * 0.2, canvas.height * 0.15);
+            drawCloud(canvas.width * 0.5, canvas.height * 0.1);
+            drawCloud(canvas.width * 0.75, canvas.height * 0.18);
+        }
+
+        function drawTree(x, y) {
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 4, y, 8, 40);
+            ctx.fillStyle = '#388E3C';
+            ctx.beginPath();
+            ctx.arc(x, y - 10, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#43A047';
+            ctx.beginPath();
+            ctx.arc(x - 8, y - 5, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 8, y - 5, 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawCloud(x, y) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.arc(x + 20, y - 5, 18, 0, Math.PI * 2);
+            ctx.arc(x + 15, y + 5, 15, 0, Math.PI * 2);
+            ctx.arc(x - 15, y, 16, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ============ ЧАСТИЦЫ И ЭФФЕКТЫ ============
+        function spawnSparkles(x, y, count = 10) {
+            for (let i = 0; i < count; i++) {
+                sparkles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4 - 2,
+                    life: 1,
+                    size: Math.random() * 5 + 2,
+                    color: ['#FFD700', '#FF6B35', '#FFEB3B', '#FF9800'][Math.floor(Math.random() * 4)]
+                });
+            }
+        }
+
+        function updateSparkles() {
+            for (let i = sparkles.length - 1; i >= 0; i--) {
+                const s = sparkles[i];
+                s.x += s.vx;
+                s.y += s.vy;
+                s.life -= 0.02;
+                if (s.life <= 0) sparkles.splice(i, 1);
+            }
+        }
+
+        function drawSparkles() {
+            for (const s of sparkles) {
+                ctx.fillStyle = s.color;
+                ctx.globalAlpha = s.life;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // ============ ОСНОВНАЯ ОТРИСОВКА СЦЕНЫ ============
+        function drawScene(sceneIndex) {
+            const scene = scenes[sceneIndex];
+            const W = canvas.width;
+            const H = canvas.height;
+            
+            ctx.clearRect(0, 0, W, H);
+            drawBackground(scene.time);
+            
+            // Рисуем персонажей в зависимости от сцены
+            const chars = scene.characters;
+            
+            if (scene.id === 'intro' || scene.id === 'krosh_idea') {
+                // Крош у своего домика
+                drawHouse(W * 0.3, H * 0.42, '#FFCC80');
+                drawKrosh(W * 0.4, H * 0.55, 1.5, 'excited');
+                if (scene.id === 'krosh_idea') {
+                    // Монетка над головой
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(W * 0.45, H * 0.3, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FF8F00';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            } else if (scene.id === 'losyash_lab') {
+                // Лаборатория Лосяша
+                drawHouse(W * 0.25, H * 0.4, '#B0BEC5');
+                drawLosyash(W * 0.35, H * 0.55, 1.5);
+                drawKrosh(W * 0.55, H * 0.6, 1.3, 'excited');
+            } else if (scene.id === 'pin_hangar') {
+                // Ангар Пина
+                drawHangar(W * 0.3, H * 0.4);
+                drawPin(W * 0.35, H * 0.55, 1.5);
+                drawLosyash(W * 0.5, H * 0.6, 1.2);
+                drawKrosh(W * 0.6, H * 0.62, 1.2, 'excited');
+            } else if (scene.id === 'test_machine') {
+                // Поляна с машиной
+                drawMachine(W * 0.35, H * 0.5);
+                drawKrosh(W * 0.2, H * 0.55, 1.3, 'excited');
+                drawYojik(W * 0.3, H * 0.6, 1.3);
+                drawLosyash(W * 0.55, H * 0.55, 1.2);
+                drawPin(W * 0.65, H * 0.58, 1.2);
+                drawKarich(W * 0.75, H * 0.55, 1.2);
+                // Облако над машиной
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.beginPath();
+                ctx.ellipse(W * 0.35, H * 0.25, 60, 30, 0, 0, Math.PI * 2);
+                ctx.fill();
+                spawnSparkles(W * 0.35, H * 0.25, 3);
+            } else if (scene.id === 'wisdom' || scene.id === 'ending') {
+                // Закат, все сидят
+                drawKrosh(W * 0.3, H * 0.55, 1.2);
+                drawYojik(W * 0.45, H * 0.58, 1.3);
+                drawLosyash(W * 0.6, H * 0.55, 1.2);
+                drawPin(W * 0.7, H * 0.57, 1.2);
+                drawKarich(W * 0.8, H * 0.55, 1.2);
+            }
+            
+            updateSparkles();
+            drawSparkles();
+        }
+
+        function drawHouse(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x - 25, y - 20, 50, 40);
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath();
+            ctx.moveTo(x - 30, y - 20);
+            ctx.lineTo(x, y - 45);
+            ctx.lineTo(x + 30, y - 20);
+            ctx.fill();
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 8, y + 5, 16, 15);
+        }
+
+        function drawHangar(x, y) {
+            ctx.fillStyle = '#78909C';
+            ctx.fillRect(x - 40, y - 15, 80, 50);
+            ctx.fillStyle = '#546E7A';
+            ctx.beginPath();
+            ctx.moveTo(x - 45, y - 15);
+            ctx.lineTo(x, y - 45);
+            ctx.lineTo(x + 45, y - 15);
+            ctx.fill();
+            ctx.fillStyle = '#FFB74D';
+            ctx.fillRect(x - 5, y + 10, 30, 25);
+        }
+
+        function drawMachine(x, y) {
+            // Фото-Ретро-Скоп
+            ctx.fillStyle = '#795548';
+            ctx.fillRect(x - 20, y - 25, 40, 40);
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath();
+            ctx.arc(x, y - 30, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#4FC3F7';
+            ctx.beginPath();
+            ctx.arc(x, y - 30, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 5, y + 15, 10, 15);
+        }
+
+        // ============ АНИМАЦИЯ ============
+        function animate() {
+            time += 0.02;
+            // Небольшое покачивание облаков и персонажей (можно добавить)
+            drawScene(currentScene);
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        // ============ УПРАВЛЕНИЕ ============
+        function nextScene() {
+            if (currentScene < scenes.length - 1) {
+                currentScene++;
+                dialogueBox.textContent = scenes[currentScene].text;
+                sparkles = [];
+            } else if (currentScene === scenes.length - 1) {
+                // Финальная сцена — показать сообщение
+                dialogueBox.textContent = 'КОНЕЦ СЕРИИ. Спасибо за просмотр! 🎬';
+                clickHint.style.display = 'none';
+            }
+        }
+
+        // Обработчик кликов
+        container.addEventListener('click', () => {
+            nextScene();
+        });
+
+        // Обработчик клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'Enter') {
+                e.preventDefault();
+                nextScene();
+            }
+        });
+
+        // ============ ЗАПУСК ============
+        function init() {
+            resizeCanvas();
+            dialogueBox.textContent = scenes[0].text;
+            drawScene(0);
+            animate();
+            // Автоматическое переключение сцен (опционально)
+            // setInterval(nextScene, 5000);
+        }
+
+        init();
+
+        // Адаптивный ресайз
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawScene(currentScene);
+        });
+
+        console.log('🎬 Смешарики: Эффект присутствия - Серия 1 запущена!');
+        console.log('Кликайте по экрану для смены сцен.');
+    </script>
+</body>
+</html>

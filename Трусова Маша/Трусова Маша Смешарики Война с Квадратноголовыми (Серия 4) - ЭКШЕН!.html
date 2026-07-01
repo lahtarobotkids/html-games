@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Смешарики: Война с Квадратноголовыми (Серия 4) - ЭКШЕН!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        #container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            height: 550px;
+            background: linear-gradient(180deg, #87CEEB 0%, #98D8C8 40%, #7EC850 60%, #5DAE3B 100%);
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(255,100,0,0.5);
+            overflow: hidden;
+            cursor: pointer;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #dialogue-box {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 4px solid #FF4444;
+            color: #FFD700;
+            border-radius: 20px;
+            padding: 12px 22px;
+            font-size: 15px;
+            font-weight: bold;
+            text-align: center;
+            min-width: 200px;
+            max-width: 85%;
+            box-shadow: 0 8px 25px rgba(255,0,0,0.5);
+            z-index: 10;
+            transition: all 0.3s ease;
+            opacity: 0;
+            animation: fadeInUp 0.5s forwards;
+            text-shadow: 1px 1px 2px black;
+        }
+        #dialogue-box::after {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 15px solid #FF4444;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        #subtitles {
+            position: absolute;
+            bottom: 105px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #FFD700;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 10px 25px;
+            border-radius: 30px;
+            letter-spacing: 1px;
+            text-align: center;
+            white-space: nowrap;
+            z-index: 9;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255,0,0,0.6);
+            border: 2px solid #FFD700;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #subtitles.show {
+            opacity: 1;
+            animation: subtitlePulse 0.4s ease-out;
+        }
+
+        @keyframes subtitlePulse {
+            0% { transform: translateX(-50%) scale(0.9); }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #FF4444;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 3px 3px 0 #FFD700, -1px -1px 0 #000, 0 0 20px #FF0000;
+            z-index: 5;
+            text-align: center;
+            letter-spacing: 3px;
+            animation: titleGlow 1s infinite alternate;
+        }
+        @keyframes titleGlow {
+            from { text-shadow: 3px 3px 0 #FFD700, 0 0 20px #FF0000; }
+            to { text-shadow: 3px 3px 0 #FFD700, 0 0 40px #FF0000, 0 0 60px #FF4444; }
+        }
+
+        #sound-indicator {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(255,0,0,0.7);
+            color: #FFD700;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 2px solid #FFD700;
+        }
+        #sound-indicator.active {
+            opacity: 1;
+            animation: pulse 0.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        #restart-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid #FF4444;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(255,0,0,0.5);
+            color: #FFD700;
+        }
+        #restart-btn:hover {
+            background: #FF4444;
+            color: white;
+            transform: scale(1.2);
+            box-shadow: 0 4px 20px rgba(255,0,0,0.8);
+        }
+
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: #FFD700;
+            font-size: 22px;
+        }
+
+        /* Эффект тряски экрана */
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-8px, 5px); }
+            50% { transform: translate(8px, -5px); }
+            75% { transform: translate(-5px, -3px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div id="title">⚔️ ВОЙНА С КВАДРАТНОГОЛОВЫМИ ⚔️</div>
+        <div id="dialogue-box">▶ Нажмите, чтобы начать БИТВУ!</div>
+        <div id="subtitles"></div>
+        <div id="sound-indicator">💥 БОЙ! 💥</div>
+        <button id="restart-btn" title="Начать заново">🔄</button>
+        <div id="loading-screen">
+            <p>⚔️ Подготовка к битве...</p>
+            <p style="font-size:14px;color:#FF4444;">ПИУ! ПАУ! БУМ!</p>
+        </div>
+    </div>
+
+    <script>
+        // ==================== ОСНОВНЫЕ ЭЛЕМЕНТЫ ====================
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('container');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const subtitles = document.getElementById('subtitles');
+        const soundIndicator = document.getElementById('sound-indicator');
+        const restartBtn = document.getElementById('restart-btn');
+        const loadingScreen = document.getElementById('loading-screen');
+
+        let currentScene = 0;
+        let animationFrame;
+        let time = 0;
+        let sparkles = [];
+        let explosions = [];
+        let lasers = [];
+        let isSpeaking = false;
+        let speechSynth = window.speechSynthesis;
+        let currentUtterance = null;
+        let battleIntensity = 0;
+        let screenShake = 0;
+
+        // ==================== ГОЛОСОВЫЕ ПРОФИЛИ ====================
+        const voiceProfiles = {
+            'КРОШ': { pitch: 1.7, rate: 1.3, voiceName: 'Google русский' },
+            'ЛОСЯШ': { pitch: 0.85, rate: 0.9, voiceName: 'Google русский' },
+            'ПИН': { pitch: 1.15, rate: 1.0, voiceName: 'Google русский' },
+            'КАРЫЧ': { pitch: 0.7, rate: 0.85, voiceName: 'Google русский' },
+            'ЁЖИК': { pitch: 1.25, rate: 1.05, voiceName: 'Google русский' },
+            'КОПАТЫЧ': { pitch: 0.75, rate: 0.8, voiceName: 'Google русский' },
+            'СОВУНЬЯ': { pitch: 1.4, rate: 0.95, voiceName: 'Google русский' },
+            'КВАДРАТНЫЙ': { pitch: 0.5, rate: 0.7, voiceName: 'Google русский' },
+            'РАССКАЗЧИК': { pitch: 0.95, rate: 0.95, voiceName: 'Google русский' }
+        };
+
+        function detectSpeaker(text) {
+            if (text.startsWith('КРОШ:')) return 'КРОШ';
+            if (text.startsWith('ЛОСЯШ:')) return 'ЛОСЯШ';
+            if (text.startsWith('ПИН:')) return 'ПИН';
+            if (text.startsWith('КАРЫЧ:')) return 'КАРЫЧ';
+            if (text.startsWith('ЁЖИК:')) return 'ЁЖИК';
+            if (text.startsWith('КОПАТЫЧ:')) return 'КОПАТЫЧ';
+            if (text.startsWith('СОВУНЬЯ:')) return 'СОВУНЬЯ';
+            if (text.startsWith('КВАДРАТНЫЙ:')) return 'КВАДРАТНЫЙ';
+            return 'РАССКАЗЧИК';
+        }
+
+        function getRussianVoice() {
+            const voices = speechSynth.getVoices();
+            let ruVoice = voices.find(v => v.lang.startsWith('ru') && v.name.includes('Google'));
+            if (!ruVoice) ruVoice = voices.find(v => v.lang.startsWith('ru'));
+            return ruVoice || voices[0];
+        }
+
+        function speakText(text) {
+            if (speechSynth.speaking) speechSynth.cancel();
+            const speaker = detectSpeaker(text);
+            const profile = voiceProfiles[speaker];
+            let cleanText = text;
+            if (text.includes(':')) cleanText = text.split(':')[1].trim();
+            cleanText = cleanText.replace(/"/g, '');
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = 'ru-RU';
+            utterance.pitch = profile.pitch;
+            utterance.rate = profile.rate;
+            const voice = getRussianVoice();
+            if (voice) utterance.voice = voice;
+            subtitles.textContent = cleanText;
+            subtitles.classList.add('show');
+            soundIndicator.classList.add('active');
+            isSpeaking = true;
+            utterance.onend = () => {
+                subtitles.classList.remove('show');
+                soundIndicator.classList.remove('active');
+                isSpeaking = false;
+                currentUtterance = null;
+            };
+            utterance.onerror = () => {
+                subtitles.classList.remove('show');
+                soundIndicator.classList.remove('active');
+                isSpeaking = false;
+                currentUtterance = null;
+            };
+            currentUtterance = utterance;
+            speechSynth.speak(utterance);
+        }
+
+        function stopSpeech() {
+            if (speechSynth.speaking) speechSynth.cancel();
+            subtitles.classList.remove('show');
+            soundIndicator.classList.remove('active');
+            isSpeaking = false;
+        }
+
+        // ==================== СЦЕНЫ СЕРИИ ====================
+        const scenes = [
+            {
+                id: 'intro',
+                text: 'РАССКАЗЧИК: "Ромашковая долина. Тихий день. Но на горизонте появились странные туристы... Квадратные. С квадратными головами."',
+                time: 'day',
+                action: 'intro',
+                voiceText: 'Ромашковая долина. Тихий день. Но на горизонте появились странные туристы... Квадратные. С квадратными головами.',
+                intensity: 0
+            },
+            {
+                id: 'square_arrive',
+                text: 'КВАДРАТНЫЙ: "МЫ — КВАДРАТНОГОЛОВЫЕ ПОЛУКЛУБОЧКИ! ПРИШЛИ ЗАХВАТИТЬ ВАШУ ДОЛИНУ! ПИУ-ПАУ!"',
+                time: 'day',
+                action: 'square_arrive',
+                voiceText: 'КВАДРАТНЫЙ: "МЫ — КВАДРАТНОГОЛОВЫЕ ПОЛУКЛУБОЧКИ! ПРИШЛИ ЗАХВАТИТЬ ВАШУ ДОЛИНУ! ПИУ-ПАУ!"',
+                intensity: 2
+            },
+            {
+                id: 'krosh_house_robbed',
+                text: 'КРОШ: "Эй! Это мой домик! Они украли мой ГОДОВОЙ ЗАПАС МОРКОВКИ! Вот злодеи квадратные!"',
+                time: 'day',
+                action: 'krosh_robbed',
+                voiceText: 'КРОШ: "Эй! Это мой домик! Они украли мой ГОДОВОЙ ЗАПАС МОРКОВКИ! Вот злодеи квадратные!"',
+                intensity: 3
+            },
+            {
+                id: 'yojik_collection',
+                text: 'ЁЖИК (в слезах): "ОХ! МОЯ КОЛЛЕКЦИЯ! Они уничтожили все мои фантики, камушки и осенние листья! ВСЁ ПРОПАЛО!"',
+                time: 'day',
+                action: 'yojik_cries',
+                voiceText: 'ЁЖИК: "ОХ! МОЯ КОЛЛЕКЦИЯ! Они уничтожили все мои фантики, камушки и осенние листья! ВСЁ ПРОПАЛО!"',
+                intensity: 3
+            },
+            {
+                id: 'krosh_arrives_hedgehog',
+                text: 'КРОШ (вбегая): "Вилки и тарелки! Ёжик, что тут происходит?! Квадратные разрушили твой дом?!"',
+                time: 'day',
+                action: 'krosh_to_hedgehog',
+                voiceText: 'КРОШ: "Вилки и тарелки! Ёжик, что тут происходит?! Квадратные разрушили твой дом?!"',
+                intensity: 4
+            },
+            {
+                id: 'call_to_arms',
+                text: 'КРОШ: "ВСЕ СЮДА! КОПАТЫЧ! ЛОСЯШ! ПИН! СОВУНЬЯ! КАРЫЧ! Квадратные атакуют! Нужно дать отпор! ПИУ-ПАУ!"',
+                time: 'day',
+                action: 'call_arms',
+                voiceText: 'КРОШ: "ВСЕ СЮДА! КОПАТЫЧ! ЛОСЯШ! ПИН! СОВУНЬЯ! КАРЫЧ! Квадратные атакуют! Нужно дать отпор! ПИУ-ПАУ!"',
+                intensity: 5
+            },
+            {
+                id: 'battle_begins',
+                text: 'РАССКАЗЧИК: "БИТВА НАЧАЛАСЬ! Копатыч машет лопатой! Пин изобрёл лазерную пушку! Совунья бросает целебные бомбы! Карыч командует!"',
+                time: 'evening',
+                action: 'battle',
+                voiceText: 'БИТВА НАЧАЛАСЬ! Копатыч машет лопатой! Пин изобрёл лазерную пушку! Совунья бросает целебные бомбы! Карыч командует!',
+                intensity: 8
+            },
+            {
+                id: 'pin_laser',
+                text: 'ПИН: "A-яй-яй! Лазерный бластер готов! ПИУ-ПИУ! Квадратные получат по заслугам! Феноменально!"',
+                time: 'evening',
+                action: 'pin_laser',
+                voiceText: 'ПИН: "A-яй-яй! Лазерный бластер готов! ПИУ-ПИУ! Квадратные получат по заслугам! Феноменально!"',
+                intensity: 8
+            },
+            {
+                id: 'kopatych_swings',
+                text: 'КОПАТЫЧ: "Ух! Получайте, квадратные разбойники! Вот вам лопатой! БУМ! БАХ!"',
+                time: 'evening',
+                action: 'kopatych_fight',
+                voiceText: 'КОПАТЫЧ: "Ух! Получайте, квадратные разбойники! Вот вам лопатой! БУМ! БАХ!"',
+                intensity: 7
+            },
+            {
+                id: 'sovunya_bombs',
+                text: 'СОВУНЬЯ: "Лечебные бомбы с ромашкой! Это вылечит ваше квадратное безобразие! ПАУ-ПАУ!"',
+                time: 'evening',
+                action: 'sovunya_fight',
+                voiceText: 'СОВУНЬЯ: "Лечебные бомбы с ромашкой! Это вылечит ваше квадратное безобразие! ПАУ-ПАУ!"',
+                intensity: 7
+            },
+            {
+                id: 'karich_commands',
+                text: 'КАРЫЧ: "В атаку, друзья! Как в моём знаменитом спектакле 1978 года! Держите строй! ПИУ!"',
+                time: 'evening',
+                action: 'karich_fight',
+                voiceText: 'КАРЫЧ: "В атаку, друзья! Как в моём знаменитом спектакле 1978 года! Держите строй! ПИУ!"',
+                intensity: 6
+            },
+            {
+                id: 'losyash_science',
+                text: 'ЛОСЯШ: "Согласно расчётам, их квадратность делает их уязвимыми к округлости! Атакуем сферически! ПАУ!"',
+                time: 'evening',
+                action: 'losyash_fight',
+                voiceText: 'ЛОСЯШ: "Согласно расчётам, их квадратность делает их уязвимыми к округлости! Атакуем сферически! ПАУ!"',
+                intensity: 6
+            },
+            {
+                id: 'square_retreat',
+                text: 'КВАДРАТНЫЙ: "О НЕТ! КРУГЛЫЕ СЛИШКОМ СИЛЬНЫ! МЫ ОТСТУПАЕМ! НАША КВАДРАТНОСТЬ ПОДВЕЛА! ПИУ-ПАУ-ОЙ!"',
+                time: 'sunset',
+                action: 'square_retreat',
+                voiceText: 'КВАДРАТНЫЙ: "О НЕТ! КРУГЛЫЕ СЛИШКОМ СИЛЬНЫ! МЫ ОТСТУПАЕМ! НАША КВАДРАТНОСТЬ ПОДВЕЛА! ПИУ-ПАУ-ОЙ!"',
+                intensity: 9
+            },
+            {
+                id: 'victory',
+                text: 'КРОШ: "УРА! МЫ ПОБЕДИЛИ! Квадратные убежали! Ромашковая долина снова в безопасности! ПИУ-ПАУ-УРА!"',
+                time: 'sunset',
+                action: 'victory',
+                voiceText: 'КРОШ: "УРА! МЫ ПОБЕДИЛИ! Квадратные убежали! Ромашковая долина снова в безопасности! ПИУ-ПАУ-УРА!"',
+                intensity: 10
+            },
+            {
+                id: 'yojik_happy',
+                text: 'ЁЖИК: "Моя коллекция... Ой, смотрите! Фантики уцелели! Спасибо, друзья! Вы лучшие!"',
+                time: 'sunset',
+                action: 'yojik_happy',
+                voiceText: 'ЁЖИК: "Моя коллекция... Ой, смотрите! Фантики уцелели! Спасибо, друзья! Вы лучшие!"',
+                intensity: 2
+            },
+            {
+                id: 'final',
+                text: 'РАССКАЗЧИК: "Так Смешарики в очередной раз доказали: вместе они — сила! Даже квадратные захватчики не страшны круглой дружбе! ПИУ-ПАУ-КОНЕЦ!"',
+                time: 'sunset',
+                action: 'final',
+                voiceText: 'Так Смешарики в очередной раз доказали: вместе они — сила! Даже квадратные захватчики не страшны круглой дружбе! ПИУ-ПАУ-КОНЕЦ!',
+                intensity: 5
+            }
+        ];
+
+        // ==================== РИСОВАНИЕ ПЕРСОНАЖЕЙ ====================
+        function drawKrosh(x, y, scale = 1, expression = 'normal') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#4FC3F7';
+            ctx.fill();
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = '#4FC3F7';
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.ellipse(-15, -40, 8, 22, -0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(15, -40, 8, 22, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-12, -5, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.arc(12, -5, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-9, -3, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, -3, 5, 0, Math.PI * 2); ctx.fill();
+            if (expression === 'angry') {
+                ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(-20, -18); ctx.lineTo(-4, -12); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(20, -18); ctx.lineTo(4, -12); ctx.stroke();
+                ctx.fillStyle = '#C62828';
+                ctx.beginPath(); ctx.arc(0, 8, 8, Math.PI, 0); ctx.fill();
+            } else if (expression === 'excited') {
+                ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(-20, -18); ctx.lineTo(-6, -10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(20, -18); ctx.lineTo(6, -10); ctx.stroke();
+                ctx.fillStyle = '#E57373';
+                ctx.beginPath(); ctx.arc(0, 8, 10, 0, Math.PI); ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.beginPath(); ctx.rect(-4, 4, 3, 5); ctx.fill();
+                ctx.beginPath(); ctx.rect(1, 4, 3, 5); ctx.fill();
+            } else {
+                ctx.fillStyle = '#E57373';
+                ctx.beginPath(); ctx.arc(0, 5, 6, 0, Math.PI); ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.beginPath(); ctx.rect(-4, 4, 3, 5); ctx.fill();
+                ctx.beginPath(); ctx.rect(1, 4, 3, 5); ctx.fill();
+            }
+            ctx.fillStyle = '#FF8A80';
+            ctx.beginPath(); ctx.arc(0, -8, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawYojik(x, y, scale = 1, crying = false) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.arc(0, 0, 33, 0, Math.PI * 2);
+            ctx.fillStyle = '#E57373'; ctx.fill();
+            ctx.strokeStyle = '#B71C1C'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#5D4037';
+            for (let i = -3; i <= 3; i++) {
+                ctx.beginPath(); ctx.moveTo(i * 8, -33); ctx.lineTo(i * 8 - 5, -48); ctx.lineTo(i * 8 + 5, -48); ctx.fill();
+            }
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(-10, -5, 10, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(10, -5, 10, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, -5); ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-10, -5, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(10, -5, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-8, -3, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(12, -3, 3, 0, Math.PI * 2); ctx.fill();
+            if (crying) {
+                ctx.fillStyle = '#4FC3F7';
+                ctx.beginPath(); ctx.arc(-16, 5, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(16, 5, 5, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(0, 5, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0, 10, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawLosyash(x, y, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.arc(0, 0, 38, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD54F'; ctx.fill();
+            ctx.strokeStyle = '#F57F17'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-15, -35); ctx.lineTo(-25, -55); ctx.lineTo(-30, -50);
+            ctx.moveTo(-25, -55); ctx.lineTo(-18, -60); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(15, -35); ctx.lineTo(25, -55); ctx.lineTo(30, -50);
+            ctx.moveTo(25, -55); ctx.lineTo(18, -60); ctx.stroke();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(-12, -5, 12, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(12, -5, 12, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, -5); ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-12, -5, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(12, -5, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-10, -3, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(14, -3, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath(); ctx.ellipse(0, 5, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawKarich(x, y, scale = 1) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#546E7A'; ctx.fill();
+            ctx.strokeStyle = '#263238'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#3E2723';
+            ctx.beginPath(); ctx.ellipse(0, -32, 25, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.rect(-15, -45, 30, 15); ctx.fill();
+            ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(10, -8, 10, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(10, -18); ctx.lineTo(15, -30); ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(10, -8, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(12, -7, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(-10, -8, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-8, -7, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath(); ctx.moveTo(-8, 5); ctx.lineTo(0, 22); ctx.lineTo(8, 5); ctx.fill();
+            ctx.fillStyle = '#E53935';
+            ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(-12, -12); ctx.lineTo(-12, 8); ctx.lineTo(0, -2); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(12, -12); ctx.lineTo(12, 8); ctx.lineTo(0, -2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, -2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawKopatych(x, y, scale = 1, hasShovel = false) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2);
+            ctx.fillStyle = '#8D6E63'; ctx.fill();
+            ctx.strokeStyle = '#4E342E'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#8D6E63'; ctx.strokeStyle = '#4E342E'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(-20, -35, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(20, -35, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath(); ctx.ellipse(0, -28, 30, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#E65100'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#FFB74D'; ctx.beginPath(); ctx.rect(-18, -45, 36, 18); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-14, -2, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.arc(14, -2, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-10, 0, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(18, 0, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(0, 8, 10, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(-5, 20, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(5, 20, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+            if (hasShovel) {
+                ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(30, -5); ctx.lineTo(45, -40); ctx.stroke();
+                ctx.fillStyle = '#78909C';
+                ctx.beginPath(); ctx.moveTo(40, -40); ctx.lineTo(55, -35); ctx.lineTo(50, -28); ctx.lineTo(43, -32); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawPin(x, y, scale = 1, hasLaser = false) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.ellipse(0, 0, 32, 38, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#ECEFF1'; ctx.fill();
+            ctx.strokeStyle = '#37474F'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#5D4037';
+            ctx.beginPath(); ctx.ellipse(0, -30, 28, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.rect(-20, -38, 40, 12); ctx.fill();
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath(); ctx.ellipse(-12, -8, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(12, -8, 14, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(3, -8); ctx.stroke();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-10, -8, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(14, -8, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath(); ctx.moveTo(-5, 2); ctx.lineTo(0, 15); ctx.lineTo(5, 2); ctx.fill();
+            if (hasLaser) {
+                ctx.fillStyle = '#FFD700';
+                ctx.fillRect(25, -15, 20, 8);
+                ctx.strokeStyle = '#FF6F00'; ctx.lineWidth = 2;
+                ctx.strokeRect(25, -15, 20, 8);
+                ctx.fillStyle = '#FF0000';
+                ctx.beginPath(); ctx.arc(47, -11, 5, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawSovunya(x, y, scale = 1, throwing = false) {
+            ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+            ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#9C27B0'; ctx.fill();
+            ctx.strokeStyle = '#6A1B9A'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.rect(-20, -38, 40, 12); ctx.fill();
+            ctx.fillStyle = '#E53935';
+            ctx.beginPath(); ctx.moveTo(-8, -38); ctx.lineTo(8, -38); ctx.lineTo(0, -50); ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-14, -5, 14, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.beginPath(); ctx.arc(14, -5, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#FF9800';
+            ctx.beginPath(); ctx.arc(-10, -3, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(18, -3, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(-8, -2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(20, -2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath(); ctx.moveTo(-5, 2); ctx.lineTo(0, 12); ctx.lineTo(5, 2); ctx.fill();
+            ctx.fillStyle = '#9C27B0'; ctx.strokeStyle = '#6A1B9A'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(-30, 5, 12, 20, -0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(30, 5, 12, 20, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            if (throwing) {
+                ctx.fillStyle = '#4CAF50';
+                ctx.beginPath(); ctx.arc(35, -20, 8, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#2E7D32'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#FFD700'; ctx.font = '10px Arial'; ctx.fillText('💣', 30, -17);
+            }
+            ctx.restore();
+        }
+
+        function drawSquareEnemy(x, y, scale = 1, damaged = false) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            // Квадратное тело
+            ctx.fillStyle = damaged ? '#78909C' : '#FF5722';
+            ctx.strokeStyle = '#BF360C';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.rect(-30, -30, 60, 60);
+            ctx.fill();
+            ctx.stroke();
+            // Квадратная голова
+            ctx.fillStyle = damaged ? '#90A4AE' : '#FF8A65';
+            ctx.strokeStyle = '#BF360C';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.rect(-20, -55, 40, 30);
+            ctx.fill();
+            ctx.stroke();
+            // Глаза (квадратные)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(-14, -48, 10, 10);
+            ctx.fillRect(4, -48, 10, 10);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-10, -44, 6, 6);
+            ctx.fillRect(8, -44, 6, 6);
+            // Злой рот
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-8, -38);
+            ctx.lineTo(0, -35);
+            ctx.lineTo(8, -38);
+            ctx.stroke();
+            // Ноги-полукруги (полуклубочки)
+            ctx.fillStyle = '#FF5722';
+            ctx.strokeStyle = '#BF360C';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(-12, 35, 12, 0, Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, 35, 12, 0, Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            if (damaged) {
+                ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                ctx.fillRect(-30, -30, 60, 60);
+                ctx.font = '20px Arial';
+                ctx.fillText('💥', 0, 0);
+            }
+            ctx.restore();
+        }
+
+        // ==================== ФОН ====================
+        function drawBackground(timeOfDay, intensity = 0) {
+            let skyGradient;
+            if (timeOfDay === 'day') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#64B5F6');
+                skyGradient.addColorStop(1, '#BBDEFB');
+            } else if (timeOfDay === 'evening') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#FF6F00');
+                skyGradient.addColorStop(0.5, '#FF8F00');
+                skyGradient.addColorStop(1, '#FFB74D');
+            } else if (timeOfDay === 'sunset') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#E91E63');
+                skyGradient.addColorStop(0.5, '#FF6F00');
+                skyGradient.addColorStop(1, '#FFD54F');
+            }
+            // Добавляем красный оттенок битвы
+            if (intensity > 5) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${(intensity - 5) * 0.1})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+            
+            ctx.fillStyle = intensity > 5 ? '#5D8A3C' : '#7EC850';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.3, canvas.height * 0.4, canvas.width * 0.6, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.8, canvas.height * 0.5, canvas.width, canvas.height * 0.55);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            ctx.fillStyle = intensity > 5 ? '#3E6B2E' : '#5DAE3B';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.7);
+            ctx.quadraticCurveTo(canvas.width * 0.5, canvas.height * 0.65, canvas.width, canvas.height * 0.7);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            if (intensity < 5) {
+                drawCloud(canvas.width * 0.2, canvas.height * 0.15);
+                drawCloud(canvas.width * 0.55, canvas.height * 0.1);
+            } else {
+                // Дым битвы
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.3, canvas.height * 0.2, 40, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.6, canvas.height * 0.15, 35, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawCloud(x, y) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.arc(x + 20, y - 5, 18, 0, Math.PI * 2);
+            ctx.arc(x + 15, y + 5, 15, 0, Math.PI * 2);
+            ctx.arc(x - 15, y, 16, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ==================== ЭФФЕКТЫ ====================
+        function spawnExplosion(x, y, size = 20) {
+            explosions.push({ x, y, life: 1, size, maxSize: size + 15 });
+            screenShake = Math.max(screenShake, 8);
+        }
+
+        function spawnLaser(x, y, tx, ty) {
+            lasers.push({ x, y, tx, ty, life: 1 });
+        }
+
+        function updateEffects() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].life -= 0.03;
+                if (explosions[i].life <= 0) explosions.splice(i, 1);
+            }
+            for (let i = lasers.length - 1; i >= 0; i--) {
+                lasers[i].life -= 0.05;
+                if (lasers[i].life <= 0) lasers.splice(i, 1);
+            }
+            if (screenShake > 0) screenShake *= 0.85;
+        }
+
+        function drawEffects() {
+            for (const exp of explosions) {
+                const r = exp.maxSize * (1 - exp.life);
+                const gradient = ctx.createRadialGradient(exp.x, exp.y, 0, exp.x, exp.y, r);
+                gradient.addColorStop(0, 'rgba(255, 255, 0, ' + exp.life + ')');
+                gradient.addColorStop(0.5, 'rgba(255, 100, 0, ' + (exp.life * 0.7) + ')');
+                gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(exp.x, exp.y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            for (const laser of lasers) {
+                ctx.strokeStyle = `rgba(255, 0, 0, ${laser.life})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(laser.x, laser.y);
+                ctx.lineTo(laser.tx, laser.ty);
+                ctx.stroke();
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(laser.tx, laser.ty, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ==================== ОТРИСОВКА СЦЕНЫ ====================
+        function drawScene(sceneIndex) {
+            const scene = scenes[sceneIndex];
+            const W = canvas.width;
+            const H = canvas.height;
+            
+            battleIntensity += (scene.intensity - battleIntensity) * 0.3;
+            
+            ctx.save();
+            if (screenShake > 0.5) {
+                const sx = (Math.random() - 0.5) * screenShake;
+                const sy = (Math.random() - 0.5) * screenShake;
+                ctx.translate(sx, sy);
+            }
+            
+            ctx.clearRect(-20, -20, W + 40, H + 40);
+            drawBackground(scene.time, battleIntensity);
+            
+            if (scene.id === 'intro') {
+                drawSquareEnemy(W * 0.7, H * 0.5, 0.8);
+            } else if (scene.id === 'square_arrive') {
+                drawSquareEnemy(W * 0.3, H * 0.5, 1.0);
+                drawSquareEnemy(W * 0.55, H * 0.52, 0.9);
+                drawSquareEnemy(W * 0.75, H * 0.48, 0.85);
+            } else if (scene.id === 'krosh_robbed') {
+                drawKrosh(W * 0.3, H * 0.55, 1.4, 'angry');
+                drawSquareEnemy(W * 0.65, H * 0.5, 0.9);
+                // Мешок с морковкой
+                ctx.fillStyle = '#8D6E63';
+                ctx.fillRect(W * 0.72, H * 0.4, 20, 15);
+                ctx.fillStyle = '#FF6F00';
+                ctx.beginPath(); ctx.moveTo(W * 0.72, H * 0.38); ctx.lineTo(W * 0.78, H * 0.32); ctx.lineTo(W * 0.82, H * 0.38); ctx.fill();
+            } else if (scene.id === 'yojik_cries') {
+                drawYojik(W * 0.35, H * 0.55, 1.4, true);
+                drawSquareEnemy(W * 0.65, H * 0.5, 0.9);
+                // Разбросанные коллекции
+                ctx.fillStyle = '#FFD700'; ctx.fillRect(W * 0.55, H * 0.6, 8, 6);
+                ctx.fillStyle = '#FF5722'; ctx.fillRect(W * 0.6, H * 0.58, 6, 8);
+                ctx.fillStyle = '#4CAF50'; ctx.fillRect(W * 0.5, H * 0.57, 7, 7);
+            } else if (scene.id === 'krosh_to_hedgehog') {
+                drawKrosh(W * 0.25, H * 0.55, 1.3, 'angry');
+                drawYojik(W * 0.55, H * 0.57, 1.2, true);
+            } else if (scene.id === 'call_arms') {
+                drawKrosh(W * 0.35, H * 0.55, 1.5, 'excited');
+                drawYojik(W * 0.6, H * 0.58, 1.2);
+                spawnExplosion(W * 0.7, H * 0.4, 10);
+            } else if (scene.id === 'battle_begins') {
+                drawKopatych(W * 0.15, H * 0.52, 1.2, true);
+                drawPin(W * 0.4, H * 0.55, 1.2, true);
+                drawSovunya(W * 0.65, H * 0.55, 1.2, true);
+                drawKarich(W * 0.85, H * 0.5, 1.1);
+                drawSquareEnemy(W * 0.5, H * 0.5, 0.8);
+                drawSquareEnemy(W * 0.75, H * 0.48, 0.75, true);
+                if (Math.random() < 0.3) spawnExplosion(W * 0.55, H * 0.45, 15);
+                if (Math.random() < 0.2) spawnLaser(W * 0.42, H * 0.5, W * 0.5, H * 0.45);
+            } else if (scene.id === 'pin_laser') {
+                drawPin(W * 0.35, H * 0.55, 1.4, true);
+                drawSquareEnemy(W * 0.7, H * 0.5, 0.8, true);
+                if (Math.random() < 0.5) {
+                    spawnLaser(W * 0.4, H * 0.5, W * 0.68, H * 0.45);
+                    spawnExplosion(W * 0.68, H * 0.45, 12);
+                }
+            } else if (scene.id === 'kopatych_fight') {
+                drawKopatych(W * 0.3, H * 0.52, 1.4, true);
+                drawSquareEnemy(W * 0.65, H * 0.5, 0.9, true);
+                if (Math.random() < 0.3) spawnExplosion(W * 0.6, H * 0.45, 18);
+            } else if (scene.id === 'sovunya_fight') {
+                drawSovunya(W * 0.35, H * 0.55, 1.4, true);
+                drawSquareEnemy(W * 0.7, H * 0.5, 0.85, true);
+                if (Math.random() < 0.3) spawnExplosion(W * 0.7, H * 0.45, 15);
+            } else if (scene.id === 'karich_fight') {
+                drawKarich(W * 0.35, H * 0.52, 1.4);
+                drawSquareEnemy(W * 0.7, H * 0.5, 0.8, true);
+            } else if (scene.id === 'losyash_fight') {
+                drawLosyash(W * 0.3, H * 0.55, 1.3);
+                drawSquareEnemy(W * 0.7, H * 0.5, 0.85, true);
+                if (Math.random() < 0.3) spawnExplosion(W * 0.7, H * 0.45, 14);
+            } else if (scene.id === 'square_retreat') {
+                drawSquareEnemy(W * 0.4, H * 0.5, 0.9, true);
+                drawSquareEnemy(W * 0.65, H * 0.48, 0.8, true);
+                drawSquareEnemy(W * 0.8, H * 0.52, 0.7, true);
+                spawnExplosion(W * 0.5, H * 0.4, 25);
+                spawnExplosion(W * 0.7, H * 0.35, 20);
+            } else if (scene.id === 'victory') {
+                drawKrosh(W * 0.25, H * 0.55, 1.5, 'excited');
+                drawYojik(W * 0.5, H * 0.57, 1.3);
+                drawKopatych(W * 0.15, H * 0.52, 1.0);
+                drawPin(W * 0.4, H * 0.53, 1.0);
+                drawSovunya(W * 0.65, H * 0.55, 1.0);
+                drawKarich(W * 0.8, H * 0.5, 1.0);
+                spawnExplosion(W * 0.35, H * 0.35, 8);
+                spawnExplosion(W * 0.55, H * 0.3, 6);
+                // Фейерверки
+                ctx.fillStyle = '#FFD700'; ctx.font = '20px Arial';
+                ctx.fillText('🎉', W * 0.3, H * 0.25);
+                ctx.fillText('🎉', W * 0.5, H * 0.2);
+                ctx.fillText('🎉', W * 0.7, H * 0.28);
+            } else if (scene.id === 'yojik_happy') {
+                drawYojik(W * 0.45, H * 0.57, 1.4);
+                drawKrosh(W * 0.2, H * 0.55, 1.2, 'excited');
+                // Фантики
+                ctx.fillStyle = '#FFD700'; ctx.fillRect(W * 0.5, H * 0.5, 10, 8);
+                ctx.fillStyle = '#FF5722'; ctx.fillRect(W * 0.55, H * 0.48, 8, 10);
+                ctx.fillStyle = '#4FC3F7'; ctx.fillRect(W * 0.48, H * 0.47, 9, 7);
+            } else if (scene.id === 'final') {
+                drawKrosh(W * 0.2, H * 0.55, 1.2, 'excited');
+                drawYojik(W * 0.4, H * 0.57, 1.2);
+                drawKopatych(W * 0.6, H * 0.52, 1.1);
+                drawPin(W * 0.75, H * 0.53, 1.0);
+                drawSovunya(W * 0.85, H * 0.55, 1.0);
+                ctx.fillStyle = '#FFD700'; ctx.font = '16px Arial';
+                ctx.fillText('❤️', W * 0.3, H * 0.35);
+                ctx.fillText('❤️', W * 0.5, H * 0.3);
+                ctx.fillText('❤️', W * 0.7, H * 0.33);
+            }
+            
+            updateEffects();
+            drawEffects();
+            ctx.restore();
+        }
+
+        // ==================== АНИМАЦИЯ ====================
+        function animate() {
+            time += 0.02;
+            drawScene(currentScene);
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        // ==================== НАВИГАЦИЯ ====================
+        function nextScene() {
+            if (isSpeaking) stopSpeech();
+            if (currentScene < scenes.length - 1) {
+                currentScene++;
+                const scene = scenes[currentScene];
+                dialogueBox.textContent = scene.text;
+                dialogueBox.style.animation = 'none';
+                dialogueBox.offsetHeight;
+                dialogueBox.style.animation = 'fadeInUp 0.5s forwards';
+                explosions = [];
+                lasers = [];
+                if (scene.voiceText) {
+                    setTimeout(() => speakText(scene.voiceText), 300);
+                }
+                // Звуки битвы
+                if (scene.intensity > 5) {
+                    soundIndicator.textContent = '💥 ПИУ-ПАУ! 💥';
+                } else {
+                    soundIndicator.textContent = '🔊 Говорит...';
+                }
+            } else if (currentScene === scenes.length - 1) {
+                dialogueBox.textContent = '🎬 КОНЕЦ СЕРИИ. ПОБЕДА ЗА СМЕШАРИКАМИ! ПИУ-ПАУ! 🏆';
+                subtitles.textContent = 'ПИУ-ПАУ! ПОБЕДА!';
+                subtitles.classList.add('show');
+                speakText('Конец серии. Победа за Смешариками! Пиу-пау!');
+            }
+        }
+
+        function restartAll() {
+            stopSpeech();
+            currentScene = 0;
+            battleIntensity = 0;
+            screenShake = 0;
+            explosions = [];
+            lasers = [];
+            dialogueBox.textContent = scenes[0].text;
+            dialogueBox.style.animation = 'none';
+            dialogueBox.offsetHeight;
+            dialogueBox.style.animation = 'fadeInUp 0.5s forwards';
+            subtitles.classList.remove('show');
+            soundIndicator.classList.remove('active');
+            soundIndicator.textContent = '💥 БОЙ! 💥';
+            setTimeout(() => speakText(scenes[0].voiceText), 300);
+        }
+
+        // ==================== ОБРАБОТЧИКИ ====================
+        container.addEventListener('click', (e) => {
+            if (e.target === restartBtn) return;
+            if (loadingScreen.style.display !== 'none') return;
+            nextScene();
+        });
+
+        restartBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            restartAll();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') {
+                e.preventDefault();
+                nextScene();
+            } else if (e.code === 'ArrowLeft') {
+                e.preventDefault();
+                if (currentScene > 0) {
+                    stopSpeech();
+                    currentScene--;
+                    dialogueBox.textContent = scenes[currentScene].text;
+                    subtitles.classList.remove('show');
+                }
+            } else if (e.code === 'KeyR') {
+                e.preventDefault();
+                restartAll();
+            }
+        });
+
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawScene(currentScene);
+        });
+
+        function init() {
+            resizeCanvas();
+            if (speechSynth.getVoices().length === 0) {
+                speechSynth.addEventListener('voiceschanged', () => {
+                    loadingScreen.style.display = 'none';
+                    dialogueBox.textContent = scenes[0].text;
+                    drawScene(0);
+                    animate();
+                });
+            } else {
+                loadingScreen.style.display = 'none';
+                dialogueBox.textContent = scenes[0].text;
+                drawScene(0);
+                animate();
+            }
+            console.log('⚔️ Смешарики: Война с Квадратноголовыми - Серия 4!');
+            console.log('💥 ПИУ-ПАУ! БУМ! БАХ!');
+        }
+
+        init();
+    </script>
+</body>
+</html>

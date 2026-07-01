@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Смешарики: Часть 2 — Крош и воздушные шары 🎈🐰</title>
+    <style>
+        body {
+            margin: 0;
+            background: #c8e6c9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #8bc34a;
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+            background: #e0f2f1;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="screen" width="600" height="400"></canvas>
+    <script>
+        (function() {
+            const canvas = document.getElementById('screen');
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+
+            // ----- СЦЕНЫ -----
+            const SCENE = {
+                INTRO: 0,
+                ATTACH: 1,
+                FLY: 2,
+                POP: 3,
+                FALL: 4,
+                SAVE: 5,
+                OUTRO: 6
+            };
+            let currentScene = SCENE.INTRO;
+            let timer = 0;
+            let frame = 0;
+
+            // Объекты
+            let krosh = {
+                x: 200, y: H/2 + 40,
+                scale: 1.0,
+                vy: 0,
+                onGround: true
+            };
+            let yozhik = { x: 400, y: H/2 + 50 };
+            let nyusha = { x: 500, y: H/2 + 40, visible: false };
+            let balloons = [];           // каждый шарик: {x, y, popped, color, size}
+            let particles = [];
+            let speechBubble = { text: '', timer: 0 };
+            let hammock = { x: 300, y: H-20, width: 120, ready: false };
+
+            // Частица (для лопнувших шариков или искр)
+            class Particle {
+                constructor(x, y, color) {
+                    this.x = x; this.y = y;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 5;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.life = 1;
+                    this.decay = 0.02 + Math.random() * 0.04;
+                    this.color = color;
+                    this.size = 2 + Math.random() * 4;
+                }
+                update() {
+                    this.x += this.vx; this.y += this.vy;
+                    this.vy += 0.05;
+                    this.life -= this.decay;
+                }
+                draw(ctx) {
+                    ctx.globalAlpha = this.life;
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // Сброс сцены
+            function resetScene(scene) {
+                currentScene = scene;
+                timer = 0;
+                krosh.vy = 0;
+                krosh.onGround = true;
+                krosh.y = H/2 + 40;
+                krosh.scale = 1.0;
+                balloons = [];
+                particles = [];
+                nyusha.visible = false;
+                speechBubble.text = '';
+                hammock.ready = false;
+            }
+
+            // Рисование персонажей (аналогично первой части)
+            function drawKrosh(x, y, scale = 1) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.ellipse(0, 30, 35, 10, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#81d4fa';
+                ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#81d4fa'; ctx.strokeStyle = '#4fc3f7';
+                ctx.beginPath(); ctx.ellipse(-20, -35, 10, 25, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.ellipse(20, -35, 10, 25, 0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(-12, -5, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(12, -5, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-10, -5, 4, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(14, -5, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0, 8, 10, 0.1*Math.PI, 0.9*Math.PI); ctx.stroke();
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath(); ctx.arc(0, -2, 4, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+
+            function drawYozhik(x, y) {
+                ctx.save(); ctx.translate(x, y);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.ellipse(0, 28, 30, 8, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ef9a9a';
+                ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#e57373'; ctx.lineWidth = 2; ctx.stroke();
+                for (let i=0; i<8; i++) {
+                    let a = i*Math.PI/4 - Math.PI/2;
+                    ctx.fillStyle = '#b71c1c';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a)*30, Math.sin(a)*30);
+                    ctx.lineTo(Math.cos(a)*38, Math.sin(a)*38);
+                    ctx.lineTo(Math.cos(a+0.3)*32, Math.sin(a+0.3)*32);
+                    ctx.fill();
+                }
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(-12,-5,8,0,Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(12,-5,8,0,Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-4,-5); ctx.lineTo(4,-5); ctx.stroke();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-10,-5,3,0,Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(14,-5,3,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath(); ctx.arc(0,-2,4,0,Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+
+            function drawNyusha(x, y) {
+                ctx.save(); ctx.translate(x, y);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.ellipse(0,28,28,8,0,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#f48fb1';
+                ctx.beginPath(); ctx.arc(0,0,28,0,Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#f06292'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#f48fb1';
+                ctx.beginPath(); ctx.arc(0,-28,14,0,Math.PI,true); ctx.fill();
+                ctx.fillStyle = '#e91e63';
+                ctx.beginPath(); ctx.ellipse(-8,-38,8,6,0,0,Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(8,-38,8,6,0,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(-10,-5,7,0,Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(10,-5,7,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-8,-5,3,0,Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(12,-5,3,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath(); ctx.arc(0,-2,4,0,Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+
+            // Логика сцен
+            function update() {
+                timer++;
+                frame++;
+                particles.forEach(p => p.update());
+                particles = particles.filter(p => p.life > 0.01);
+
+                switch (currentScene) {
+                    case SCENE.INTRO:
+                        if (timer === 1) speechBubble.text = 'Ёжик, я хочу летать как птица!';
+                        if (timer > 120) resetScene(SCENE.ATTACH);
+                        break;
+                    case SCENE.ATTACH:
+                        speechBubble.text = 'Привяжем шарики!';
+                        nyusha.visible = true;
+                        nyusha.x = 400 - (timer*0.8);
+                        if (nyusha.x < 250) nyusha.x = 250;
+                        // создаём шарики вокруг Кроша постепенно
+                        if (timer % 15 === 0 && balloons.length < 8) {
+                            balloons.push({
+                                x: krosh.x + Math.sin(balloons.length*1.2)*30,
+                                y: krosh.y - 40 - balloons.length*5,
+                                popped: false,
+                                color: `hsl(${balloons.length*40}, 80%, 70%)`,
+                                size: 18 + Math.random()*8
+                            });
+                        }
+                        if (timer > 200) resetScene(SCENE.FLY);
+                        break;
+                    case SCENE.FLY:
+                        speechBubble.text = 'Ура! Я лечу!';
+                        krosh.onGround = false;
+                        krosh.vy = -1.2;
+                        krosh.y += krosh.vy;
+                        // двигаем шарики вместе с Крошем
+                        balloons.forEach(b => {
+                            if (!b.popped) {
+                                b.x = krosh.x + (Math.random()-0.5)*10;
+                                b.y = krosh.y - 50 - Math.random()*30;
+                            }
+                        });
+                        if (krosh.y < 80) {
+                            resetScene(SCENE.POP);
+                        }
+                        break;
+                    case SCENE.POP:
+                        speechBubble.text = 'Ой! Шарики лопаются!';
+                        // лопаем шарики один за другим
+                        if (timer % 20 === 0) {
+                            const alive = balloons.filter(b => !b.popped);
+                            if (alive.length > 0) {
+                                const b = alive[Math.floor(Math.random()*alive.length)];
+                                b.popped = true;
+                                for (let i=0; i<12; i++) {
+                                    particles.push(new Particle(b.x, b.y, b.color));
+                                }
+                            }
+                        }
+                        krosh.vy = 0.5;
+                        krosh.y += krosh.vy;
+                        if (balloons.every(b => b.popped) && krosh.y > H/2) {
+                            resetScene(SCENE.FALL);
+                        }
+                        break;
+                    case SCENE.FALL:
+                        speechBubble.text = 'Ааааа!';
+                        krosh.vy += 0.2;
+                        krosh.y += krosh.vy;
+                        if (krosh.y >= H - 50) {
+                            krosh.y = H - 50;
+                            resetScene(SCENE.SAVE);
+                        }
+                        break;
+                    case SCENE.SAVE:
+                        speechBubble.text = 'Друзья, ловите!';
+                        hammock.ready = true;
+                        // Ёжик и Нюша держат гамак
+                        yozhik.x = 200; nyusha.x = 400;
+                        nyusha.visible = true;
+                        // Крош падает в гамак
+                        if (timer > 60) {
+                            krosh.y = H - 55;
+                            speechBubble.text = 'Спасибо, вы лучшие!';
+                        }
+                        if (timer > 180) resetScene(SCENE.OUTRO);
+                        break;
+                    case SCENE.OUTRO:
+                        speechBubble.text = 'Полёты — это здорово, но с друзьями безопаснее!';
+                        if (timer > 200) resetScene(SCENE.INTRO); // зацикливаем
+                        break;
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                // Фон
+                ctx.fillStyle = '#a5d6a7';
+                ctx.fillRect(0, H-80, W, 80);
+                ctx.fillStyle = '#81c784';
+                for (let i=0; i<15; i++) ctx.fillRect(i*50 + (frame%50), H-75, 30, 20);
+                ctx.fillStyle = '#e0f2f1';
+                ctx.fillRect(0, 0, W, H-80);
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arial';
+                ctx.fillText('☁️', 50, 50);
+                ctx.fillText('☁️', 350, 30);
+                ctx.fillText('☁️', 500, 70);
+
+                // Рисуем шарики (которые не лопнули)
+                balloons.forEach(b => {
+                    if (!b.popped) {
+                        ctx.fillStyle = b.color;
+                        ctx.beginPath();
+                        ctx.arc(b.x, b.y, b.size, 0, Math.PI*2);
+                        ctx.fill();
+                        // ниточка
+                        ctx.strokeStyle = '#999';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(b.x, b.y + b.size);
+                        ctx.lineTo(b.x - 2, b.y + b.size + 20);
+                        ctx.stroke();
+                    }
+                });
+
+                // Гамак (если ready)
+                if (hammock.ready) {
+                    ctx.strokeStyle = '#8d6e63';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(yozhik.x, yozhik.y-20);
+                    ctx.quadraticCurveTo((yozhik.x+nyusha.x)/2, H-30, nyusha.x, nyusha.y-20);
+                    ctx.stroke();
+                    // сетка
+                    ctx.fillStyle = '#d7ccc8';
+                    ctx.fillRect(yozhik.x+5, H-40, nyusha.x-yozhik.x-10, 8);
+                }
+
+                // Персонажи
+                drawKrosh(krosh.x, krosh.y, krosh.scale);
+                drawYozhik(yozhik.x, yozhik.y);
+                if (nyusha.visible) drawNyusha(nyusha.x, nyusha.y);
+
+                // Частицы
+                particles.forEach(p => p.draw(ctx));
+
+                // Облачко с текстом
+                if (speechBubble.text) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    let bx = krosh.x - 80, by = krosh.y - 90;
+                    ctx.beginPath();
+                    ctx.roundRect(bx, by, 180, 40, 15);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = '#000';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(speechBubble.text, bx+90, by+25);
+                }
+            }
+
+            // Полифил roundRect
+            if (!ctx.roundRect) {
+                ctx.roundRect = function(x, y, w, h, r) {
+                    if (typeof r === 'number') r = {tl: r, tr: r, br: r, bl: r};
+                    this.beginPath();
+                    this.moveTo(x + r.tl, y);
+                    this.lineTo(x + w - r.tr, y);
+                    this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+                    this.lineTo(x + w, y + h - r.br);
+                    this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+                    this.lineTo(x + r.bl, y + h);
+                    this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+                    this.lineTo(x, y + r.tl);
+                    this.quadraticCurveTo(x, y, x + r.tl, y);
+                    this.closePath();
+                    return this;
+                };
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            resetScene(SCENE.INTRO);
+            loop();
+        })();
+    </script>
+</body>
+</html>

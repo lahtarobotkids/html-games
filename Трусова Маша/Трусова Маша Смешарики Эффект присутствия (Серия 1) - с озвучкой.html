@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Смешарики: Эффект присутствия (Серия 1) - с озвучкой</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a0a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        #container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 500px;
+            background: linear-gradient(180deg, #87CEEB 0%, #98D8C8 40%, #7EC850 60%, #5DAE3B 100%);
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+            cursor: pointer;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* --- ДИАЛОГОВОЕ ОКНО --- */
+        #dialogue-box {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: 4px solid #FF9800;
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            min-width: 200px;
+            max-width: 85%;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            z-index: 10;
+            transition: all 0.3s ease;
+            opacity: 0;
+            animation: fadeInUp 0.5s forwards;
+        }
+        #dialogue-box::after {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 15px solid #FF9800;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* --- ТИТРЫ (СУБТИТРЫ ВНИЗУ) --- */
+        #subtitles {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: #FFD700;
+            font-size: 22px;
+            font-weight: bold;
+            padding: 10px 25px;
+            border-radius: 30px;
+            letter-spacing: 1px;
+            text-align: center;
+            white-space: nowrap;
+            z-index: 9;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            border: 2px solid #FFD700;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #subtitles.show {
+            opacity: 1;
+            animation: subtitlePulse 0.4s ease-out;
+        }
+
+        @keyframes subtitlePulse {
+            0% { transform: translateX(-50%) scale(0.9); }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+
+        /* --- ЗАГОЛОВОК СЕРИИ --- */
+        #title {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 26px;
+            font-weight: bold;
+            text-shadow: 3px 3px 0 #FF6B35, -1px -1px 0 #333;
+            z-index: 5;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        /* --- ИНДИКАТОР ЗВУКА --- */
+        #sound-indicator {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            color: #4FC3F7;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #sound-indicator.active {
+            opacity: 1;
+        }
+
+        /* --- КНОПКА ПОВТОРА --- */
+        #restart-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.9);
+            border: 2px solid #FF9800;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        #restart-btn:hover {
+            background: #FF9800;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        /* --- ЭКРАН ЗАГРУЗКИ --- */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: white;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div id="title">🎬 ЭФФЕКТ ПРИСУТСТВИЯ</div>
+        <div id="dialogue-box">▶ Нажмите, чтобы начать!</div>
+        <div id="subtitles"></div>
+        <div id="sound-indicator">🔊 Говорит...</div>
+        <button id="restart-btn" title="Начать заново">🔄</button>
+        <div id="loading-screen">
+            <p>🎙️ Подготовка голоса...</p>
+            <p style="font-size:14px;color:#aaa;">(проверка синтезатора речи)</p>
+        </div>
+    </div>
+
+    <script>
+        // ==================== ОСНОВНЫЕ ЭЛЕМЕНТЫ ====================
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('container');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const subtitles = document.getElementById('subtitles');
+        const soundIndicator = document.getElementById('sound-indicator');
+        const restartBtn = document.getElementById('restart-btn');
+        const loadingScreen = document.getElementById('loading-screen');
+
+        let currentScene = 0;
+        let animationFrame;
+        let time = 0;
+        let sparkles = [];
+        let isSpeaking = false;
+        let speechSynth = window.speechSynthesis;
+        let currentUtterance = null;
+
+        // ==================== НАСТРОЙКА ГОЛОСОВ ====================
+        // Голоса для разных персонажей ( pitch и rate меняют характер )
+        const voiceProfiles = {
+            'КРОШ': { pitch: 1.6, rate: 1.2, voiceName: 'Google русский' },
+            'ЛОСЯШ': { pitch: 0.85, rate: 0.9, voiceName: 'Google русский' },
+            'ПИН': { pitch: 1.1, rate: 0.95, voiceName: 'Google русский' },
+            'КАРЫЧ': { pitch: 0.7, rate: 0.85, voiceName: 'Google русский' },
+            'ЁЖИК': { pitch: 1.2, rate: 1.0, voiceName: 'Google русский' },
+            'РАССКАЗЧИК': { pitch: 0.95, rate: 0.95, voiceName: 'Google русский' }
+        };
+
+        function detectSpeaker(text) {
+            if (text.startsWith('КРОШ:')) return 'КРОШ';
+            if (text.startsWith('ЛОСЯШ:')) return 'ЛОСЯШ';
+            if (text.startsWith('ПИН:')) return 'ПИН';
+            if (text.startsWith('КАРЫЧ:')) return 'КАРЫЧ';
+            if (text.startsWith('ЁЖИК:')) return 'ЁЖИК';
+            return 'РАССКАЗЧИК';
+        }
+
+        function getRussianVoice() {
+            const voices = speechSynth.getVoices();
+            // Ищем русский голос
+            let ruVoice = voices.find(v => v.lang.startsWith('ru') && v.name.includes('Google'));
+            if (!ruVoice) ruVoice = voices.find(v => v.lang.startsWith('ru'));
+            if (!ruVoice) ruVoice = voices.find(v => v.lang.startsWith('ru') || v.name.includes('Russian'));
+            return ruVoice || voices[0];
+        }
+
+        // ==================== ОЗВУЧКА ====================
+        function speakText(text) {
+            // Останавливаем предыдущую речь
+            if (speechSynth.speaking) {
+                speechSynth.cancel();
+            }
+
+            const speaker = detectSpeaker(text);
+            const profile = voiceProfiles[speaker];
+            
+            // Очищаем текст от имени персонажа для озвучки
+            let cleanText = text;
+            if (text.includes(':')) {
+                cleanText = text.split(':')[1].trim();
+            }
+            // Убираем кавычки для озвучки
+            cleanText = cleanText.replace(/"/g, '');
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = 'ru-RU';
+            utterance.pitch = profile.pitch;
+            utterance.rate = profile.rate;
+            
+            const voice = getRussianVoice();
+            if (voice) utterance.voice = voice;
+
+            // Показываем субтитры
+            subtitles.textContent = cleanText;
+            subtitles.classList.add('show');
+            soundIndicator.classList.add('active');
+            isSpeaking = true;
+
+            utterance.onend = () => {
+                subtitles.classList.remove('show');
+                soundIndicator.classList.remove('active');
+                isSpeaking = false;
+                currentUtterance = null;
+            };
+
+            utterance.onerror = () => {
+                subtitles.classList.remove('show');
+                soundIndicator.classList.remove('active');
+                isSpeaking = false;
+                currentUtterance = null;
+            };
+
+            currentUtterance = utterance;
+            speechSynth.speak(utterance);
+        }
+
+        function stopSpeech() {
+            if (speechSynth.speaking) {
+                speechSynth.cancel();
+            }
+            subtitles.classList.remove('show');
+            soundIndicator.classList.remove('active');
+            isSpeaking = false;
+        }
+
+        // ==================== СЦЕНЫ И ДИАЛОГИ ====================
+        const scenes = [
+            {
+                id: 'intro',
+                text: 'Солнечное утро в долине Смешариков. Крош нашёл только одну монетку в копилке...',
+                characters: ['krosh'],
+                time: 'morning',
+                action: 'intro',
+                voiceText: 'Солнечное утро в долине Смешариков. Крош нашёл только одну монетку в копилке.'
+            },
+            {
+                id: 'krosh_idea',
+                text: 'КРОШ: "Эх, так дело не пойдет! Нужен дар предвидения — буду знать, где монетка упадет!"',
+                characters: ['krosh'],
+                time: 'morning',
+                action: 'krosh_running',
+                voiceText: 'КРОШ: "Эх, так дело не пойдет! Нужен дар предвидения — буду знать, где монетка упадет!"'
+            },
+            {
+                id: 'losyash_lab',
+                text: 'ЛОСЯШ: "Предвидение — антинаучный вздор... Но есть гипотетический принцип — эффект присутствия!"',
+                characters: ['losyash', 'krosh'],
+                time: 'day',
+                action: 'losyash_thinking',
+                voiceText: 'ЛОСЯШ: "Предвидение — антинаучный вздор... Но есть гипотетический принцип — эффект присутствия!"'
+            },
+            {
+                id: 'pin_hangar',
+                text: 'ПИН: "Мы сделаем Фото-Ретро-Скоп! Будет снимать то, что здесь было! Феноменально!"',
+                characters: ['pin', 'losyash', 'krosh'],
+                time: 'day',
+                action: 'pin_building',
+                voiceText: 'ПИН: "Мы сделаем Фото-Ретро-Скоп! Будет снимать то, что здесь было! Феноменально!"'
+            },
+            {
+                id: 'test_machine',
+                text: 'На поляне испытание прибора! Все смотрят в облако над машиной и видят... себя!',
+                characters: ['krosh', 'losyash', 'pin', 'karich', 'yojik'],
+                time: 'evening',
+                action: 'machine_test',
+                voiceText: 'На поляне испытание прибора! Все смотрят в облако над машиной и видят... самих себя!'
+            },
+            {
+                id: 'wisdom',
+                text: 'КРОШ: "Может, аэро-скейт не так уж и нужен? Вон какой вечер хороший..."',
+                characters: ['krosh', 'yojik'],
+                time: 'sunset',
+                action: 'sunset_wisdom',
+                voiceText: 'КРОШ: "Может, аэро-скейт не так уж и нужен? Вон какой вечер хороший..."'
+            },
+            {
+                id: 'ending',
+                text: 'ЁЖИК (за кадром): "Иногда, чтобы увидеть важное, не нужно заглядывать в будущее. Достаточно просто посмотреть вокруг."',
+                characters: ['yojik'],
+                time: 'sunset',
+                action: 'ending',
+                voiceText: 'ЁЖИК: "Иногда, чтобы увидеть важное, не нужно заглядывать в будущее. Достаточно просто посмотреть вокруг."'
+            }
+        ];
+
+        // ==================== РИСОВАНИЕ ПЕРСОНАЖЕЙ ====================
+        function drawKrosh(x, y, scale = 1, expression = 'normal') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#4FC3F7';
+            ctx.fill();
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Уши
+            ctx.fillStyle = '#4FC3F7';
+            ctx.strokeStyle = '#0288D1';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(-15, -40, 8, 22, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(15, -40, 8, 22, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Глаза
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-12, -5, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, -5, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-9, -3, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(15, -3, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (expression === 'excited') {
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-20, -18);
+                ctx.lineTo(-6, -10);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(20, -18);
+                ctx.lineTo(6, -10);
+                ctx.stroke();
+            }
+            
+            ctx.fillStyle = '#E57373';
+            ctx.beginPath();
+            if (expression === 'excited') {
+                ctx.arc(0, 8, 10, 0, Math.PI);
+            } else {
+                ctx.arc(0, 5, 6, 0, Math.PI);
+            }
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.rect(-4, 4, 3, 5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(1, 4, 3, 5);
+            ctx.fill();
+            
+            ctx.fillStyle = '#FF8A80';
+            ctx.beginPath();
+            ctx.arc(0, -8, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawLosyash(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 38, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD54F';
+            ctx.fill();
+            ctx.strokeStyle = '#F57F17';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.strokeStyle = '#5D4037';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-15, -35);
+            ctx.lineTo(-25, -55);
+            ctx.lineTo(-30, -50);
+            ctx.moveTo(-25, -55);
+            ctx.lineTo(-18, -60);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(15, -35);
+            ctx.lineTo(25, -55);
+            ctx.lineTo(30, -50);
+            ctx.moveTo(25, -55);
+            ctx.lineTo(18, -60);
+            ctx.stroke();
+            
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-12, -5, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, -5, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(3, -5);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-10, -3, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(14, -3, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 10, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawPin(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 32, 38, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#ECEFF1';
+            ctx.fill();
+            ctx.strokeStyle = '#37474F';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#5D4037';
+            ctx.beginPath();
+            ctx.ellipse(0, -30, 28, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(-20, -38, 40, 12);
+            ctx.fill();
+            
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath();
+            ctx.ellipse(-12, -8, 14, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(12, -8, 14, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -8);
+            ctx.lineTo(3, -8);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-10, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(14, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath();
+            ctx.moveTo(-5, 2);
+            ctx.lineTo(0, 15);
+            ctx.lineTo(5, 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawKarich(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#546E7A';
+            ctx.fill();
+            ctx.strokeStyle = '#263238';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#3E2723';
+            ctx.beginPath();
+            ctx.ellipse(0, -32, 25, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(-15, -45, 30, 15);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(10, -8, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(10, -18);
+            ctx.lineTo(15, -30);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(12, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-8, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#FF8F00';
+            ctx.beginPath();
+            ctx.moveTo(-8, 5);
+            ctx.lineTo(0, 22);
+            ctx.lineTo(8, 5);
+            ctx.fill();
+            
+            ctx.fillStyle = '#E53935';
+            ctx.beginPath();
+            ctx.moveTo(0, -2);
+            ctx.lineTo(-12, -12);
+            ctx.lineTo(-12, 8);
+            ctx.lineTo(0, -2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(0, -2);
+            ctx.lineTo(12, -12);
+            ctx.lineTo(12, 8);
+            ctx.lineTo(0, -2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(0, -2, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawYojik(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 33, 0, Math.PI * 2);
+            ctx.fillStyle = '#E57373';
+            ctx.fill();
+            ctx.strokeStyle = '#B71C1C';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#5D4037';
+            for (let i = -3; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * 8, -33);
+                ctx.lineTo(i * 8 - 5, -48);
+                ctx.lineTo(i * 8 + 5, -48);
+                ctx.fill();
+            }
+            
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-10, -5, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(10, -5, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(3, -5);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -5, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(10, -5, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(-8, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(0, 5, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 10, 8, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // ==================== ФОН И ОБЪЕКТЫ ====================
+        function drawBackground(timeOfDay) {
+            let skyGradient;
+            if (timeOfDay === 'morning') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#87CEEB');
+                skyGradient.addColorStop(1, '#FFF9C4');
+            } else if (timeOfDay === 'day') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#64B5F6');
+                skyGradient.addColorStop(1, '#BBDEFB');
+            } else if (timeOfDay === 'evening' || timeOfDay === 'sunset') {
+                skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+                skyGradient.addColorStop(0, '#FF6F00');
+                skyGradient.addColorStop(0.5, '#FF8F00');
+                skyGradient.addColorStop(1, '#FFB74D');
+            }
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+            
+            if (timeOfDay === 'sunset') {
+                ctx.fillStyle = '#FF6F00';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.7, canvas.height * 0.35, 50, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FFD54F';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.7, canvas.height * 0.35, 35, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#FFF176';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.8, canvas.height * 0.2, 45, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.fillStyle = '#7EC850';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.3, canvas.height * 0.4, canvas.width * 0.6, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.8, canvas.height * 0.5, canvas.width, canvas.height * 0.55);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            ctx.fillStyle = '#5DAE3B';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.7);
+            ctx.quadraticCurveTo(canvas.width * 0.5, canvas.height * 0.65, canvas.width, canvas.height * 0.7);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            
+            drawTree(canvas.width * 0.1, canvas.height * 0.5);
+            drawTree(canvas.width * 0.85, canvas.height * 0.52);
+            drawCloud(canvas.width * 0.2, canvas.height * 0.15);
+            drawCloud(canvas.width * 0.5, canvas.height * 0.1);
+            drawCloud(canvas.width * 0.75, canvas.height * 0.18);
+        }
+
+        function drawTree(x, y) {
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 4, y, 8, 40);
+            ctx.fillStyle = '#388E3C';
+            ctx.beginPath();
+            ctx.arc(x, y - 10, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#43A047';
+            ctx.beginPath();
+            ctx.arc(x - 8, y - 5, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 8, y - 5, 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawCloud(x, y) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.arc(x + 20, y - 5, 18, 0, Math.PI * 2);
+            ctx.arc(x + 15, y + 5, 15, 0, Math.PI * 2);
+            ctx.arc(x - 15, y, 16, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawHouse(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x - 25, y - 20, 50, 40);
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath();
+            ctx.moveTo(x - 30, y - 20);
+            ctx.lineTo(x, y - 45);
+            ctx.lineTo(x + 30, y - 20);
+            ctx.fill();
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 8, y + 5, 16, 15);
+        }
+
+        function drawHangar(x, y) {
+            ctx.fillStyle = '#78909C';
+            ctx.fillRect(x - 40, y - 15, 80, 50);
+            ctx.fillStyle = '#546E7A';
+            ctx.beginPath();
+            ctx.moveTo(x - 45, y - 15);
+            ctx.lineTo(x, y - 45);
+            ctx.lineTo(x + 45, y - 15);
+            ctx.fill();
+            ctx.fillStyle = '#FFB74D';
+            ctx.fillRect(x - 5, y + 10, 30, 25);
+        }
+
+        function drawMachine(x, y) {
+            ctx.fillStyle = '#795548';
+            ctx.fillRect(x - 20, y - 25, 40, 40);
+            ctx.fillStyle = '#FFB74D';
+            ctx.beginPath();
+            ctx.arc(x, y - 30, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#4FC3F7';
+            ctx.beginPath();
+            ctx.arc(x, y - 30, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(x - 5, y + 15, 10, 15);
+        }
+
+        // ==================== ЧАСТИЦЫ ====================
+        function spawnSparkles(x, y, count = 10) {
+            for (let i = 0; i < count; i++) {
+                sparkles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4 - 2,
+                    life: 1,
+                    size: Math.random() * 5 + 2,
+                    color: ['#FFD700', '#FF6B35', '#FFEB3B', '#FF9800'][Math.floor(Math.random() * 4)]
+                });
+            }
+        }
+
+        function updateSparkles() {
+            for (let i = sparkles.length - 1; i >= 0; i--) {
+                const s = sparkles[i];
+                s.x += s.vx;
+                s.y += s.vy;
+                s.life -= 0.02;
+                if (s.life <= 0) sparkles.splice(i, 1);
+            }
+        }
+
+        function drawSparkles() {
+            for (const s of sparkles) {
+                ctx.fillStyle = s.color;
+                ctx.globalAlpha = s.life;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // ==================== ОСНОВНАЯ ОТРИСОВКА ====================
+        function drawScene(sceneIndex) {
+            const scene = scenes[sceneIndex];
+            const W = canvas.width;
+            const H = canvas.height;
+            
+            ctx.clearRect(0, 0, W, H);
+            drawBackground(scene.time);
+            
+            if (scene.id === 'intro' || scene.id === 'krosh_idea') {
+                drawHouse(W * 0.3, H * 0.42, '#FFCC80');
+                drawKrosh(W * 0.4, H * 0.55, 1.5, scene.id === 'krosh_idea' ? 'excited' : 'normal');
+                if (scene.id === 'krosh_idea') {
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(W * 0.45, H * 0.3, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FF8F00';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            } else if (scene.id === 'losyash_lab') {
+                drawHouse(W * 0.25, H * 0.4, '#B0BEC5');
+                drawLosyash(W * 0.35, H * 0.55, 1.5);
+                drawKrosh(W * 0.55, H * 0.6, 1.3, 'excited');
+            } else if (scene.id === 'pin_hangar') {
+                drawHangar(W * 0.3, H * 0.4);
+                drawPin(W * 0.35, H * 0.55, 1.5);
+                drawLosyash(W * 0.5, H * 0.6, 1.2);
+                drawKrosh(W * 0.6, H * 0.62, 1.2, 'excited');
+            } else if (scene.id === 'test_machine') {
+                drawMachine(W * 0.35, H * 0.5);
+                drawKrosh(W * 0.2, H * 0.55, 1.3, 'excited');
+                drawYojik(W * 0.3, H * 0.6, 1.3);
+                drawLosyash(W * 0.55, H * 0.55, 1.2);
+                drawPin(W * 0.65, H * 0.58, 1.2);
+                drawKarich(W * 0.75, H * 0.55, 1.2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.beginPath();
+                ctx.ellipse(W * 0.35, H * 0.25, 60, 30, 0, 0, Math.PI * 2);
+                ctx.fill();
+                if (Math.random() < 0.3) spawnSparkles(W * 0.35, H * 0.25, 2);
+            } else if (scene.id === 'wisdom' || scene.id === 'ending') {
+                drawKrosh(W * 0.3, H * 0.55, 1.2);
+                drawYojik(W * 0.45, H * 0.58, 1.3);
+                drawLosyash(W * 0.6, H * 0.55, 1.2);
+                drawPin(W * 0.7, H * 0.57, 1.2);
+                drawKarich(W * 0.8, H * 0.55, 1.2);
+            }
+            
+            updateSparkles();
+            drawSparkles();
+        }
+
+        // ==================== АНИМАЦИЯ ====================
+        function animate() {
+            time += 0.02;
+            drawScene(currentScene);
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        // ==================== НАВИГАЦИЯ ПО СЦЕНАМ ====================
+        function nextScene() {
+            if (isSpeaking) {
+                stopSpeech();
+            }
+            
+            if (currentScene < scenes.length - 1) {
+                currentScene++;
+                const scene = scenes[currentScene];
+                dialogueBox.textContent = scene.text;
+                dialogueBox.style.animation = 'none';
+                dialogueBox.offsetHeight; // reflow
+                dialogueBox.style.animation = 'fadeInUp 0.5s forwards';
+                sparkles = [];
+                
+                // Озвучка
+                if (scene.voiceText) {
+                    setTimeout(() => speakText(scene.voiceText), 300);
+                }
+            } else if (currentScene === scenes.length - 1) {
+                dialogueBox.textContent = '🎬 КОНЕЦ СЕРИИ. Спасибо за просмотр!';
+                subtitles.textContent = 'Конец';
+                subtitles.classList.add('show');
+                speakText('Конец серии. Спасибо за просмотр!');
+            }
+        }
+
+        function restartAll() {
+            stopSpeech();
+            currentScene = 0;
+            sparkles = [];
+            dialogueBox.textContent = scenes[0].text;
+            dialogueBox.style.animation = 'none';
+            dialogueBox.offsetHeight;
+            dialogueBox.style.animation = 'fadeInUp 0.5s forwards';
+            subtitles.classList.remove('show');
+            soundIndicator.classList.remove('active');
+            setTimeout(() => speakText(scenes[0].voiceText), 300);
+        }
+
+        // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
+        container.addEventListener('click', (e) => {
+            if (e.target === restartBtn) return;
+            if (loadingScreen.style.display !== 'none') return;
+            nextScene();
+        });
+
+        restartBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            restartAll();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') {
+                e.preventDefault();
+                nextScene();
+            } else if (e.code === 'ArrowLeft') {
+                e.preventDefault();
+                if (currentScene > 0) {
+                    stopSpeech();
+                    currentScene--;
+                    dialogueBox.textContent = scenes[currentScene].text;
+                    subtitles.classList.remove('show');
+                }
+            } else if (e.code === 'KeyR') {
+                e.preventDefault();
+                restartAll();
+            }
+        });
+
+        // ==================== РЕСАЙЗ ====================
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawScene(currentScene);
+        });
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+        function init() {
+            resizeCanvas();
+            
+            // Ждём загрузки голосов
+            if (speechSynth.getVoices().length === 0) {
+                speechSynth.addEventListener('voiceschanged', () => {
+                    loadingScreen.style.display = 'none';
+                    dialogueBox.textContent = scenes[0].text;
+                    drawScene(0);
+                    animate();
+                    console.log('🎙️ Голосовой движок готов!');
+                });
+            } else {
+                loadingScreen.style.display = 'none';
+                dialogueBox.textContent = scenes[0].text;
+                drawScene(0);
+                animate();
+            }
+            
+            console.log('🎬 Смешарики: Эффект присутствия - Серия 1 с озвучкой!');
+            console.log('👆 Кликайте / пробел / стрелки для навигации');
+            console.log('🔄 Кнопка справа вверху — начать заново');
+        }
+
+        init();
+    </script>
+</body>
+</html>

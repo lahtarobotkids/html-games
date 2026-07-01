@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Жамоскреп: Три новые части 🎬</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1e1e2f;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      border: 4px solid #ffaa00;
+      border-radius: 24px;
+      box-shadow: 0 0 30px rgba(255,140,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="screen" width="600" height="400"></canvas>
+  <script>
+    (function() {
+      const canvas = document.getElementById('screen');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+
+      // ======= ЭПИЗОДЫ =======
+      const EPISODES = {
+        CANDY: 0,     // Жамоскреп ест конфету -> взрыв
+        CAROUSEL: 1,  // Карусель -> укачивает и улетает
+        FIXSEVEN: 2   // Встреча с Фикс Севеном
+      };
+      let currentEpisode = EPISODES.CANDY;
+      let timer = 0;               // кадры внутри эпизода
+      let frame = 0;               // общий счётчик для анимаций
+      let legPhase = 0;
+
+      // Параметры объектов (меняются в сценах)
+      let jx = W/2, jy = H/2 + 40;
+      let walkDir = 1;
+      let particles = [];
+      let candyX, candyY, candyTension = 0, candyExploded = false;
+      let carouselAngle = 0, carouselOmega = 0, gooseOn = false;
+      let fixSevenX = -100, fixSevenY = H/2 + 30, repairState = 0;
+
+      // ---------- ПОЛЕЗНЫЕ ФУНКЦИИ ----------
+      function resetEpisode(ep) {
+        currentEpisode = ep;
+        timer = 0;
+        particles = [];
+        jx = W/2;
+        jy = H/2 + 40;
+        walkDir = 1;
+        candyExploded = false;
+        candyTension = 0;
+        carouselAngle = 0;
+        carouselOmega = 0;
+        gooseOn = false;
+        fixSevenX = -100;
+        repairState = 0;
+        // Сброс конфеты
+        candyX = W/2 + 100;
+        candyY = H/2 - 10;
+      }
+
+      function nextEpisode() {
+        if (currentEpisode === EPISODES.CANDY) resetEpisode(EPISODES.CAROUSEL);
+        else if (currentEpisode === EPISODES.CAROUSEL) resetEpisode(EPISODES.FIXSEVEN);
+        else resetEpisode(EPISODES.CANDY); // зацикливаем
+      }
+
+      // Рисуем Жамоскрепа (тот же, что и раньше)
+      function drawZhamoskrep(x, y, scale = 1, mouthOpen = false) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath(); ctx.ellipse(0, 15, 35, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ff6b35';
+        ctx.fillRect(-35, -28, 70, 40);
+        ctx.fillStyle = '#ff8c52';
+        ctx.fillRect(-31, -26, 62, 36);
+        ctx.fillStyle = '#ff6b35';
+        ctx.beginPath(); ctx.arc(-35, -8, 18, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(35, -8, 18, 0, Math.PI*2); ctx.fill();
+        const eyeY = -18;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(-14, eyeY, 9, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(14, eyeY, 9, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-14, eyeY, 4.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(14, eyeY, 4.5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (mouthOpen) {
+          ctx.arc(0, -8, 10, 0.1*Math.PI, 0.9*Math.PI);
+        } else {
+          ctx.arc(0, -10, 12, 0.1*Math.PI, 0.9*Math.PI);
+        }
+        ctx.stroke();
+        const legLen = 16;
+        const lx = -20, rx = 20, legBaseY = 12;
+        const leftAngle = Math.sin(legPhase) * 0.6;
+        const rightAngle = Math.sin(legPhase + Math.PI) * 0.6;
+        ctx.strokeStyle = '#ff6b35';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(lx, legBaseY);
+        ctx.lineTo(lx + Math.sin(leftAngle)*legLen, legBaseY + Math.abs(Math.cos(leftAngle))*legLen);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(rx, legBaseY);
+        ctx.lineTo(rx + Math.sin(rightAngle)*legLen, legBaseY + Math.abs(Math.cos(rightAngle))*legLen);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Частица взрыва
+      class Particle {
+        constructor(x, y, color = null) {
+          this.x = x; this.y = y;
+          const angle = Math.random() * Math.PI*2;
+          const speed = 2 + Math.random() * 6;
+          this.vx = Math.cos(angle)*speed;
+          this.vy = Math.sin(angle)*speed - 2;
+          this.life = 1;
+          this.decay = 0.015 + Math.random()*0.03;
+          this.color = color || `hsl(${Math.random()*30+20}, 100%, 60%)`;
+        }
+        update() {
+          this.x += this.vx; this.y += this.vy; this.vy += 0.1; this.life -= this.decay;
+        }
+        draw(ctx) {
+          ctx.globalAlpha = this.life;
+          ctx.fillStyle = this.color;
+          ctx.fillRect(this.x-2, this.y-2, 4, 4);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // ---------- ОБНОВЛЕНИЕ ЭПИЗОДОВ ----------
+      function updateEpisode() {
+        timer++;
+        frame++;
+        legPhase += 0.3;
+
+        // Обновление частиц (везде)
+        particles.forEach(p => p.update());
+        particles = particles.filter(p => p.life > 0.01);
+
+        switch (currentEpisode) {
+          case EPISODES.CANDY:
+            updateCandyScene();
+            break;
+          case EPISODES.CAROUSEL:
+            updateCarouselScene();
+            break;
+          case EPISODES.FIXSEVEN:
+            updateFixSevenScene();
+            break;
+        }
+      }
+
+      // ----- ЭПИЗОД 1: КОНФЕТА -----
+      function updateCandyScene() {
+        // Жамоскреп идёт к конфете
+        if (timer < 120) {
+          jx += 0.8;
+          if (jx > candyX - 50) jx = candyX - 50;
+        } else if (timer < 180) {
+          // Ест конфету (конфета уменьшается, жамоскреп открывает рот)
+          candyTension += 0.02;
+          if (candyTension >= 1.0) {
+            // взрыв
+            candyExploded = true;
+            for (let i=0; i<50; i++) {
+              particles.push(new Particle(candyX, candyY, '#ff4466'));
+              particles.push(new Particle(candyX, candyY, '#ffaa00'));
+            }
+          }
+        }
+        if (candyExploded && timer > 180 && particles.length === 0 && timer > 250) {
+          nextEpisode();
+        }
+      }
+
+      // ----- ЭПИЗОД 2: КАРУСЕЛЬ -----
+      function updateCarouselScene() {
+        if (timer < 100) {
+          // Жамоскреп заходит на карусель
+          jx = 200;
+          jy = 300;
+        } else if (timer < 300) {
+          // Карусель крутится с ускорением
+          gooseOn = true;
+          carouselOmega += 0.005;
+          carouselAngle += carouselOmega;
+          // Жамоскреп привязан к карусели
+          const r = 70;
+          jx = 300 + Math.cos(carouselAngle) * r;
+          jy = 200 + Math.sin(carouselAngle) * r;
+        } else if (timer < 400) {
+          // Улетает с карусели
+          gooseOn = false;
+          jy -= 2;
+          jx += 1.5;
+          if (jy < -50) nextEpisode();
+        }
+      }
+
+      // ----- ЭПИЗОД 3: ФИКС СЕВЕН -----
+      function updateFixSevenScene() {
+        // Жамоскреп падает сверху
+        if (timer < 50) {
+          jx = W/2;
+          jy = -30 + timer * 3;
+        } else if (timer < 80) {
+          // Фикс Севен подходит
+          fixSevenX = W/2 - 100 + (timer-50)*3;
+          if (fixSevenX > W/2 - 80) fixSevenX = W/2 - 80;
+        } else if (timer < 200) {
+          // Фикс Севен чинит (частицы)
+          if (timer % 10 === 0) {
+            for (let i=0; i<5; i++) particles.push(new Particle(fixSevenX+30, fixSevenY-20, '#00ff88'));
+          }
+          repairState = Math.min(1, (timer-80)/120);
+        } else {
+          // Башня починена, радость
+          if (timer === 200) {
+            for (let i=0; i<60; i++) particles.push(new Particle(W/2, H/2-60, '#ffdd00'));
+          }
+          if (timer > 300) nextEpisode();
+        }
+      }
+
+      // ---------- ОТРИСОВКА ----------
+      function drawScene() {
+        ctx.clearRect(0, 0, W, H);
+        // Общий фон
+        ctx.fillStyle = '#282840';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#3a3a5a';
+        ctx.fillRect(0, H-50, W, 50);
+
+        // Субтитры
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'center';
+        let sub = '';
+        if (currentEpisode === EPISODES.CANDY) sub = 'Часть 1: Конфета';
+        else if (currentEpisode === EPISODES.CAROUSEL) sub = 'Часть 2: Карусель';
+        else sub = 'Часть 3: Фикс Севен';
+        ctx.fillText(sub, W/2, 30);
+
+        // Рисуем эпизоды
+        switch (currentEpisode) {
+          case EPISODES.CANDY: drawCandyScene(); break;
+          case EPISODES.CAROUSEL: drawCarouselScene(); break;
+          case EPISODES.FIXSEVEN: drawFixSevenScene(); break;
+        }
+
+        // Частицы
+        particles.forEach(p => p.draw(ctx));
+      }
+
+      function drawCandyScene() {
+        // Конфета (если не взорвана)
+        if (!candyExploded) {
+          ctx.fillStyle = '#ff99cc';
+          ctx.beginPath();
+          ctx.arc(candyX, candyY, 30, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(candyX-5, candyY-5, 8, 0, Math.PI*2);
+          ctx.fill();
+        }
+        drawZhamoskrep(jx, jy, 1.0, candyTension > 0.3);
+      }
+
+      function drawCarouselScene() {
+        // Карусель
+        ctx.fillStyle = '#8B5A2B';
+        ctx.beginPath();
+        ctx.arc(300, 200, 80, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#d2a679';
+        ctx.lineWidth = 3;
+        for (let i=0; i<8; i++) {
+          const a = carouselAngle + i*Math.PI/4;
+          ctx.beginPath();
+          ctx.moveTo(300, 200);
+          ctx.lineTo(300+Math.cos(a)*75, 200+Math.sin(a)*75);
+          ctx.stroke();
+        }
+        // Жамоскреп на карусели
+        if (gooseOn) {
+          drawZhamoskrep(jx, jy, 0.8);
+        } else {
+          drawZhamoskrep(jx, jy, 0.8);
+        }
+      }
+
+      function drawFixSevenScene() {
+        // Башня (разрушенная или починенная)
+        ctx.fillStyle = repairState > 0.5 ? '#5a6b7a' : '#3b3b4d';
+        ctx.fillRect(W/2-40, H/2-120, 80, 120);
+        ctx.fillStyle = '#ffd966';
+        if (repairState > 0.5) ctx.fillRect(W/2-30, H/2-100, 10, 10);
+        // Фикс Севен (робот)
+        ctx.fillStyle = '#e0a800';
+        ctx.fillRect(fixSevenX, fixSevenY-30, 30, 30);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(fixSevenX+5, fixSevenY-25, 6, 6);
+        ctx.fillRect(fixSevenX+18, fixSevenY-25, 6, 6);
+        // Жамоскреп
+        drawZhamoskrep(jx, jy, 0.9);
+      }
+
+      // ---------- ИГРОВОЙ ЦИКЛ ----------
+      function loop() {
+        updateEpisode();
+        drawScene();
+        requestAnimationFrame(loop);
+      }
+
+      // Старт с первого эпизода
+      resetEpisode(EPISODES.CANDY);
+      loop();
+    })();
+  </script>
+</body>
+</html>

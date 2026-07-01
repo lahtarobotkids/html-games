@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>БЕШЕНЫЙ МУЛЬТИК ✦</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Comic Sans MS', 'Impact', 'Arial Black', sans-serif;
+            cursor: crosshair;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .warning {
+            position: fixed;
+            bottom: 10px;
+            right: 15px;
+            color: #ffff00;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 100;
+            text-shadow: 0 0 10px red;
+            pointer-events: none;
+            opacity: 0.8;
+            animation: flicker 0.1s infinite alternate;
+        }
+        @keyframes flicker {
+            0% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="madCanvas"></canvas>
+    <div class="warning">⚠️ БЕШЕНЫЙ РЕЖИМ АКТИВИРОВАН ⚠️</div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('madCanvas');
+            const ctx = canvas.getContext('2d');
+
+            let width, height;
+
+            // Безумные бессмысленные слова
+            const crazyWords = [
+                'БДЫЩЬ!', 'ХРЯСЬ!', 'ТЫДЫЩЬ!', 'ПШШШ!', 'УХ!', 'НЯ!',
+                'ЗВЯК!', 'БАЦ!', 'ХЛОБЫСЬ!', 'ТУДУДУМ!', 'ВЖУХ!', 'БЛЯМС!',
+                'WOW!', 'ZOOP!', 'BLARG!', 'NEE!', 'WOOP!', 'FLURP!',
+                'ХА!', 'ОПА!', 'ЁЛКИ-ПАЛКИ!', 'КАРАМБА!', 'БУЛЬК!', 'ДРЫНЬ!',
+                'ЧПОК!', 'ГЫ!', 'КРЯК!', 'БЗДЫНЬ!', 'ХРУМ!', 'ТЫЦ!',
+                'БИМ-БОМ!', 'ТРАХ-ТИБИДОХ!', 'ШЛЁП!', 'ФЬЮТЬ!', 'БРРР!'
+            ];
+
+            // Яркие кислотные цвета
+            const neonPalette = [
+                '#FF00FF', '#00FFFF', '#FFFF00', '#FF0000', '#00FF00',
+                '#FF6600', '#CC00FF', '#FF0099', '#00FF99', '#99FF00',
+                '#FF3366', '#33FFCC', '#FFCC00', '#FF0066', '#66FF00',
+                '#FF00CC', '#00CCFF', '#FF3300', '#CCFF00', '#9900FF'
+            ];
+
+            // Массивы объектов
+            let floatingTexts = [];
+            let popupTexts = [];
+            let fairyLights = [];
+            let madStars = [];
+
+            // Таймеры для всплывающих гигантских слов
+            let popupTimer = 0;
+            let glitchTimer = 0;
+            let backgroundColor = '#000000';
+
+            // ------------------------------------------------------------
+            //  Инициализация размеров
+            // ------------------------------------------------------------
+            function resizeCanvas() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+                initFairyLights();
+                initMadStars();
+            }
+
+            // ------------------------------------------------------------
+            //  Гирлянда из лампочек (по периметру и линиям)
+            // ------------------------------------------------------------
+            function initFairyLights() {
+                fairyLights = [];
+                const count = 70;
+                // По периметру экрана с небольшим отступом
+                for (let i = 0; i < count; i++) {
+                    const progress = i / count;
+                    let x, y;
+                    const perimeter = 2 * (width + height);
+                    let pos = progress * perimeter;
+
+                    if (pos < width) {
+                        x = pos;
+                        y = 30 + Math.sin(i * 0.5) * 15;
+                    } else if (pos < width + height) {
+                        x = width - 30 + Math.sin(i * 0.7) * 15;
+                        y = pos - width;
+                    } else if (pos < 2 * width + height) {
+                        x = (2 * width + height) - pos;
+                        y = height - 30 + Math.sin(i * 0.9) * 15;
+                    } else {
+                        x = 30 + Math.sin(i * 1.1) * 15;
+                        y = perimeter - pos;
+                    }
+
+                    fairyLights.push({
+                        baseX: Math.max(20, Math.min(width - 20, x)),
+                        baseY: Math.max(20, Math.min(height - 20, y)),
+                        radius: 4 + Math.random() * 8,
+                        color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                        phase: Math.random() * Math.PI * 2,
+                        speed: 0.2 + Math.random() * 1.5,
+                        wireOffset: (Math.random() - 0.5) * 30
+                    });
+                }
+
+                // Добавим несколько вертикальных и горизонтальных "нитей" внутри
+                for (let j = 0; j < 5; j++) {
+                    const startX = Math.random() * width;
+                    const startY = Math.random() * height;
+                    const isHorizontal = Math.random() > 0.5;
+                    const length = 100 + Math.random() * 400;
+                    const lightCount = 8 + Math.floor(Math.random() * 15);
+
+                    for (let k = 0; k < lightCount; k++) {
+                        const t = k / (lightCount - 1);
+                        let x, y;
+                        if (isHorizontal) {
+                            x = startX + t * length;
+                            y = startY + (Math.random() - 0.5) * 50;
+                        } else {
+                            x = startX + (Math.random() - 0.5) * 50;
+                            y = startY + t * length;
+                        }
+                        fairyLights.push({
+                            baseX: Math.max(10, Math.min(width - 10, x)),
+                            baseY: Math.max(10, Math.min(height - 10, y)),
+                            radius: 3 + Math.random() * 7,
+                            color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                            phase: Math.random() * Math.PI * 2,
+                            speed: 0.3 + Math.random() * 2.0,
+                            wireOffset: (Math.random() - 0.5) * 20
+                        });
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------
+            //  Дурацкие звёзды
+            // ------------------------------------------------------------
+            function initMadStars() {
+                madStars = [];
+                const count = 25;
+                for (let i = 0; i < count; i++) {
+                    madStars.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height,
+                        vx: (Math.random() - 0.5) * 8,
+                        vy: (Math.random() - 0.5) * 8,
+                        size: 10 + Math.random() * 40,
+                        rotation: Math.random() * 360,
+                        rotationSpeed: (Math.random() - 0.5) * 15,
+                        color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                        spikes: 4 + Math.floor(Math.random() * 7),
+                        outerR: 0.7 + Math.random() * 0.8,
+                        innerR: 0.2 + Math.random() * 0.4,
+                        shake: Math.random() * 5,
+                        pulsate: Math.random() * 2
+                    });
+                }
+            }
+
+            // ------------------------------------------------------------
+            //  Создание летающих текстов
+            // ------------------------------------------------------------
+            function spawnFloatingText() {
+                if (floatingTexts.length > 40) return;
+                const text = crazyWords[Math.floor(Math.random() * crazyWords.length)];
+                floatingTexts.push({
+                    text: text,
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 0.5) * 12,
+                    size: 14 + Math.random() * 48,
+                    color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                    life: 1.0,
+                    decay: 0.002 + Math.random() * 0.02,
+                    font: Math.random() > 0.5 ? 'Comic Sans MS' : 'Impact',
+                    glow: Math.random() > 0.6
+                });
+            }
+
+            // ------------------------------------------------------------
+            //  Всплывающие гигантские слова
+            // ------------------------------------------------------------
+            function spawnPopupText() {
+                const text = crazyWords[Math.floor(Math.random() * crazyWords.length)];
+                popupTexts.push({
+                    text: text,
+                    x: width * 0.2 + Math.random() * width * 0.6,
+                    y: height * 0.3 + Math.random() * height * 0.4,
+                    size: 60 + Math.random() * 120,
+                    color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                    life: 1.0,
+                    decay: 0.03 + Math.random() * 0.08,
+                    rotation: (Math.random() - 0.5) * 30,
+                    font: Math.random() > 0.5 ? 'Impact' : 'Arial Black'
+                });
+            }
+
+            // ------------------------------------------------------------
+            //  Рисование звезды
+            // ------------------------------------------------------------
+            function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius, rotation) {
+                let rot = (Math.PI / 2 * 3) + (rotation * Math.PI / 180);
+                const step = Math.PI / spikes;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - outerRadius);
+                for (let i = 0; i < spikes; i++) {
+                    let x = cx + Math.cos(rot) * outerRadius;
+                    let y = cy + Math.sin(rot) * outerRadius;
+                    ctx.lineTo(x, y);
+                    rot += step;
+                    x = cx + Math.cos(rot) * innerRadius;
+                    y = cy + Math.sin(rot) * innerRadius;
+                    ctx.lineTo(x, y);
+                    rot += step;
+                }
+                ctx.lineTo(cx, cy - outerRadius);
+                ctx.closePath();
+            }
+
+            // ------------------------------------------------------------
+            //  Главный цикл анимации
+            // ------------------------------------------------------------
+            function animate() {
+                // Иногда меняем фон резко
+                glitchTimer++;
+                if (glitchTimer % 10 === 0) {
+                    backgroundColor = Math.random() > 0.7 ?
+                        neonPalette[Math.floor(Math.random() * neonPalette.length)] : '#000000';
+                }
+
+                // Очистка с полупрозрачным фоном для эффекта следа? Нет, жесткая очистка для бешеного мелькания
+                ctx.fillStyle = backgroundColor;
+                ctx.fillRect(0, 0, width, height);
+
+                // Обновляем и рисуем лампочки (гирлянды)
+                ctx.shadowBlur = 15;
+                for (let lamp of fairyLights) {
+                    // Мерцание
+                    const intensity = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() * 0.01 * lamp.speed + lamp.phase));
+                    const radius = lamp.radius * (0.5 + intensity * 0.8);
+
+                    // Иногда резко меняем цвет
+                    if (Math.random() < 0.05) {
+                        lamp.color = neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                    }
+
+                    ctx.shadowColor = lamp.color;
+                    ctx.fillStyle = lamp.color;
+                    ctx.beginPath();
+                    // Добавляем дрожание позиции
+                    const shakeX = (Math.random() - 0.5) * 4;
+                    const shakeY = (Math.random() - 0.5) * 4;
+                    ctx.arc(lamp.baseX + shakeX, lamp.baseY + shakeY, Math.max(1, radius), 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Иногда рисуем дополнительную обводку
+                    if (Math.random() < 0.3) {
+                        ctx.strokeStyle = '#FFFFFF';
+                        ctx.lineWidth = 1;
+                        ctx.shadowColor = '#FFFFFF';
+                        ctx.stroke();
+                    }
+                }
+
+                // Обновляем и рисуем дурацкие звезды
+                ctx.shadowBlur = 12;
+                for (let star of madStars) {
+                    star.x += star.vx;
+                    star.y += star.vy;
+                    star.rotation += star.rotationSpeed;
+
+                    // Отскок от стен
+                    if (star.x < -50) star.x = width + 50;
+                    if (star.x > width + 50) star.x = -50;
+                    if (star.y < -50) star.y = height + 50;
+                    if (star.y > height + 50) star.y = -50;
+
+                    // Пульсация и дрожание размера
+                    const pulse = 1 + Math.sin(Date.now() * 0.02 * star.pulsate) * 0.3;
+                    const currentSize = star.size * pulse + (Math.random() - 0.5) * star.shake;
+
+                    const outerR = currentSize * star.outerR;
+                    const innerR = currentSize * star.innerR;
+
+                    // Резкая смена цвета иногда
+                    if (Math.random() < 0.04) {
+                        star.color = neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                    }
+
+                    ctx.fillStyle = star.color;
+                    ctx.shadowColor = star.color;
+                    drawStar(ctx, star.x, star.y, star.spikes, outerR, innerR, star.rotation);
+                    ctx.fill();
+
+                    // Дополнительная обводка для безумия
+                    if (Math.random() < 0.4) {
+                        ctx.strokeStyle = Math.random() > 0.5 ? '#FFFFFF' : '#FFFF00';
+                        ctx.lineWidth = 2;
+                        ctx.shadowColor = ctx.strokeStyle;
+                        ctx.stroke();
+                    }
+                }
+
+                // Спавним летающие тексты
+                if (Math.random() < 0.6) {
+                    spawnFloatingText();
+                }
+
+                // Обновляем и рисуем летающие тексты
+                ctx.shadowBlur = 8;
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    const ft = floatingTexts[i];
+                    ft.x += ft.vx;
+                    ft.y += ft.vy;
+                    ft.life -= ft.decay;
+
+                    if (ft.life <= 0 || ft.x < -200 || ft.x > width + 200 || ft.y < -200 || ft.y > height + 200) {
+                        floatingTexts.splice(i, 1);
+                        continue;
+                    }
+
+                    // Мерцание видимости
+                    if (Math.random() < 0.2) continue;
+
+                    ctx.font = `bold ${ft.size}px "${ft.font}", "Comic Sans MS", cursive`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = ft.color;
+                    ctx.shadowColor = ft.glow ? '#FFFFFF' : ft.color;
+
+                    // Дрожание при отрисовке
+                    const sx = (Math.random() - 0.5) * 8;
+                    const sy = (Math.random() - 0.5) * 8;
+                    ctx.fillText(ft.text, ft.x + sx, ft.y + sy);
+
+                    // Иногда дублируем со смещением (глитч)
+                    if (Math.random() < 0.3) {
+                        ctx.fillStyle = neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                        ctx.fillText(ft.text, ft.x + (Math.random() - 0.5) * 20, ft.y + (Math.random() - 0.5) * 20);
+                    }
+                }
+
+                // Спавним гигантские всплывающие слова
+                popupTimer++;
+                if (popupTimer % 8 === 0 || Math.random() < 0.1) {
+                    spawnPopupText();
+                }
+
+                // Обновляем и рисуем всплывающие тексты
+                ctx.shadowBlur = 20;
+                for (let i = popupTexts.length - 1; i >= 0; i--) {
+                    const pt = popupTexts[i];
+                    pt.life -= pt.decay;
+                    if (pt.life <= 0) {
+                        popupTexts.splice(i, 1);
+                        continue;
+                    }
+
+                    // Мерцание
+                    if (Math.random() < 0.15) continue;
+
+                    ctx.save();
+                    ctx.translate(pt.x, pt.y);
+                    ctx.rotate((pt.rotation + (Math.random() - 0.5) * 15) * Math.PI / 180);
+                    ctx.font = `bold ${pt.size}px "${pt.font}", "Impact", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = pt.color;
+                    ctx.shadowColor = '#FFFFFF';
+                    ctx.fillText(pt.text, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+                    ctx.restore();
+
+                    // Дублируем сумасшедший глитч-слой
+                    if (Math.random() < 0.5) {
+                        ctx.save();
+                        ctx.translate(pt.x + (Math.random() - 0.5) * 30, pt.y + (Math.random() - 0.5) * 30);
+                        ctx.rotate((pt.rotation + Math.random() * 40) * Math.PI / 180);
+                        ctx.font = `bold ${pt.size * 0.8}px "Arial Black", sans-serif`;
+                        ctx.fillStyle = neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                        ctx.shadowColor = '#FF00FF';
+                        ctx.fillText(pt.text, 0, 0);
+                        ctx.restore();
+                    }
+                }
+
+                // Добавляем случайные линии-помехи
+                ctx.shadowBlur = 0;
+                if (Math.random() < 0.3) {
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = Math.random() * 3;
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * width, Math.random() * height);
+                    ctx.lineTo(Math.random() * width, Math.random() * height);
+                    ctx.stroke();
+                }
+
+                // Случайные большие прямоугольники рамки
+                if (Math.random() < 0.1) {
+                    ctx.strokeStyle = neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                    ctx.lineWidth = 5 + Math.random() * 10;
+                    ctx.strokeRect(Math.random() * width * 0.8, Math.random() * height * 0.8,
+                        Math.random() * 300, Math.random() * 200);
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            // ------------------------------------------------------------
+            //  Запуск
+            // ------------------------------------------------------------
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Первоначальное заполнение
+            for (let i = 0; i < 15; i++) {
+                spawnFloatingText();
+            }
+            for (let i = 0; i < 5; i++) {
+                spawnPopupText();
+            }
+
+            animate();
+
+            // Добавим обработку клика для дополнительного безумия
+            window.addEventListener('click', (e) => {
+                for (let i = 0; i < 8; i++) {
+                    const word = crazyWords[Math.floor(Math.random() * crazyWords.length)];
+                    popupTexts.push({
+                        text: word,
+                        x: e.clientX + (Math.random() - 0.5) * 150,
+                        y: e.clientY + (Math.random() - 0.5) * 150,
+                        size: 40 + Math.random() * 100,
+                        color: neonPalette[Math.floor(Math.random() * neonPalette.length)],
+                        life: 1.0,
+                        decay: 0.05 + Math.random() * 0.1,
+                        rotation: (Math.random() - 0.5) * 60,
+                        font: 'Impact'
+                    });
+                }
+                // Встряска звезд
+                for (let star of madStars) {
+                    star.vx += (Math.random() - 0.5) * 15;
+                    star.vy += (Math.random() - 0.5) * 15;
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

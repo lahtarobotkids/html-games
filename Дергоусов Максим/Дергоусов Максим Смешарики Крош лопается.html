@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Смешарики: Крош лопается 🐰💥</title>
+    <style>
+        body {
+            margin: 0;
+            background: #c8e6c9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #8bc34a;
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+            background: #e0f2f1;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="screen" width="600" height="400"></canvas>
+    <script>
+        (function() {
+            const canvas = document.getElementById('screen');
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+
+            // ----- СЦЕНЫ -----
+            const SCENE = { INTRO: 0, INFLATE: 1, EXPLODE: 2, REPAIR: 3, OUTRO: 4 };
+            let currentScene = SCENE.INTRO;
+            let timer = 0;           // кадры внутри сцены
+            let frame = 0;           // общий счётчик
+
+            // Состояния объектов
+            let krosh = {
+                x: 200, y: H/2 + 20,
+                scale: 1.0,
+                exploded: false,
+                parts: []           // частицы после взрыва
+            };
+            let yozhik = { x: 400, y: H/2 + 30 };
+            let nyusha = { x: 500, y: H/2 + 20, visible: false };
+            let speechBubble = { text: '', timer: 0 };
+
+            // Частица взрыва (кусочки Кроша)
+            class Particle {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 3 + Math.random() * 7;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed - 2;
+                    this.life = 1;
+                    this.decay = 0.01 + Math.random() * 0.03;
+                    this.size = 3 + Math.random() * 10;
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.vy += 0.15;
+                    this.life -= this.decay;
+                }
+                draw(ctx) {
+                    ctx.globalAlpha = this.life;
+                    ctx.fillStyle = '#64b5f6';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // ----- РИСУЕМ ПЕРСОНАЖЕЙ -----
+            function drawKrosh(x, y, scale = 1) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+
+                // Тень
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(0, 30, 35, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Тело (светло-голубой шар)
+                ctx.fillStyle = '#81d4fa';
+                ctx.beginPath();
+                ctx.arc(0, 0, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#4fc3f7';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Уши (длинные)
+                ctx.fillStyle = '#81d4fa';
+                ctx.strokeStyle = '#4fc3f7';
+                ctx.lineWidth = 2;
+                // Левое ухо
+                ctx.beginPath();
+                ctx.ellipse(-20, -35, 10, 25, -0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                // Правое ухо
+                ctx.beginPath();
+                ctx.ellipse(20, -35, 10, 25, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Глаза
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-12, -5, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(12, -5, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-10, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(14, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Рот (в зависимости от ситуации)
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                if (krosh.exploded) {
+                    // грустный рот
+                    ctx.arc(0, 15, 8, 0.1 * Math.PI, 0.9 * Math.PI);
+                } else {
+                    // улыбка
+                    ctx.arc(0, 8, 10, 0.1 * Math.PI, 0.9 * Math.PI);
+                }
+                ctx.stroke();
+
+                // Нос
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath();
+                ctx.arc(0, -2, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            function drawYozhik(x, y) {
+                ctx.save();
+                ctx.translate(x, y);
+                // Тень
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(0, 28, 30, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Тело (малиновый шар)
+                ctx.fillStyle = '#ef9a9a';
+                ctx.beginPath();
+                ctx.arc(0, 0, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#e57373';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Иголки (несколько треугольников)
+                for (let i = 0; i < 8; i++) {
+                    let angle = i * Math.PI / 4 - Math.PI / 2;
+                    ctx.fillStyle = '#b71c1c';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
+                    ctx.lineTo(Math.cos(angle) * 38, Math.sin(angle) * 38);
+                    ctx.lineTo(Math.cos(angle + 0.3) * 32, Math.sin(angle + 0.3) * 32);
+                    ctx.fill();
+                }
+                // Очки
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(-12, -5, 8, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(12, -5, 8, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-4, -5);
+                ctx.lineTo(4, -5);
+                ctx.stroke();
+                // Глаза за очками
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-10, -5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(14, -5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                // Нос
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath();
+                ctx.arc(0, -2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            function drawNyusha(x, y) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(0, 28, 28, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Розовый шар
+                ctx.fillStyle = '#f48fb1';
+                ctx.beginPath();
+                ctx.arc(0, 0, 28, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#f06292';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Прическа (волнистая)
+                ctx.fillStyle = '#f48fb1';
+                ctx.beginPath();
+                ctx.arc(0, -28, 14, 0, Math.PI, true);
+                ctx.fill();
+                // Бантик
+                ctx.fillStyle = '#e91e63';
+                ctx.beginPath();
+                ctx.ellipse(-8, -38, 8, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(8, -38, 8, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Глаза
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-10, -5, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(10, -5, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-8, -5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(12, -5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#e57373';
+                ctx.beginPath();
+                ctx.arc(0, -2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // ----- ОБЩАЯ ЛОГИКА СЦЕН -----
+            function resetScene(scene) {
+                currentScene = scene;
+                timer = 0;
+                krosh.exploded = false;
+                krosh.scale = 1.0;
+                krosh.parts = [];
+                nyusha.visible = false;
+                speechBubble.timer = 0;
+                speechBubble.text = '';
+            }
+
+            function update() {
+                timer++;
+                frame++;
+                // Обновление частиц
+                krosh.parts.forEach(p => p.update());
+                krosh.parts = krosh.parts.filter(p => p.life > 0.01);
+
+                // Логика сцен
+                switch (currentScene) {
+                    case SCENE.INTRO:
+                        if (timer === 1) speechBubble.text = 'Смотри, Ёжик, я могу надуться!';
+                        if (timer > 150) resetScene(SCENE.INFLATE);
+                        break;
+                    case SCENE.INFLATE:
+                        speechBubble.text = 'Надуваюсь...';
+                        if (timer < 180) {
+                            krosh.scale += 0.008; // увеличиваем Кроша
+                            if (krosh.scale > 2.5) krosh.scale = 2.5;
+                        } else {
+                            resetScene(SCENE.EXPLODE);
+                        }
+                        break;
+                    case SCENE.EXPLODE:
+                        if (timer === 1) {
+                            krosh.exploded = true;
+                            speechBubble.text = 'БУМ!';
+                            // Создаём частицы на месте Кроша
+                            for (let i = 0; i < 60; i++) {
+                                krosh.parts.push(new Particle(krosh.x, krosh.y));
+                            }
+                        }
+                        if (timer > 120 && krosh.parts.length === 0) {
+                            resetScene(SCENE.REPAIR);
+                        }
+                        break;
+                    case SCENE.REPAIR:
+                        speechBubble.text = 'Нюша, помоги!';
+                        nyusha.visible = true;
+                        if (timer > 100) {
+                            // Появление Нюши с пластырем
+                            nyusha.x = 500 - (timer - 100);
+                            if (nyusha.x < 250) nyusha.x = 250;
+                        }
+                        if (timer > 250) {
+                            // Крош восстанавливается
+                            krosh.exploded = false;
+                            krosh.scale = 1.0;
+                            speechBubble.text = 'Спасибо!';
+                        }
+                        if (timer > 350) resetScene(SCENE.OUTRO);
+                        break;
+                    case SCENE.OUTRO:
+                        speechBubble.text = 'Всё хорошо, что хорошо кончается!';
+                        if (timer > 200) resetScene(SCENE.INTRO); // зацикливаем
+                        break;
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                // Фон (поляна)
+                ctx.fillStyle = '#a5d6a7';
+                ctx.fillRect(0, H - 80, W, 80);
+                ctx.fillStyle = '#81c784';
+                for (let i = 0; i < 15; i++) {
+                    ctx.fillRect(i * 50 + (frame % 50), H - 75, 30, 20);
+                }
+                // Небо и облака
+                ctx.fillStyle = '#e0f2f1';
+                ctx.fillRect(0, 0, W, H - 80);
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arial';
+                ctx.fillText('☁️', 50, 50);
+                ctx.fillText('☁️', 350, 30);
+                ctx.fillText('☁️', 500, 70);
+
+                // Рисуем персонажей (если не взорван)
+                if (!krosh.exploded || currentScene !== SCENE.EXPLODE) {
+                    drawKrosh(krosh.x, krosh.y, krosh.scale);
+                }
+                drawYozhik(yozhik.x, yozhik.y);
+                if (nyusha.visible) {
+                    drawNyusha(nyusha.x, nyusha.y);
+                }
+
+                // Частицы взрыва
+                krosh.parts.forEach(p => p.draw(ctx));
+
+                // Речевое облачко
+                if (speechBubble.text && speechBubble.timer < 100) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    const bx = krosh.x - 80;
+                    const by = krosh.y - 80;
+                    ctx.beginPath();
+                    ctx.roundRect(bx, by, 180, 40, 15);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = '#000';
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(speechBubble.text, bx + 90, by + 25);
+                }
+            }
+
+            // Полифил для roundRect (если нет)
+            if (!ctx.roundRect) {
+                ctx.roundRect = function(x, y, w, h, r) {
+                    if (typeof r === 'number') r = {tl: r, tr: r, br: r, bl: r};
+                    this.beginPath();
+                    this.moveTo(x + r.tl, y);
+                    this.lineTo(x + w - r.tr, y);
+                    this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+                    this.lineTo(x + w, y + h - r.br);
+                    this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+                    this.lineTo(x + r.bl, y + h);
+                    this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+                    this.lineTo(x, y + r.tl);
+                    this.quadraticCurveTo(x, y, x + r.tl, y);
+                    this.closePath();
+                    return this;
+                };
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            // Старт
+            resetScene(SCENE.INTRO);
+            loop();
+        })();
+    </script>
+</body>
+</html>

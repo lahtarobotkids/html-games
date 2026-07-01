@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Смешарики: Возвращение Копатыча и жомоскреп (исправлено)</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a3b2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+        }
+        #container {
+            position: relative;
+            width: 800px;
+            height: 500px;
+            background: #b1d8fc;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            cursor: pointer;
+        }
+        #overlay button {
+            padding: 20px 50px;
+            font-size: 28px;
+            border: none;
+            border-radius: 50px;
+            background: #ffd966;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        #overlay button:hover {
+            background: #ffb703;
+        }
+        #controls {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 5;
+        }
+        .ctrl-btn {
+            padding: 10px 25px;
+            font-size: 18px;
+            border: none;
+            border-radius: 30px;
+            background: #ffd966;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .ctrl-btn:hover {
+            background: #ffb703;
+        }
+        #status {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: rgba(255,255,255,0.9);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 5;
+        }
+        #muteBtn {
+            background: #e0e0e0;
+        }
+        #muteBtn.muted {
+            background: #ff8c8c;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <canvas id="cartoonCanvas" width="800" height="500"></canvas>
+    <div id="overlay">
+        <button id="enableSoundBtn">🔊 Включить звук</button>
+    </div>
+    <div id="controls">
+        <button class="ctrl-btn" id="playPauseBtn">⏯️ Пауза</button>
+        <button class="ctrl-btn" id="restartBtn">🔄 Заново</button>
+        <button class="ctrl-btn" id="muteBtn" title="Вкл/Выкл звук">🔊</button>
+    </div>
+    <div id="status">Сцена 1</div>
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('cartoonCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ---------- ГЛОБАЛЬНОЕ СОСТОЯНИЕ ----------
+        let currentSceneIndex = 0;
+        let dialogueIndex = 0;
+        let fadeAlpha = 0;           // 0..1 для затемнения
+        let paused = false;
+        let audioEnabled = true;
+        let userInteracted = false;
+        let isSpeaking = false;
+        let speechTimeout = null;
+        let sceneTransitionTimer = null;  // таймер для перехода между сценами после окончания диалогов
+
+        const DIALOGUE_SPEED = 3.8;  // для неозвучиваемых реплик (all)
+
+        // ---------- ЗВУКОВАЯ ПОДСИСТЕМА ----------
+        let audioCtx = null;
+
+        function tryCreateAudioContext() {
+            if (!audioCtx) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                } catch(e) {
+                    console.warn("Web Audio API не поддерживается");
+                }
+            }
+            return audioCtx;
+        }
+
+        function resumeAudio() {
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function stopAllSound() {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            isSpeaking = false;
+            if (speechTimeout) {
+                clearTimeout(speechTimeout);
+                speechTimeout = null;
+            }
+            if (sceneTransitionTimer) {
+                clearTimeout(sceneTransitionTimer);
+                sceneTransitionTimer = null;
+            }
+        }
+
+        function speak(text, characterType, onEnd) {
+            if (!audioEnabled || characterType === 'all') {
+                if (onEnd) onEnd();
+                return;
+            }
+            if (!window.speechSynthesis) {
+                if (onEnd) onEnd();
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+            isSpeaking = true;
+
+            let utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ru-RU';
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            let ruVoices = voices.filter(v => v.lang.startsWith('ru'));
+            if (ruVoices.length > 0) {
+                switch(characterType) {
+                    case 'kopatych':
+                        let maleLow = ruVoices.find(v => v.name.includes('Yuri') || v.name.toLowerCase().includes('male'));
+                        utterance.voice = maleLow || ruVoices[0];
+                        utterance.pitch = 0.7;
+                        utterance.rate = 0.85;
+                        break;
+                    case 'pin':
+                        let maleHigh = ruVoices.find(v => v.name.includes('Google') && v.name.includes('Male'));
+                        utterance.voice = maleHigh || ruVoices[0];
+                        utterance.pitch = 1.2;
+                        utterance.rate = 0.95;
+                        break;
+                    case 'losyash':
+                        utterance.voice = ruVoices[0];
+                        utterance.pitch = 0.9;
+                        utterance.rate = 0.9;
+                        break;
+                    case 'karkarych':
+                        utterance.voice = ruVoices[0];
+                        utterance.pitch = 0.8;
+                        utterance.rate = 0.85;
+                        break;
+                    case 'sovunya':
+                        let female = ruVoices.find(v => v.name.toLowerCase().includes('female'));
+                        utterance.voice = female || ruVoices[0];
+                        utterance.pitch = 1.3;
+                        utterance.rate = 0.95;
+                        break;
+                    case 'barash':
+                        utterance.voice = ruVoices[0];
+                        utterance.pitch = 1.0;
+                        utterance.rate = 0.9;
+                        break;
+                    default:
+                        utterance.voice = ruVoices[0];
+                }
+            }
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                if (onEnd) onEnd();
+            };
+            utterance.onerror = (e) => {
+                console.warn("Speech error:", e);
+                isSpeaking = false;
+                if (onEnd) onEnd();
+            };
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function playSoundEffect(type) {
+            if (!audioEnabled || !audioCtx) return;
+            resumeAudio();
+            if (audioCtx.state === 'suspended') return;
+            const now = audioCtx.currentTime;
+            switch(type) {
+                case 'airplane':
+                    {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(120, now);
+                        osc.frequency.linearRampToValueAtTime(80, now + 2);
+                        gain.gain.setValueAtTime(0.4, now);
+                        gain.gain.linearRampToValueAtTime(0.1, now + 2);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 2.5);
+                    }
+                    break;
+                case 'explosion':
+                    {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+                        gain.gain.setValueAtTime(0.5, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.4);
+                    }
+                    break;
+                case 'creak':
+                    {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(800, now);
+                        osc.frequency.setValueAtTime(1200, now + 0.05);
+                        osc.frequency.setValueAtTime(600, now + 0.1);
+                        gain.gain.setValueAtTime(0.4, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.2);
+                    }
+                    break;
+                case 'machine':
+                    {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(200, now);
+                        osc.frequency.setValueAtTime(180, now + 0.5);
+                        osc.frequency.setValueAtTime(220, now + 1);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.linearRampToValueAtTime(0.1, now + 1.5);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 1.5);
+                    }
+                    break;
+                case 'typewriter':
+                    for(let i = 0; i < 5; i++) {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(1000, now + i*0.08);
+                        gain.gain.setValueAtTime(0.35, now + i*0.08);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + i*0.08 + 0.05);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now + i*0.08);
+                        osc.stop(now + i*0.08 + 0.05);
+                    }
+                    break;
+                case 'boom':
+                    {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(80, now);
+                        osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                        gain.gain.setValueAtTime(0.6, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.3);
+                    }
+                    break;
+                default: break;
+            }
+        }
+
+        // ---------- РИСОВАНИЕ (без изменений) ----------
+        function drawKopatych(x, y, scale = 1, expression = 'neutral') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#8B5A2B';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 35, 40, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#6b431a';
+            ctx.beginPath();
+            ctx.arc(-25, -30, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(25, -30, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#E6C280';
+            ctx.beginPath();
+            ctx.ellipse(0, -40, 38, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#C8A34E';
+            ctx.beginPath();
+            ctx.ellipse(0, -42, 22, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#1C1C1C';
+            ctx.beginPath();
+            ctx.arc(-10 + (expression === 'angry' ? -3 : 0), -5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(14 + (expression === 'angry' ? 3 : 0), -5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#3D2B1F';
+            ctx.beginPath();
+            ctx.arc(0, 5, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(0, 15, 4, 0, Math.PI);
+            ctx.strokeStyle = '#3D2B1F';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawPin(x, y, scale = 1, expression = 'neutral') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#1A1A24';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 30, 45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#F0F0F0';
+            ctx.beginPath();
+            ctx.ellipse(0, 8, 18, 28, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#1A1A24';
+            ctx.beginPath();
+            ctx.arc(0, -40, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFA500';
+            ctx.beginPath();
+            ctx.moveTo(-5, -40);
+            ctx.lineTo(0, -25);
+            ctx.lineTo(5, -40);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.arc(0, -47, 23, 0, Math.PI, true);
+            ctx.fill();
+            ctx.fillRect(-25, -47, 50, 10);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-8, -37, 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(8, -37, 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#87CEEB';
+            ctx.beginPath();
+            ctx.arc(-8, -37, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(8, -37, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawLosyash(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#B8860B';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 35, 45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#B8860B';
+            ctx.beginPath();
+            ctx.arc(0, -35, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#5C4033';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-15, -50);
+            ctx.lineTo(-30, -65);
+            ctx.lineTo(-20, -55);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(15, -50);
+            ctx.lineTo(30, -65);
+            ctx.lineTo(20, -55);
+            ctx.stroke();
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-10, -35, 9, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12, -35, 9, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#FFF';
+            ctx.beginPath();
+            ctx.arc(-10, -35, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -35, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(-10, -35, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -35, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawKarKarych(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#2F2F2F';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 30, 42, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#2F2F2F';
+            ctx.beginPath();
+            ctx.arc(0, -35, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFA500';
+            ctx.beginPath();
+            ctx.moveTo(-10, -35);
+            ctx.lineTo(0, -20);
+            ctx.lineTo(10, -35);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#111';
+            ctx.fillRect(-18, -65, 36, 20);
+            ctx.fillStyle = '#1c1c1c';
+            ctx.fillRect(-22, -55, 44, 10);
+            ctx.restore();
+        }
+
+        function drawSovunya(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#8B6B4D';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 33, 43, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8B6B4D';
+            ctx.beginPath();
+            ctx.arc(0, -33, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#6B4F3A';
+            ctx.beginPath();
+            ctx.moveTo(-15, -50);
+            ctx.lineTo(-25, -65);
+            ctx.lineTo(-5, -45);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(15, -50);
+            ctx.lineTo(25, -65);
+            ctx.lineTo(5, -45);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-10, -35, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -35, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(-10, -35, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -35, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawBarash(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#E6D3C8';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 38, 42, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#C8B2A6';
+            for (let i = 0; i < 8; i++) {
+                let angle = (i / 8) * Math.PI * 2;
+                let bx = Math.cos(angle) * 30;
+                let by = Math.sin(angle) * 32;
+                ctx.beginPath();
+                ctx.arc(bx, by, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#D2B4A5';
+            ctx.beginPath();
+            ctx.arc(0, -30, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#6A5ACD';
+            ctx.beginPath();
+            ctx.ellipse(0, -42, 20, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#483D8B';
+            ctx.beginPath();
+            ctx.arc(0, -44, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawAirplane(x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#C0C0C0';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 40, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.ellipse(10, -5, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#708090';
+            ctx.beginPath();
+            ctx.moveTo(-15, -5);
+            ctx.lineTo(-40, -25);
+            ctx.lineTo(-45, -15);
+            ctx.lineTo(-20, 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-15, 5);
+            ctx.lineTo(-40, 25);
+            ctx.lineTo(-45, 15);
+            ctx.lineTo(-20, -2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.ellipse(40, 0, 5, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawSpeechBubble(x, y, text) {
+            ctx.save();
+            let lines = [];
+            let maxWidth = 160;
+            let words = text.split(' ');
+            let line = '';
+            for (let w of words) {
+                let test = line + w + ' ';
+                if (ctx.measureText(test).width > maxWidth && line !== '') {
+                    lines.push(line.trim());
+                    line = w + ' ';
+                } else line = test;
+            }
+            lines.push(line.trim());
+            let bubbleHeight = lines.length * 18 + 25;
+            let bubbleWidth = Math.min(maxWidth + 30, ctx.measureText(text).width + 30);
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(x - bubbleWidth/2, y - bubbleHeight, bubbleWidth, bubbleHeight, 15);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y);
+            ctx.lineTo(x + 10, y);
+            ctx.lineTo(x, y + 12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+            ctx.fillStyle = '#000';
+            ctx.font = '14px Comic Sans MS, Arial';
+            ctx.textAlign = 'center';
+            for (let i = 0; i < lines.length; i++) {
+                ctx.fillText(lines[i], x, y - bubbleHeight + 20 + i * 18);
+            }
+            ctx.restore();
+        }
+
+        function drawBackground(bg) {
+            if (bg === 'airfield') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 500);
+                grad.addColorStop(0, '#87CEEB');
+                grad.addColorStop(1, '#98FB98');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 800, 500);
+                ctx.fillStyle = '#8B7355';
+                ctx.fillRect(0, 400, 800, 100);
+                ctx.fillStyle = '#556B2F';
+                ctx.fillRect(0, 390, 800, 15);
+            } else if (bg === 'square') {
+                ctx.fillStyle = '#7ec850';
+                ctx.fillRect(0, 0, 800, 500);
+                ctx.fillStyle = '#d4a373';
+                ctx.fillRect(100, 300, 600, 150);
+            } else if (bg === 'hangar') {
+                ctx.fillStyle = '#4a4a4a';
+                ctx.fillRect(0, 0, 800, 500);
+                ctx.fillStyle = '#6b6b6b';
+                for (let i = 0; i < 10; i++) {
+                    ctx.fillRect(100 + i*70, 200, 10, 300);
+                }
+            } else if (bg === 'evening') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 500);
+                grad.addColorStop(0, '#FF7F50');
+                grad.addColorStop(1, '#2E0854');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 800, 500);
+            }
+        }
+
+        // ---------- СЦЕНЫ И ДИАЛОГИ ----------
+        const scenes = [
+            {
+                bg: 'airfield',
+                characters: [
+                    { type: 'kopatych', x: 250, y: 370, scale: 1, expression: 'happy' },
+                ],
+                extra: { airplane: { x: 180, y: 360, scale: 1.2 } },
+                dialogues: [
+                    { speaker: 'kopatych', text: 'Фух, ну и перелёт! Ромашковая долина, как я скучал! Сейчас всех обниму...', sound: 'airplane' },
+                    { speaker: 'kopatych', text: 'Ой, а что это с вами? Пин тащит какой-то ржавый ящик, Совунья метёт драным веником...', sound: null }
+                ]
+            },
+            {
+                bg: 'square',
+                characters: [
+                    { type: 'pin', x: 120, y: 350, scale: 1 },
+                    { type: 'losyash', x: 280, y: 360, scale: 1 },
+                    { type: 'karkarych', x: 440, y: 350, scale: 1 },
+                    { type: 'sovunya', x: 600, y: 360, scale: 1 },
+                    { type: 'barash', x: 720, y: 350, scale: 1 },
+                    { type: 'kopatych', x: 400, y: 420, scale: 1.1, expression: 'shocked' }
+                ],
+                dialogues: [
+                    { speaker: 'pin', text: 'Копатыч, гляди! Жомоскрепный пылесос – он не сосёт, а разбрасывает пыль! Зато звук мотора как симфония!', sound: 'machine' },
+                    { speaker: 'losyash', text: 'А я изобрёл машину времени на жомоскрепных транзисторах. Она не перемещает, зато красиво мигает.', sound: null },
+                    { speaker: 'karkarych', text: 'Я нашёл пластинку, которая играет только шипение! Это подлинный дух эпохи!', sound: 'creak' },
+                    { speaker: 'sovunya', text: 'Мой новый рецепт – пирожки с опилками, как в блокаду! Полезно для зубов.', sound: null },
+                    { speaker: 'barash', text: 'Я пишу стихи на бересте углём! Рифмы исчезают, но в этом глубина.', sound: 'typewriter' },
+                    { speaker: 'kopatych', text: 'Вы что, с ума посходили? Это ж антикварная лихорадка! Жомоскреп вас поразил!', sound: null }
+                ]
+            },
+            {
+                bg: 'airfield',
+                characters: [
+                    { type: 'kopatych', x: 400, y: 380, scale: 1.1, expression: 'neutral' }
+                ],
+                extra: { airplane: { x: 150, y: 370, scale: 1 } },
+                dialogues: [
+                    { speaker: 'kopatych', text: 'Надо их вылечить! Дед рассказывал: против жомоскрепа помогает только суперновинка... или абсолютный жомоскреп.', sound: null },
+                    { speaker: 'kopatych', text: 'Попробую собрать их в ангаре и покажу настоящий прогресс!', sound: null }
+                ]
+            },
+            {
+                bg: 'hangar',
+                characters: [
+                    { type: 'kopatych', x: 200, y: 350, scale: 1 },
+                    { type: 'pin', x: 400, y: 370, scale: 0.9 },
+                    { type: 'losyash', x: 550, y: 360, scale: 0.9 },
+                    { type: 'karkarych', x: 700, y: 370, scale: 0.9 }
+                ],
+                dialogues: [
+                    { speaker: 'kopatych', text: 'Друзья! Вот супер-пупер-гаджет 2026. Он печёт, стирает, читает стихи и предсказывает ураганы!', sound: null },
+                    { speaker: 'pin', text: 'Фу, пластик! Холодный, души нет. Жомоскреп милее.', sound: null },
+                    { speaker: 'kopatych', text: 'Ну тогда получайте! Включаю Абсолютный Жомоскреп-3000!', sound: 'machine' },
+                    { speaker: 'all', text: '*Машина скрежещет, плюётся дымом, взрывается банка варенья*', sound: 'explosion' },
+                    { speaker: 'kopatych', text: 'Ну что, всё ещё любите старьё?', sound: null },
+                    { speaker: 'pin', text: 'Прости, Копатыч! Я хочу обратно свой нано-культиватор...', sound: null },
+                    { speaker: 'losyash', text: 'И я лучше буду пользоваться Открывашкой 3000...', sound: null }
+                ]
+            },
+            {
+                bg: 'evening',
+                characters: [
+                    { type: 'kopatych', x: 300, y: 380, scale: 1, expression: 'happy' },
+                    { type: 'pin', x: 500, y: 380, scale: 1, expression: 'neutral' }
+                ],
+                dialogues: [
+                    { speaker: 'kopatych', text: 'Старое уважать надо, но и новое не стоит отвергать. Всему своё место.', sound: null },
+                    { speaker: 'pin', text: 'Ты прав, Копатыч. Жомоскреп – это память, а не образ жизни.', sound: null }
+                ]
+            }
+        ];
+        const totalScenes = scenes.length;
+
+        // ---------- ОТРИСОВКА СЦЕНЫ ----------
+        function drawScene() {
+            let scene = scenes[currentSceneIndex];
+            drawBackground(scene.bg);
+            if (scene.extra && scene.extra.airplane) {
+                drawAirplane(scene.extra.airplane.x, scene.extra.airplane.y, scene.extra.airplane.scale);
+            }
+            for (let ch of scene.characters) {
+                switch (ch.type) {
+                    case 'kopatych': drawKopatych(ch.x, ch.y, ch.scale || 1, ch.expression || 'neutral'); break;
+                    case 'pin': drawPin(ch.x, ch.y, ch.scale || 1, ch.expression || 'neutral'); break;
+                    case 'losyash': drawLosyash(ch.x, ch.y, ch.scale || 1); break;
+                    case 'karkarych': drawKarKarych(ch.x, ch.y, ch.scale || 1); break;
+                    case 'sovunya': drawSovunya(ch.x, ch.y, ch.scale || 1); break;
+                    case 'barash': drawBarash(ch.x, ch.y, ch.scale || 1); break;
+                }
+            }
+            if (dialogueIndex < scene.dialogues.length) {
+                let d = scene.dialogues[dialogueIndex];
+                let speakerCh = scene.characters.find(c => c.type === d.speaker);
+                if (!speakerCh) speakerCh = scene.characters[0];
+                let bx = speakerCh ? speakerCh.x : 400;
+                let by = speakerCh ? speakerCh.y - 80 : 250;
+                if (d.speaker === 'all') { bx = 400; by = 150; }
+                drawSpeechBubble(bx, by, d.text);
+            }
+            document.getElementById('status').innerText = `Сцена ${currentSceneIndex+1}/${totalScenes}`;
+            if (fadeAlpha > 0) {
+                ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+                ctx.fillRect(0, 0, 800, 500);
+            }
+        }
+
+        // ---------- УПРАВЛЕНИЕ ДИАЛОГАМИ И СЦЕНАМИ ----------
+        function goToNextDialogue() {
+            if (paused) return;
+            let scene = scenes[currentSceneIndex];
+            dialogueIndex++;
+            if (dialogueIndex >= scene.dialogues.length) {
+                // конец сцены: плавное затемнение, потом переключение
+                stopAllSound();
+                fadeAlpha = 0.01;   // начинаем затемнение
+                sceneTransitionTimer = setTimeout(switchToNextScene, 800); // через 0.8 сек сменим сцену
+            } else {
+                // продолжаем текущую сцену
+                let d = scene.dialogues[dialogueIndex];
+                if (d.sound) playSoundEffect(d.sound);
+                if (d.speaker === 'all' || !audioEnabled) {
+                    speechTimeout = setTimeout(() => {
+                        speechTimeout = null;
+                        goToNextDialogue();
+                    }, DIALOGUE_SPEED * 1000);
+                } else {
+                    speak(d.text, d.speaker, () => {
+                        if (!paused) goToNextDialogue();
+                    });
+                }
+            }
+        }
+
+        function switchToNextScene() {
+            sceneTransitionTimer = null;
+            currentSceneIndex = (currentSceneIndex + 1) % totalScenes;
+            dialogueIndex = 0;
+            fadeAlpha = 1;   // экран чёрный, начинаем проявление
+            // Проявление будет в цикле отрисовки
+            // Как только проявится – запустим первую реплику
+            // Это делается в updateLoop при fadeAlpha > 0 и после проявления.
+        }
+
+        function startCurrentDialogue() {
+            if (paused) return;
+            let scene = scenes[currentSceneIndex];
+            if (dialogueIndex < scene.dialogues.length) {
+                let d = scene.dialogues[dialogueIndex];
+                if (d.sound) playSoundEffect(d.sound);
+                if (d.speaker === 'all' || !audioEnabled) {
+                    speechTimeout = setTimeout(() => {
+                        speechTimeout = null;
+                        goToNextDialogue();
+                    }, DIALOGUE_SPEED * 1000);
+                } else {
+                    speak(d.text, d.speaker, () => {
+                        if (!paused) goToNextDialogue();
+                    });
+                }
+            }
+        }
+
+        // ---------- ГЛАВНЫЙ ЦИКЛ ОТРИСОВКИ И ОБРАБОТКИ FADE ----------
+        function updateLoop(timestamp) {
+            if (!userInteracted) {
+                // Ждём нажатия "Включить звук", ничего не делаем
+                drawScene();
+                requestAnimationFrame(updateLoop);
+                return;
+            }
+            resumeAudio();
+
+            // Обрабатываем проявление/затемнение fadeAlpha
+            if (fadeAlpha > 0 && fadeAlpha < 1) {
+                if (dialogueIndex >= scenes[currentSceneIndex].dialogues.length) {
+                    // Идёт затемнение перед сменой сцены
+                    fadeAlpha += 0.03;
+                    if (fadeAlpha >= 1) {
+                        fadeAlpha = 1;
+                        // Смена сцены произойдёт по таймеру (switchToNextScene уже вызван)
+                    }
+                } else {
+                    // Идёт проявление новой сцены
+                    fadeAlpha -= 0.03;
+                    if (fadeAlpha <= 0) {
+                        fadeAlpha = 0;
+                        // Сцена полностью проявилась – запускаем первую реплику
+                        startCurrentDialogue();
+                    }
+                }
+            }
+
+            drawScene();
+            requestAnimationFrame(updateLoop);
+        }
+
+        // ---------- ЗАПУСК ПОСЛЕ ВКЛЮЧЕНИЯ ЗВУКА ----------
+        function enableAudioAndStart() {
+            tryCreateAudioContext();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume().then(() => {
+                    userInteracted = true;
+                    document.getElementById('overlay').style.display = 'none';
+                    // Начинаем первую сцену (fadeAlpha=0, реплика 0)
+                    startCurrentDialogue();
+                    requestAnimationFrame(updateLoop);
+                }).catch(e => {
+                    alert("Не удалось включить звук. Разрешите аудио в настройках браузера и обновите страницу.");
+                });
+            } else {
+                userInteracted = true;
+                document.getElementById('overlay').style.display = 'none';
+                startCurrentDialogue();
+                requestAnimationFrame(updateLoop);
+            }
+        }
+
+        document.getElementById('enableSoundBtn').addEventListener('click', enableAudioAndStart);
+        canvas.addEventListener('click', () => {
+            if (!userInteracted) enableAudioAndStart();
+            else resumeAudio();
+        });
+
+        document.getElementById('playPauseBtn').addEventListener('click', () => {
+            if (!userInteracted) return;
+            paused = !paused;
+            document.getElementById('playPauseBtn').innerText = paused ? '▶️ Играть' : '⏯️ Пауза';
+            if (paused) {
+                stopAllSound();
+            } else {
+                // Возобновляем: если сейчас идёт реплика, она продолжит (speak onend запустит следующую)
+                // Если нет активной речи – запускаем текущую реплику заново
+                if (!isSpeaking && !speechTimeout && fadeAlpha === 0) {
+                    startCurrentDialogue();
+                }
+            }
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            if (!userInteracted) {
+                enableAudioAndStart();
+                return;
+            }
+            stopAllSound();
+            currentSceneIndex = 0;
+            dialogueIndex = 0;
+            fadeAlpha = 0;
+            paused = false;
+            document.getElementById('playPauseBtn').innerText = '⏯️ Пауза';
+            startCurrentDialogue();
+        });
+
+        const muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', () => {
+            if (!userInteracted) return;
+            audioEnabled = !audioEnabled;
+            muteBtn.innerText = audioEnabled ? '🔊' : '🔇';
+            muteBtn.classList.toggle('muted', !audioEnabled);
+            if (!audioEnabled) {
+                stopAllSound();
+            } else {
+                if (!paused && fadeAlpha === 0 && !isSpeaking && !speechTimeout) {
+                    startCurrentDialogue();
+                }
+            }
+        });
+
+        window.speechSynthesis.onvoiceschanged = () => {};
+
+        // Первоначальная отрисовка (до взаимодействия)
+        requestAnimationFrame(updateLoop);
+    })();
+</script>
+</body>
+</html>
