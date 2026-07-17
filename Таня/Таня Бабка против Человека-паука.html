@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Бабка против Человека-паука</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1e2b3c;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 15px;
+            user-select: none;
+        }
+        .wrapper {
+            width: 100%;
+            max-width: 850px;
+            aspect-ratio: 800 / 500;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7), 0 0 0 5px #f4a261, 0 0 0 10px #264653;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 14px;
+            cursor: pointer;
+        }
+        .controls {
+            margin-top: 14px;
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background: #f4a261;
+            color: #264653;
+            border: 3px solid #264653;
+            padding: 10px 22px;
+            border-radius: 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #e9c46a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(244,162,97,0.5);
+        }
+        button:active {
+            transform: scale(0.94);
+        }
+        .info {
+            color: #f4a261;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <canvas id="cartoonCanvas"></canvas>
+    </div>
+    <div class="controls">
+        <button id="restartBtn">🔄 Заново</button>
+        <span class="info" id="sceneText">Сцена <span style="color:#e9c46a;">1/4</span></span>
+        <button id="skipBtn">⏭ Дальше</button>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('cartoonCanvas');
+            const ctx = canvas.getContext('2d');
+            const W = 800, H = 500;
+            canvas.width = W;
+            canvas.height = H;
+
+            // Сцены и их начало (секунды)
+            const SCENES = [
+                { name: 'Встреча с бутылкой', start: 0 },
+                { name: 'Швабра возмездия', start: 4.5 },
+                { name: 'Спецназ приехал', start: 11 },
+                { name: 'Арест и радость', start: 18 }
+            ];
+            const TOTAL_TIME = 26;
+            let animTime = 0;
+            let playing = true;
+            let lastFrame = null;
+            let reqId = null;
+
+            // --- Рисование персонажей ---
+
+            function drawGrandma(x, y, scale, holding = 'none') {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Платье (цветастый фартук)
+                ctx.fillStyle = '#6b4c3b';
+                ctx.beginPath();
+                ctx.moveTo(-18, -2);
+                ctx.lineTo(-22, 42);
+                ctx.lineTo(22, 42);
+                ctx.lineTo(18, -2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#4a3328';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Фартук
+                ctx.fillStyle = '#d9b99b';
+                ctx.fillRect(-14, 8, 28, 32);
+                ctx.strokeStyle = '#b8956e';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(-14, 8, 28, 32);
+                // Голова
+                ctx.fillStyle = '#f5d5b8';
+                ctx.beginPath();
+                ctx.arc(0, -16, 18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#c49a6c';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                // Платок
+                ctx.fillStyle = '#b8473c';
+                ctx.beginPath();
+                ctx.arc(0, -22, 19, Math.PI, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-18, -18);
+                ctx.lineTo(-20, -38);
+                ctx.lineTo(-2, -22);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(18, -18);
+                ctx.lineTo(20, -38);
+                ctx.lineTo(2, -22);
+                ctx.closePath();
+                ctx.fill();
+                // Узелок платка
+                ctx.fillStyle = '#8b2e2a';
+                ctx.beginPath();
+                ctx.arc(0, -38, 5, 0, Math.PI * 2);
+                ctx.fill();
+                // Очки
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(-7, -20, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(7, -20, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-1, -20);
+                ctx.lineTo(1, -20);
+                ctx.stroke();
+                // Глаза
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-7, -19, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(7, -19, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.arc(-6, -18, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(8, -18, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+                // Рот (сердитый или улыбка)
+                ctx.strokeStyle = '#b8473c';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, -8, 6, 0.3, Math.PI - 0.3);
+                ctx.stroke();
+                // Руки
+                ctx.fillStyle = '#f5d5b8';
+                ctx.strokeStyle = '#c49a6c';
+                ctx.lineWidth = 2;
+                if (holding === 'broom') {
+                    // Правая рука держит швабру
+                    ctx.beginPath();
+                    ctx.moveTo(16, 10);
+                    ctx.lineTo(30, 5);
+                    ctx.stroke();
+                    // Швабра (палка + тряпка)
+                    ctx.fillStyle = '#8b5a2b';
+                    ctx.fillRect(28, -30, 6, 55);
+                    ctx.strokeStyle = '#5a3a1a';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(28, -30, 6, 55);
+                    // Тряпка
+                    ctx.fillStyle = '#a0a0a0';
+                    ctx.beginPath();
+                    ctx.moveTo(28, -32);
+                    ctx.lineTo(22, -48);
+                    ctx.lineTo(38, -48);
+                    ctx.lineTo(34, -32);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = '#666';
+                    ctx.stroke();
+                } else if (holding === 'bottle') {
+                    // Левая рука с бутылкой
+                    ctx.beginPath();
+                    ctx.moveTo(-16, 10);
+                    ctx.lineTo(-30, 2);
+                    ctx.stroke();
+                    ctx.fillStyle = '#4a7a3a';
+                    ctx.beginPath();
+                    ctx.rect(-34, -12, 10, 24);
+                    ctx.fill();
+                    ctx.strokeStyle = '#2a4a1a';
+                    ctx.stroke();
+                    ctx.fillStyle = '#2a4a1a';
+                    ctx.fillRect(-32, -18, 6, 8);
+                } else {
+                    // Обе руки опущены
+                    ctx.beginPath();
+                    ctx.moveTo(-16, 10);
+                    ctx.lineTo(-26, 28);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(16, 10);
+                    ctx.lineTo(26, 28);
+                    ctx.stroke();
+                }
+                // Ноги в тапочках
+                ctx.fillStyle = '#3a3a3a';
+                ctx.fillRect(-10, 42, 8, 18);
+                ctx.fillRect(2, 42, 8, 18);
+                ctx.fillStyle = '#d4a373';
+                ctx.fillRect(-12, 56, 12, 8);
+                ctx.fillRect(0, 56, 12, 8);
+                ctx.restore();
+            }
+
+            function drawSpiderMan(x, y, scale, pose = 'stand') {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Тело
+                ctx.fillStyle = '#c41e1e';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, 14, 22, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a6e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Синие вставки
+                ctx.fillStyle = '#1a1a6e';
+                ctx.beginPath();
+                ctx.ellipse(-6, 12, 6, 12, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(6, 12, 6, 12, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+                // Паутина
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                for (let i = -3; i <= 3; i += 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -10);
+                    ctx.lineTo(i * 3, 20);
+                    ctx.stroke();
+                }
+                // Голова
+                ctx.fillStyle = '#c41e1e';
+                ctx.beginPath();
+                ctx.arc(0, -18, 15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a6e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Глаза
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.ellipse(-5, -20, 5, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(5, -20, 5, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-5, -20, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(5, -20, 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Руки и ноги
+                ctx.strokeStyle = '#c41e1e';
+                ctx.lineWidth = 5;
+                if (pose === 'stand') {
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-24, -10); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(24, -10); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 22); ctx.lineTo(-18, 38); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 22); ctx.lineTo(18, 38); ctx.stroke();
+                } else if (pose === 'hurt') {
+                    ctx.save();
+                    ctx.translate(0, 15);
+                    ctx.rotate(0.4);
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-20, -5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(18, 5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 22); ctx.lineTo(-14, 36); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 22); ctx.lineTo(8, 36); ctx.stroke();
+                    ctx.restore();
+                    // Звездочки боли
+                    ctx.fillStyle = '#ffcc00';
+                    for (let i = 0; i < 4; i++) {
+                        ctx.beginPath();
+                        ctx.arc(-20 + i * 10, -30 + Math.sin(i) * 8, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else if (pose === 'defeated') {
+                    ctx.save();
+                    ctx.translate(0, 20);
+                    ctx.rotate(0.8);
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-18, 8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(16, 8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 22); ctx.lineTo(-16, 38); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 22); ctx.lineTo(12, 38); ctx.stroke();
+                    ctx.restore();
+                    // Закрытые глаза (крестики)
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(-8, -22); ctx.lineTo(-2, -16); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-2, -22); ctx.lineTo(-8, -16); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(2, -22); ctx.lineTo(8, -16); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(8, -22); ctx.lineTo(2, -16); ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawSWAT(x, y, scale) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(-14, 0, 28, 38);
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-14, 0, 28, 38);
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-12, 4, 24, 20);
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(0, -12, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#555';
+                ctx.stroke();
+                ctx.fillStyle = '#444';
+                ctx.beginPath();
+                ctx.ellipse(0, -12, 10, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.fillRect(-6, -16, 12, 4);
+                ctx.fillStyle = '#3a3a6e';
+                ctx.fillRect(-24, -2, 10, 28);
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-24, -2, 10, 28);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('SWAT', -19, 16);
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fillRect(18, -6, 5, 26);
+                ctx.restore();
+            }
+
+            function drawNeighbor(x, y, scale, joy = false) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                ctx.fillStyle = '#e6b85c';
+                ctx.fillRect(-10, 0, 20, 32);
+                ctx.strokeStyle = '#b8843c';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(-10, 0, 20, 32);
+                ctx.fillStyle = '#f5d5b8';
+                ctx.beginPath();
+                ctx.arc(0, -10, 13, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#c49a6c';
+                ctx.stroke();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-4, -12, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(4, -12, 2, 0, Math.PI * 2); ctx.fill();
+                if (joy) {
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.arc(0, -5, 5, 0.2, Math.PI - 0.2); ctx.stroke();
+                    // Руки вверх
+                    ctx.strokeStyle = '#f5d5b8';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(-10, 6); ctx.lineTo(-22, -8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 6); ctx.lineTo(22, -8); ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawInterior() {
+                // Комната: стены, пол, коврик
+                ctx.fillStyle = '#f5e6d3';
+                ctx.fillRect(0, 0, W, H * 0.65);
+                ctx.fillStyle = '#d9b99b';
+                ctx.fillRect(0, H * 0.65, W, H * 0.35);
+                // Окно
+                ctx.fillStyle = '#c8e8f8';
+                ctx.fillRect(600, H * 0.15, 90, 90);
+                ctx.strokeStyle = '#8b5e3c';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(600, H * 0.15, 90, 90);
+                ctx.beginPath();
+                ctx.moveTo(645, H * 0.15);
+                ctx.lineTo(645, H * 0.15 + 90);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(600, H * 0.15 + 45);
+                ctx.lineTo(690, H * 0.15 + 45);
+                ctx.stroke();
+                // Картина на стене
+                ctx.fillStyle = '#8b5e3c';
+                ctx.fillRect(50, H * 0.25, 70, 50);
+                ctx.fillStyle = '#d4a373';
+                ctx.fillRect(55, H * 0.28, 60, 44);
+            }
+
+            // Определение текущей сцены
+            function getSceneInfo() {
+                let idx = 0;
+                for (let i = SCENES.length - 1; i >= 0; i--) {
+                    if (animTime >= SCENES[i].start) {
+                        idx = i;
+                        break;
+                    }
+                }
+                const start = SCENES[idx].start;
+                const end = (idx < SCENES.length - 1) ? SCENES[idx + 1].start : TOTAL_TIME;
+                const progress = (end - start) > 0 ? (animTime - start) / (end - start) : 1;
+                return { idx, progress: Math.min(1, Math.max(0, progress)) };
+            }
+
+            function render() {
+                ctx.clearRect(0, 0, W, H);
+                const { idx, progress } = getSceneInfo();
+                // Фон зависит от сцены: в доме или на улице
+                if (idx <= 1) {
+                    drawInterior();
+                } else {
+                    // Улица
+                    const grad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+                    grad.addColorStop(0, '#4a90e2');
+                    grad.addColorStop(1, '#b8d4f0');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, W, H);
+                    // Дома
+                    for (let i = 0; i < 4; i++) {
+                        let bx = 40 + i * 180;
+                        ctx.fillStyle = '#8a9aaa';
+                        ctx.fillRect(bx, H * 0.45, 90, 120);
+                        ctx.strokeStyle = '#4a5a6a';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(bx, H * 0.45, 90, 120);
+                    }
+                    ctx.fillStyle = '#555';
+                    ctx.fillRect(0, H * 0.66, W, H * 0.08);
+                }
+
+                if (idx === 0) {
+                    // Бабка входит, Паук ждет
+                    const grandmaX = 150 + progress * 120;
+                    drawGrandma(grandmaX, H * 0.48, 1.0, 'none');
+                    drawSpiderMan(550, H * 0.48, 1.1, 'stand');
+                    if (progress > 0.7) {
+                        // Паук замахивается бутылкой
+                        drawGrandma(270, H * 0.48, 1.0, 'none');
+                        ctx.fillStyle = '#4a7a3a';
+                        ctx.beginPath();
+                        ctx.rect(530, H * 0.25, 10, 24);
+                        ctx.fill();
+                        ctx.strokeStyle = '#2a4a1a';
+                        ctx.stroke();
+                    }
+                } else if (idx === 1) {
+                    // Удар бутылкой -> бабка бьет шваброй
+                    if (progress < 0.4) {
+                        // Паук бьет
+                        drawSpiderMan(500, H * 0.46, 1.0, 'stand');
+                        drawGrandma(300, H * 0.50, 0.95, 'none');
+                        ctx.fillStyle = '#4a7a3a';
+                        ctx.fillRect(490, H * 0.22, 12, 24);
+                        ctx.fillStyle = '#ffaa00';
+                        ctx.font = 'bold 24px Arial';
+                        ctx.fillText('БАМ!', 380, H * 0.30);
+                    } else {
+                        // Бабка замахивается шваброй
+                        const swing = (progress - 0.4) * 2.5;
+                        drawSpiderMan(500, H * 0.52, 0.9, swing > 1 ? 'hurt' : 'stand');
+                        drawGrandma(280, H * 0.48, 1.0, 'broom');
+                        if (swing > 0.8) {
+                            ctx.fillStyle = '#ffcc00';
+                            ctx.font = 'bold 28px Arial';
+                            ctx.fillText('БАЦ!', 440, H * 0.25);
+                        }
+                    }
+                } else if (idx === 2) {
+                    // Спецназ прибывает
+                    drawGrandma(180, H * 0.48, 0.9, 'broom');
+                    drawSpiderMan(550, H * 0.52, 0.85, 'defeated');
+                    // Машина спецназа
+                    ctx.fillStyle = '#1a1a6e';
+                    ctx.fillRect(400 - progress * 80, H * 0.58, 90, 40);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.fillText('SWAT', 420 - progress * 80, H * 0.82);
+                    if (progress > 0.6) {
+                        drawSWAT(500, H * 0.48, 0.9);
+                        drawSWAT(560, H * 0.48, 0.9);
+                    }
+                } else if (idx === 3) {
+                    // Арест и радость соседей
+                    drawSWAT(300, H * 0.48, 1.0);
+                    drawSpiderMan(380, H * 0.52, 0.7, 'defeated');
+                    drawGrandma(200, H * 0.48, 0.9, 'broom');
+                    // Соседи
+                    for (let i = 0; i < 6; i++) {
+                        const nx = 480 + i * 55;
+                        const bounce = Math.sin(animTime * 5 + i) * 4;
+                        drawNeighbor(nx, H * 0.52 + bounce, 0.8, true);
+                    }
+                    // Конфетти
+                    for (let i = 0; i < 20; i++) {
+                        const cx = 400 + Math.sin(animTime * 3 + i) * 250;
+                        const cy = H * 0.2 + Math.cos(animTime * 4 + i) * 90;
+                        ctx.fillStyle = `hsl(${i * 18}, 80%, 60%)`;
+                        ctx.fillRect(cx, cy, 6, 6);
+                    }
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.fillText('🏆 БАБКА ПОБЕДИЛА! 🏆', W/2, H*0.25);
+                }
+
+                document.getElementById('sceneText').innerHTML = `Сцена <span style="color:#e9c46a;">${idx+1}/${SCENES.length}</span> — ${SCENES[idx].name}`;
+            }
+
+            function loop(ts) {
+                if (!lastFrame) lastFrame = ts;
+                const dt = Math.min(0.1, (ts - lastFrame) / 1000);
+                if (playing && animTime < TOTAL_TIME) {
+                    animTime += dt;
+                    if (animTime >= TOTAL_TIME) animTime = TOTAL_TIME;
+                }
+                lastFrame = ts;
+                render();
+                reqId = requestAnimationFrame(loop);
+            }
+
+            function restart() {
+                animTime = 0;
+                playing = true;
+                lastFrame = null;
+            }
+
+            function skip() {
+                if (animTime >= TOTAL_TIME - 0.3) {
+                    restart();
+                    return;
+                }
+                const { idx } = getSceneInfo();
+                if (idx < SCENES.length - 1) {
+                    animTime = SCENES[idx + 1].start + 0.05;
+                } else {
+                    animTime = TOTAL_TIME - 0.1;
+                }
+                playing = true;
+                lastFrame = null;
+            }
+
+            document.getElementById('restartBtn').addEventListener('click', restart);
+            document.getElementById('skipBtn').addEventListener('click', skip);
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const relX = (e.clientX - rect.left) / rect.width;
+                if (relX > 0.5) skip();
+                else restart();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (animTime >= TOTAL_TIME) restart();
+                    else {
+                        playing = !playing;
+                        if (playing) lastFrame = null;
+                    }
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    skip();
+                } else if (e.code === 'KeyR') {
+                    e.preventDefault();
+                    restart();
+                }
+            });
+
+            reqId = requestAnimationFrame(loop);
+            console.log('Мультфильм "Бабка против Человека-паука" запущен.');
+        })();
+    </script>
+</body>
+</html>

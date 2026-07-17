@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Escape: Победный экран</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0c0c1d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            color: #fff;
+            text-shadow: 4px 4px 0 #000;
+        }
+
+        #gameContainer {
+            background: #1b1b32;
+            padding: 25px;
+            border-radius: 0;
+            box-shadow: inset 0 0 0 4px #3a3a5a, 0 0 40px rgba(0, 255, 255, 0.2);
+            text-align: center;
+            border: 8px solid #2d2d44;
+            position: relative;
+        }
+
+        #screenWrapper {
+            position: relative;
+            display: inline-block;
+            border: 4px solid #000;
+            box-shadow: inset 0 0 20px #000;
+        }
+
+        canvas {
+            display: block;
+            background: #2d2d44;
+            width: 640px;
+            height: 400px;
+            image-rendering: pixelated;
+            cursor: pointer;
+            border: 2px solid #4a4a6a;
+        }
+
+        #scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 2px, transparent 2px, transparent 4px);
+            z-index: 10;
+            mix-blend-mode: multiply;
+        }
+
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 5px 5px 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #ui div {
+            background: #0d0d1f;
+            padding: 8px 12px;
+            border: 2px solid #4a4a6a;
+        }
+
+        #message {
+            font-size: 20px;
+            display: none;
+            margin: 15px 0 10px 0;
+            background: #000;
+            padding: 8px;
+            border: 4px solid #fff;
+            text-shadow: 2px 2px 0 #000;
+            animation: blink 0.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0.3; }
+        }
+
+        #restartBtn {
+            background: #e94560;
+            border: 4px solid #000;
+            color: white;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            margin-top: 10px;
+            display: none;
+            text-shadow: 2px 2px 0 #000;
+            transition: all 0.1s;
+            box-shadow: 0 4px 0 #8b2c3e;
+        }
+
+        #restartBtn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        .controls {
+            color: #888;
+            margin-top: 15px;
+            font-size: 8px;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div id="screenWrapper">
+        <canvas id="gameCanvas" width="640" height="400"></canvas>
+        <div id="scanlines"></div>
+    </div>
+    
+    <div id="ui">
+        <div>ЗДОРОВЬЕ: <span id="healthDisplay">❤️❤️❤️</span></div>
+        <div>ВЫХОД: <span id="exitDistance">[====]</span></div>
+    </div>
+
+    <div id="message"></div>
+    <button id="restartBtn">▶ НОВАЯ ИГРА</button>
+    <div class="controls">WASD / СТРЕЛКИ | R - РЕСТАРТ</div>
+</div>
+
+<script>
+    // --- ЗВУКОВОЙ ДВИЖОК ---
+    class SoundFX {
+        constructor() {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        play(type) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+
+            if (type === 'step') {
+                osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            } else if (type === 'win') {
+                osc.frequency.setValueAtTime(523, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(659, this.ctx.currentTime + 0.1);
+                osc.frequency.setValueAtTime(784, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            } else if (type === 'lose') {
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.5);
+            }
+        }
+    }
+    const sound = new SoundFX();
+
+    // --- ИГРОВОЙ МИР ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    
+    const messageDiv = document.getElementById('message');
+    const restartBtn = document.getElementById('restartBtn');
+    const healthDisplay = document.getElementById('healthDisplay');
+    const exitDistanceSpan = document.getElementById('exitDistance');
+
+    const GRID = 4; 
+    const P_SIZE = 48;
+
+    // Игрок (Жёлтый смайлик)
+    const player = {
+        x: 80, y: 180,
+        size: P_SIZE,
+        animFrame: 0,
+        animTimer: 0,
+        isMoving: false
+    };
+
+    // Монстр (который превратился в синего друга при победе!)
+    const monster = {
+        x: 500, y: 180,
+        size: P_SIZE,
+        speed: 1.8,
+        wobble: 0,
+        mouthOpen: 0
+    };
+
+    // Домик (выход) - его больше нет, но оставим для логики
+    let exit = {
+        x: 0, y: 0,
+        size: 56,
+        glow: 0
+    };
+
+    let gameRunning = true;
+    let win = false;
+    let frameCount = 0;
+    let particles = [];
+    let victoryTime = 0; // Счётчик для победной анимации
+
+    // === Генерация выхода ===
+    function generateExit() {
+        let attempts = 0;
+        do {
+            exit.x = Math.floor(Math.random() * (canvas.width - exit.size - 20) / GRID) * GRID + 10;
+            exit.y = Math.floor(Math.random() * (canvas.height - exit.size - 20) / GRID) * GRID + 10;
+            attempts++;
+        } while (
+            (Math.abs(exit.x - player.x) < 250 && Math.abs(exit.y - player.y) < 250) &&
+            attempts < 100
+        );
+    }
+
+    // === Управление ===
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') restartGame();
+        if (e.key in keys) { keys[e.key] = true; e.preventDefault(); }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.key in keys) { keys[e.key] = false; e.preventDefault(); }
+    });
+
+    // === Логика движения ===
+    function movePlayer() {
+        if (!gameRunning) return;
+
+        let dx = 0, dy = 0;
+        if (keys.w || keys.ArrowUp) dy = -1;
+        if (keys.s || keys.ArrowDown) dy = 1;
+        if (keys.a || keys.ArrowLeft) dx = -1;
+        if (keys.d || keys.ArrowRight) dx = 1;
+
+        player.isMoving = (dx !== 0 || dy !== 0);
+
+        if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+
+        let stepX = Math.round(dx * GRID);
+        let stepY = Math.round(dy * GRID);
+
+        if (player.isMoving && frameCount % 8 === 0) sound.play('step');
+
+        player.x += stepX;
+        player.y += stepY;
+
+        if (player.isMoving) {
+            player.animTimer++;
+            if (player.animTimer > 6) {
+                player.animTimer = 0;
+                player.animFrame = (player.animFrame + 1) % 4;
+            }
+        }
+
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.size > canvas.width) player.x = canvas.width - player.size;
+        if (player.y < 0) player.y = 0;
+        if (player.y + player.size > canvas.height) player.y = canvas.height - player.size;
+    }
+
+    function moveMonster() {
+        if (!gameRunning) return;
+
+        const dx = player.x - monster.x;
+        const dy = player.y - monster.y;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+
+        if (distance > 0) {
+            monster.x += (dx / distance) * monster.speed;
+            monster.y += (dy / distance) * monster.speed;
+        }
+        
+        monster.wobble = Math.sin(frameCount / 8) * 2;
+        if (frameCount % 20 === 0) monster.mouthOpen = (monster.mouthOpen === 0) ? 1 : 0;
+        
+        if (frameCount % 4 === 0) {
+            particles.push({
+                x: monster.x + monster.size/2 + (Math.random() - 0.5) * 10,
+                y: monster.y + monster.size + 5,
+                vx: (Math.random() - 0.5) * 0.5,
+                life: 30 + Math.random() * 20,
+                size: 4 + Math.random() * 4,
+                color: ['#2a2a2a', '#3a3a3a', '#1a1a1a'][Math.floor(Math.random()*3)]
+            });
+        }
+    }
+
+    function checkCollisions() {
+        if (!gameRunning) return;
+
+        if (player.x < monster.x + monster.size &&
+            player.x + player.size > monster.x &&
+            player.y < monster.y + monster.size &&
+            player.y + player.size > monster.y) {
+            gameOver(false);
+            return;
+        }
+
+        if (player.x < exit.x + exit.size &&
+            player.x + player.size > exit.x &&
+            player.y < exit.y + exit.size &&
+            player.y + player.size > exit.y) {
+            gameOver(true);
+        }
+    }
+
+    function gameOver(isWin) {
+        if (!gameRunning) return;
+        gameRunning = false;
+        win = isWin;
+        victoryTime = 0;
+
+        if (!isWin) {
+            sound.play('lose');
+            for(let i=0; i<30; i++) {
+                particles.push({
+                    x: player.x + player.size/2,
+                    y: player.y + player.size/2,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8 - 2,
+                    life: 40 + Math.random() * 20,
+                    size: 4 + Math.random() * 6,
+                    color: ['#FFD800', '#FF3333', '#3366FF', '#FFFFFF', '#FFA500'][Math.floor(Math.random()*5)]
+                });
+            }
+            messageDiv.textContent = '--- GAME OVER ---';
+            messageDiv.style.display = 'block';
+            restartBtn.style.display = 'inline-block';
+        } else {
+            sound.play('win');
+            // Скрываем UI и сообщение, чтобы показать картинку на весь экран
+            document.getElementById('ui').style.display = 'none';
+            messageDiv.style.display = 'none';
+            restartBtn.style.display = 'none';
+        }
+        updateUI();
+    }
+
+    function restartGame() {
+        gameRunning = true;
+        win = false;
+        messageDiv.style.display = 'none';
+        restartBtn.style.display = 'none';
+        document.getElementById('ui').style.display = 'flex';
+        particles = [];
+
+        player.x = 80; player.y = 180;
+        monster.x = 500; monster.y = 180;
+        frameCount = 0;
+        generateExit();
+        updateUI();
+    }
+
+    restartBtn.addEventListener('click', restartGame);
+
+    function updateUI() {
+        healthDisplay.textContent = '❤️❤️❤️';
+        let dist = Math.abs(player.x - exit.x) + Math.abs(player.y - exit.y);
+        let maxDist = 800;
+        let progress = Math.max(0, Math.min(1, 1 - (dist / maxDist)));
+        let bars = Math.floor(progress * 8);
+        let barStr = '[';
+        for (let i=0; i<8; i++) barStr += (i < bars) ? '=' : ' ';
+        barStr += ']';
+        exitDistanceSpan.textContent = barStr;
+    }
+
+    // ==========================================
+    //       ПОБЕДНЫЙ ЭКРАН (Ваша картинка!)
+    // ==========================================
+    function drawVictoryScreen() {
+        victoryTime++;
+        // Голубой фон как на картинке
+        ctx.fillStyle = '#1E90FF'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Размеры пикселя для отрисовки
+        const s = 6; 
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2 - 20;
+
+        // --- 1. РОЗОВАЯ ДЕВОЧКА (Слева) ---
+        const pinkX = centerX - 150;
+        const pinkY = centerY + 10;
+
+        // Голова (форма "восьмёрки")
+        ctx.fillStyle = '#FFB6C1'; // Розовый
+        // Верхняя часть головы
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 12; x++) {
+                if ((y === 0 && (x < 3 || x > 8)) || 
+                    (y === 1 && (x < 2 || x > 9)) ||
+                    (y === 5 && (x < 4 || x > 7))) continue;
+                ctx.fillRect(pinkX + x * s, pinkY + y * s, s, s);
+            }
+        }
+        // Нижняя часть головы (щёки)
+        ctx.fillRect(pinkX + 2*s, pinkY + 6*s, 8*s, 4*s);
+        ctx.fillRect(pinkX + s, pinkY + 7*s, 10*s, 3*s);
+        ctx.fillRect(pinkX + 2*s, pinkY + 10*s, 8*s, 2*s);
+
+        // Глаза (большие, чёрные с белым)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(pinkX + 2*s, pinkY + 2*s, 3*s, 4*s);
+        ctx.fillRect(pinkX + 7*s, pinkY + 2*s, 3*s, 4*s);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pinkX + 2*s, pinkY + 2*s, s, 2*s);
+        ctx.fillRect(pinkX + 7*s, pinkY + 2*s, s, 2*s);
+
+        // Рот (широкая улыбка)
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(pinkX + 3*s, pinkY + 8*s, 6*s, 2*s);
+        ctx.fillRect(pinkX + 2*s, pinkY + 9*s, 8*s, s);
+
+        // Бантик (голубой)
+        ctx.fillStyle = '#00BFFF';
+        ctx.fillRect(pinkX + 5*s, pinkY + 11*s, 2*s, s);
+        ctx.fillRect(pinkX + 4*s, pinkY + 12*s, s, s);
+        ctx.fillRect(pinkX + 7*s, pinkY + 12*s, s, s);
+
+        // Тело и руки (розовые, длинные)
+        ctx.fillStyle = '#FFB6C1';
+        // Платье/тело
+        ctx.fillRect(pinkX + 3*s, pinkY + 13*s, 6*s, 6*s);
+        // Левая рука (вниз)
+        ctx.fillRect(pinkX - 2*s, pinkY + 14*s, 2*s, 5*s);
+        ctx.fillRect(pinkX - 4*s, pinkY + 16*s, 4*s, 3*s);
+        // Правая рука (вниз)
+        ctx.fillRect(pinkX + 12*s, pinkY + 14*s, 2*s, 5*s);
+        ctx.fillRect(pinkX + 12*s, pinkY + 16*s, 4*s, 3*s);
+        // Ноги
+        ctx.fillRect(pinkX + 3*s, pinkY + 19*s, 2*s, 3*s);
+        ctx.fillRect(pinkX + 7*s, pinkY + 19*s, 2*s, 3*s);
+
+        // Туфельки (жёлтые)
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(pinkX + 2*s, pinkY + 22*s, 3*s, s);
+        ctx.fillRect(pinkX + 7*s, pinkY + 22*s, 3*s, s);
+
+        // --- 2. СИНИЙ ПЕРСОНАЖ (Справа) ---
+        const blueX = centerX + 80;
+        const blueY = centerY + 10;
+
+        // Голова (синяя, изогнутая)
+        ctx.fillStyle = '#4169E1';
+        // Верхняя часть
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 14; x++) {
+                if ((y === 0 && (x < 4 || x > 9)) || 
+                    (y === 1 && (x < 3 || x > 10))) continue;
+                ctx.fillRect(blueX + x * s, blueY + y * s, s, s);
+            }
+        }
+        // Нижняя часть
+        ctx.fillRect(blueX + 2*s, blueY + 6*s, 10*s, 4*s);
+        ctx.fillRect(blueX + s, blueY + 7*s, 12*s, 3*s);
+        ctx.fillRect(blueX + 2*s, blueY + 10*s, 10*s, 2*s);
+
+        // Глаз (один, хитрый)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(blueX + 9*s, blueY + 2*s, 3*s, 3*s);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(blueX + 10*s, blueY + 2*s, s, s);
+
+        // Рот (ухмылка)
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(blueX + 6*s, blueY + 8*s, 6*s, 2*s);
+        ctx.fillRect(blueX + 7*s, blueY + 9*s, 6*s, s);
+
+        // --- 3. ЖЁЛТЫЙ СМАЙЛИК (Которого обнимают) ---
+        const yellowX = blueX + 2*s;
+        const yellowY = blueY - 4*s;
+
+        // Круглая голова
+        ctx.fillStyle = '#FFD700';
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 6; x++) {
+                if ((y === 0 && (x === 0 || x === 5)) || 
+                    (y === 5 && (x === 0 || x === 5))) continue;
+                ctx.fillRect(yellowX + x * s, yellowY + y * s, s, s);
+            }
+        }
+
+        // Глаза-чёрточки (смеётся)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(yellowX + s, yellowY + 2*s, 2*s, s);
+        ctx.fillRect(yellowX + 3*s, yellowY + 2*s, 2*s, s);
+
+        // Рот (открытый, смех)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(yellowX + s, yellowY + 4*s, 4*s, s);
+        ctx.fillRect(yellowX + 2*s, yellowY + 5*s, 2*s, s);
+
+        // --- 4. СИНИЕ РУКИ (Обнимают жёлтого) ---
+        ctx.fillStyle = '#4169E1';
+        // Левая рука (идущая через жёлтого)
+        ctx.fillRect(blueX + s, blueY - 2*s, 3*s, 2*s);
+        ctx.fillRect(blueX - 2*s, blueY - s, 5*s, 2*s);
+        ctx.fillRect(blueX - 2*s, blueY + s, 2*s, 2*s);
+        // Правая рука
+        ctx.fillRect(blueX + 10*s, blueY - 2*s, 3*s, 2*s);
+        ctx.fillRect(blueX + 9*s, blueY - s, 4*s, 2*s);
+
+        // --- 5. НОГИ СИНЕГО (Длинные, с жёлтыми туфлями) ---
+        ctx.fillStyle = '#4169E1';
+        ctx.fillRect(blueX + 3*s, blueY + 12*s, 2*s, 8*s);
+        ctx.fillRect(blueX + 9*s, blueY + 12*s, 2*s, 8*s);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(blueX + 2*s, blueY + 20*s, 3*s, s);
+        ctx.fillRect(blueX + 9*s, blueY + 20*s, 3*s, s);
+
+        // --- 6. ТЕКСТ ПОБЕДЫ ---
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 24px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 10;
+        // Мигающий текст
+        if (Math.floor(victoryTime / 20) % 2 === 0) {
+            ctx.fillText('ПОБЕДА!', canvas.width / 2, 40);
+        }
+        ctx.shadowBlur = 0;
+
+        // Кнопка рестарта появляется через секунду
+        if (victoryTime > 30) {
+            restartBtn.style.display = 'inline-block';
+            restartBtn.textContent = '▶ ЕЩЁ РАЗ';
+        }
+    }
+
+    // --- ОБЫЧНАЯ ИГРОВАЯ ОТРИСОВКА ---
+    function drawBackground() {
+        for (let y = 0; y < canvas.height; y += 16) {
+            for (let x = 0; x < canvas.width; x += 16) {
+                let offset = (Math.floor(y / 16) % 2 === 0) ? 0 : 8;
+                ctx.fillStyle = ((Math.floor((x + offset) / 16) + Math.floor(y / 16)) % 2 === 0) ? '#2d2d44' : '#3a3a5a';
+                ctx.fillRect(x, y, 16, 16);
+            }
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(player.x + 4, player.y + player.size - 8, player.size - 8, 8);
+        ctx.fillRect(monster.x + 4, monster.y + monster.size - 8, monster.size - 8, 8);
+    }
+
+    function drawPlayer() {
+        const x = player.x;
+        const y = player.y;
+        const s = player.size / 16;
+        const f = player.animFrame;
+
+        for (let py = 1; py < 15; py++) {
+            for (let px = 1; px < 15; px++) {
+                let isEdge = (px < 3 || px > 12 || py < 2 || py > 13);
+                let isCorner = (px < 2 && py < 3) || (px > 13 && py < 3) || (px < 2 && py > 12) || (px > 13 && py > 12);
+                if (isCorner) continue;
+                
+                if (isEdge) ctx.fillStyle = '#D4A500';
+                else if (px > 4 && px < 11 && py > 4 && py < 11) ctx.fillStyle = '#FFEA4D';
+                else ctx.fillStyle = '#FFD800';
+                ctx.fillRect(x + px * s, y + py * s, s, s);
+            }
+        }
+
+        ctx.fillStyle = '#FF3333';
+        let armOff = (f === 1 || f === 3) ? 1 : 0;
+        ctx.fillRect(x - 3*s, y + 5*s + armOff*s, 3*s, 3*s);
+        ctx.fillRect(x - 4*s, y + 7*s + armOff*s, 4*s, 2*s);
+        ctx.fillRect(x - 5*s, y + 8*s + armOff*s, 2*s, s);
+        ctx.fillStyle = '#CC0000';
+        ctx.fillRect(x - 2*s, y + 6*s + armOff*s, s, s);
+
+        ctx.fillStyle = '#3366FF';
+        ctx.fillRect(x + 12*s, y + 5*s + (1-armOff)*s, 3*s, 3*s);
+        ctx.fillRect(x + 12*s, y + 7*s + (1-armOff)*s, 4*s, 2*s);
+        ctx.fillRect(x + 15*s, y + 8*s + (1-armOff)*s, 2*s, s);
+        ctx.fillStyle = '#0022AA';
+        ctx.fillRect(x + 13*s, y + 6*s + (1-armOff)*s, s, s);
+
+        ctx.fillStyle = '#D4A500';
+        ctx.fillRect(x + 4*s, y + 14*s - armOff*s, 3*s, s);
+        ctx.fillRect(x + 9*s, y + 14*s - (1-armOff)*s, 3*s, s);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(x + 4*s, y + 15*s - armOff*s, 3*s, s);
+        ctx.fillRect(x + 9*s, y + 15*s - (1-armOff)*s, 3*s, s);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 6*s, y + 15*s - armOff*s, s, s);
+        ctx.fillRect(x + 11*s, y + 15*s - (1-armOff)*s, s, s);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(x + 4*s, y + 4*s, 3*s, 3*s);
+        ctx.fillRect(x + 9*s, y + 4*s, 3*s, 3*s);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x + 6*s, y + 5*s, s, 2*s);
+        ctx.fillRect(x + 11*s, y + 5*s, s, 2*s);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(x + 6*s, y + 5*s, s, s);
+        ctx.fillRect(x + 11*s, y + 5*s, s, s);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 3*s, y + 3*s, s, s);
+        ctx.fillRect(x + 4*s, y + 2*s, s, s);
+        ctx.fillRect(x + 9*s, y + 2*s, s, s);
+        ctx.fillRect(x + 11*s, y + 3*s, s, s);
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 6*s, y + 9*s, 4*s, 2*s);
+        ctx.fillRect(x + 5*s, y + 10*s, 6*s, s);
+        ctx.fillStyle = '#FF6666';
+        ctx.fillRect(x + 7*s, y + 9*s, 2*s, s);
+
+        ctx.fillStyle = '#CC8800';
+        ctx.fillRect(x + 2*s, y + 8*s, s, s);
+        ctx.fillRect(x + s, y + 9*s, s, s);
+        ctx.fillRect(x + 13*s, y + 8*s, s, s);
+        ctx.fillRect(x + 14*s, y + 9*s, s, s);
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 2*s, y, 12*s, s);
+        ctx.fillRect(x + s, y + s, 14*s, s);
+        ctx.fillRect(x, y + 2*s, s, 12*s);
+        ctx.fillRect(x + 15*s, y + 2*s, s, 12*s);
+        ctx.fillRect(x + s, y + 14*s, 14*s, s);
+        ctx.fillRect(x + 2*s, y + 15*s, 12*s, s);
+    }
+
+    function drawMonster() {
+        const x = Math.round(monster.x);
+        const y = Math.round(monster.y + monster.wobble);
+        const s = monster.size / 16;
+        const mouth = monster.mouthOpen;
+
+        for (let py = 1; py < 15; py++) {
+            for (let px = 1; px < 15; px++) {
+                let isBody = true;
+                if (px < 3 && (py < 3 || py > 13)) isBody = false;
+                if (px > 12 && (py < 3 || py > 13)) isBody = false;
+                if ((px === 2 || px === 13) && (py < 2 || py > 12)) isBody = false;
+                
+                if (isBody) {
+                    if (px < 4 || px > 11 || py < 3) ctx.fillStyle = '#2a2a2a';
+                    else if (px > 5 && px < 10 && py > 5 && py < 10) ctx.fillStyle = '#0a0a0a';
+                    else ctx.fillStyle = '#151515';
+                    ctx.fillRect(x + px * s, y + py * s, s, s);
+                }
+            }
+        }
+        ctx.fillStyle = '#444';
+        ctx.fillRect(x + 5*s, y + 3*s, 2*s, s);
+        ctx.fillRect(x + 4*s, y + 4*s, s, s);
+        ctx.fillRect(x + 10*s, y + 3*s, s, s);
+
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(x + 2*s, y + 3*s, 4*s, 3*s);
+        ctx.fillRect(x + 10*s, y + 3*s, 4*s, 3*s);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 4*s, y + 4*s, 2*s, s);
+        ctx.fillRect(x + 11*s, y + 4*s, 2*s, s);
+        ctx.fillStyle = '#880000';
+        ctx.fillRect(x + 2*s, y + 5*s, s, s);
+        ctx.fillRect(x + 10*s, y + 5*s, s, s);
+        ctx.fillRect(x + 3*s, y + 3*s, s, s);
+        ctx.fillRect(x + 12*s, y + 3*s, s, s);
+
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(x + 13*s, y + 2*s, s, s);
+        ctx.fillRect(x + 12*s, y + 3*s, s, s);
+
+        ctx.fillStyle = '#880000';
+        ctx.fillRect(x + 3*s, y + 7*s, 10*s, 2*s);
+        ctx.fillStyle = '#FFEE88';
+        ctx.fillRect(x + 4*s, y + 8*s, 2*s, s);
+        ctx.fillRect(x + 7*s, y + 8*s, 2*s, s);
+        ctx.fillRect(x + 10*s, y + 8*s, 2*s, s);
+        let jawOff = mouth * 2 * s;
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x + 2*s, y + 9*s + jawOff, 12*s, 4*s);
+        ctx.fillStyle = '#FFEE88';
+        ctx.fillRect(x + 5*s, y + 10*s + jawOff, 2*s, s);
+        ctx.fillRect(x + 9*s, y + 10*s + jawOff, 2*s, s);
+        ctx.fillStyle = '#DD4444';
+        ctx.fillRect(x + 6*s, y + 11*s + jawOff, 4*s, 2*s);
+
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x + s, y + 14*s, 2*s, 2*s);
+        ctx.fillRect(x + 5*s, y + 15*s, 2*s, s);
+        ctx.fillRect(x + 10*s, y + 14*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + 2*s, y + s, 12*s, s);
+        ctx.fillRect(x + s, y + 2*s, 14*s, s);
+        ctx.fillRect(x, y + 3*s, s, 11*s);
+        ctx.fillRect(x + 15*s, y + 3*s, s, 11*s);
+        ctx.fillRect(x + s, y + 14*s, 14*s, s);
+        ctx.fillRect(x + 2*s, y + 15*s, 12*s, s);
+    }
+
+    function drawExit() {
+        const x = exit.x;
+        const y = exit.y;
+        const s = exit.size / 16;
+        
+        exit.glow = Math.sin(frameCount / 15) * 2 + 3;
+
+        ctx.fillStyle = `rgba(46, 204, 113, ${0.1 + exit.glow / 30})`;
+        ctx.fillRect(x - 4*s, y - 4*s, exit.size + 8*s, exit.size + 8*s);
+
+        for (let py = 0; py < 5; py++) {
+            for (let px = 1; px < 15; px++) {
+                if (py === 0 && (px < 4 || px > 11)) continue;
+                if (py === 1 && (px < 3 || px > 12)) continue;
+                if (py === 2 && (px < 2 || px > 13)) continue;
+                ctx.fillStyle = (px % 2 === 0) ? '#FFD700' : '#E6C200';
+                ctx.fillRect(x + px * s, y + py * s, s, s);
+            }
+        }
+        ctx.fillStyle = '#B8960F';
+        ctx.fillRect(x + 2*s, y + 5*s, 12*s, s);
+
+        for (let py = 6; py < 16; py++) {
+            for (let px = 1; px < 15; px++) {
+                if (py === 15 && (px < 3 || px > 12)) continue;
+                ctx.fillStyle = (px % 3 === 0) ? '#C0C0C0' : '#D3D3D3';
+                ctx.fillRect(x + px * s, y + py * s, s, s);
+            }
+        }
+
+        ctx.fillStyle = '#2ECC71';
+        for (let py = 6; py < 16; py++) {
+            for (let px = 5; px < 11; px++) {
+                if (py === 6 && (px < 6 || px > 10)) continue;
+                if (py === 15 && (px < 7 || px > 9)) continue;
+                ctx.fillRect(x + px * s, y + py * s, s, s);
+            }
+        }
+        ctx.fillStyle = '#27AE60';
+        ctx.fillRect(x + 7*s, y + 8*s, 2*s, 6*s);
+
+        ctx.fillStyle = '#3B82F6';
+        ctx.fillRect(x + 2*s, y + 6*s, 2*s, 9*s);
+        ctx.fillStyle = '#2563EB';
+        ctx.fillRect(x + 2*s, y + 6*s, s, 9*s);
+        ctx.fillStyle = '#EF4444';
+        ctx.fillRect(x + 12*s, y + 6*s, 2*s, 9*s);
+        ctx.fillStyle = '#DC2626';
+        ctx.fillRect(x + 13*s, y + 6*s, s, 9*s);
+
+        ctx.fillStyle = '#1C1C1E';
+        ctx.fillRect(x + 6*s, y - 3*s, 4*s, 3*s);
+        ctx.fillRect(x + 5*s, y - 2*s, 6*s, s);
+        ctx.fillStyle = '#3B82F6';
+        ctx.fillRect(x + 7*s, y - 2*s, s, s);
+        ctx.fillRect(x + 9*s, y - 2*s, s, s);
+        ctx.fillRect(x + 6*s, y - s, s, s);
+        ctx.fillRect(x + 10*s, y - s, s, s);
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + exit.glow / 10})`;
+        ctx.font = 'bold 8px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('EXIT', x + exit.size/2, y - 10);
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + s, y + 5*s, s, 11*s);
+        ctx.fillRect(x + 14*s, y + 5*s, s, 11*s);
+        ctx.fillRect(x + s, y + 15*s, 14*s, s);
+        ctx.fillRect(x + 2*s, y + 16*s, 12*s, s);
+    }
+
+    function updateParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx || 0;
+            p.y += p.vy || 0.8;
+            p.life--;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function drawParticles() {
+        for (let p of particles) {
+            ctx.fillStyle = p.color || '#333';
+            ctx.globalAlpha = p.life / 50;
+            ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    // === ГЛАВНЫЙ ЦИКЛ ===
+    function gameLoop() {
+        if (gameRunning) {
+            movePlayer();
+            moveMonster();
+            checkCollisions();
+            frameCount++;
+            updateUI();
+        }
+        updateParticles();
+
+        if (win) {
+            drawVictoryScreen(); // Рисуем вашу картинку при победе!
+        } else {
+            drawBackground();
+            drawExit();
+            drawMonster();
+            drawPlayer();
+            drawParticles();
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // === ЗАПУСК ===
+    generateExit();
+    updateUI();
+    gameLoop();
+</script>
+</body>
+</html>

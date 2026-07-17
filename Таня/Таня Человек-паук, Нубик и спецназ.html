@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Человек-паук, Нубик и спецназ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1c1c2e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 15px;
+            user-select: none;
+        }
+        .wrapper {
+            width: 100%;
+            max-width: 850px;
+            aspect-ratio: 800 / 500;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7), 0 0 0 4px #e63946, 0 0 0 8px #1d3557;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 14px;
+            cursor: pointer;
+        }
+        .controls {
+            margin-top: 14px;
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background: #f1faee;
+            color: #1d3557;
+            border: 3px solid #e63946;
+            padding: 10px 22px;
+            border-radius: 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #a8dadc;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(230,57,70,0.4);
+        }
+        button:active {
+            transform: scale(0.94);
+        }
+        .info {
+            color: #f1faee;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        @media (max-width: 600px) {
+            button {
+                padding: 8px 16px;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <canvas id="cartoon"></canvas>
+    </div>
+    <div class="controls">
+        <button id="restartBtn">🔄 Заново</button>
+        <span class="info" id="sceneInfo">Сцена <span style="color:#e63946;">1/4</span></span>
+        <button id="skipBtn">⏭ Дальше</button>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('cartoon');
+            const ctx = canvas.getContext('2d');
+            const W = 800, H = 500;
+            canvas.width = W;
+            canvas.height = H;
+
+            // Сцены и время
+            const SCENES = [
+                { name: 'Встреча', start: 0 },
+                { name: 'Удар бутылкой', start: 3.5 },
+                { name: 'Арест спецназом', start: 10 },
+                { name: 'Победа и радость', start: 17 }
+            ];
+            const TOTAL_DURATION = 24;
+            let animationTime = 0;
+            let isPlaying = true;
+            let lastTimestamp = null;
+            let animFrameId = null;
+
+            // --- Рисование персонажей ---
+
+            function drawSpiderMan(x, y, scale, pose = 'stand') {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Тело
+                ctx.fillStyle = '#c41e1e';
+                ctx.beginPath();
+                ctx.ellipse(0, 5, 14, 22, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a6e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Синие участки
+                ctx.fillStyle = '#1a1a6e';
+                ctx.beginPath();
+                ctx.ellipse(-6, 12, 6, 12, 0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(6, 12, 6, 12, -0.3, 0, Math.PI*2);
+                ctx.fill();
+                // Паутина на груди
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                for (let i = -3; i <= 3; i += 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -10);
+                    ctx.lineTo(i * 3, 20);
+                    ctx.stroke();
+                }
+                // Голова
+                ctx.fillStyle = '#c41e1e';
+                ctx.beginPath();
+                ctx.arc(0, -18, 15, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a6e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Глаза (белые с черным)
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.ellipse(-5, -20, 5, 7, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(5, -20, 5, 7, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-5, -20, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(5, -20, 2, 0, Math.PI*2);
+                ctx.fill();
+                // Паучьи лапки (руки и ноги)
+                ctx.strokeStyle = '#c41e1e';
+                ctx.lineWidth = 5;
+                if (pose === 'stand') {
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-24, -10); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(24, -10); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 22); ctx.lineTo(-18, 38); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 22); ctx.lineTo(18, 38); ctx.stroke();
+                } else if (pose === 'hurt') {
+                    // Падает
+                    ctx.save();
+                    ctx.translate(0, 15);
+                    ctx.rotate(0.4);
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-20, -5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(18, 5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 22); ctx.lineTo(-14, 36); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(10, 22); ctx.lineTo(8, 36); ctx.stroke();
+                    ctx.restore();
+                    // Звёздочки боли
+                    ctx.fillStyle = '#ffcc00';
+                    for (let i = 0; i < 4; i++) {
+                        let sx = -20 + i * 10;
+                        let sy = -30 + Math.sin(i) * 8;
+                        ctx.beginPath();
+                        ctx.arc(sx, sy, 3, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+                ctx.restore();
+            }
+
+            function drawNoob(x, y, scale, hasBottle = false, bottleSwing = 0) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Голова (жёлтый квадрат)
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillRect(-15, -30, 30, 30);
+                ctx.strokeStyle = '#b38f00';
+                ctx.lineWidth = 2.5;
+                ctx.strokeRect(-15, -30, 30, 30);
+                // Глаза (большие)
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(-10, -24, 8, 10);
+                ctx.fillRect(2, -24, 8, 10);
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(-8, -22, 4, 6);
+                ctx.fillRect(4, -22, 4, 6);
+                // Рот
+                ctx.strokeStyle = '#1a1a1a';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.moveTo(-5, -12);
+                ctx.lineTo(5, -12);
+                ctx.stroke();
+                // Тело
+                ctx.fillStyle = '#33aa33';
+                ctx.fillRect(-14, 0, 28, 34);
+                ctx.strokeStyle = '#1a6e1a';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-14, 0, 28, 34);
+                // Ноги
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(-12, 34, 10, 20);
+                ctx.fillRect(2, 34, 10, 20);
+                ctx.strokeStyle = '#1a3a6e';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(-12, 34, 10, 20);
+                ctx.strokeRect(2, 34, 10, 20);
+                // Руки
+                ctx.fillStyle = '#ffcc00';
+                ctx.strokeStyle = '#b38f00';
+                ctx.lineWidth = 2;
+                if (hasBottle) {
+                    // Левая рука держит бутылку (поднята)
+                    ctx.save();
+                    ctx.translate(-14, 8);
+                    ctx.rotate(bottleSwing - 0.5);
+                    ctx.fillRect(-4, -2, 8, 16);
+                    ctx.strokeRect(-4, -2, 8, 16);
+                    // Бутылка
+                    ctx.fillStyle = '#4a7a3a';
+                    ctx.beginPath();
+                    ctx.rect(-6, -22, 12, 22);
+                    ctx.fill();
+                    ctx.strokeStyle = '#2a4a1a';
+                    ctx.stroke();
+                    ctx.fillStyle = '#2a4a1a';
+                    ctx.fillRect(-4, -28, 8, 7);
+                    ctx.restore();
+                    // Правая рука
+                    ctx.fillRect(10, 4, 8, 16);
+                    ctx.strokeRect(10, 4, 8, 16);
+                } else {
+                    ctx.fillRect(-18, 4, 8, 16);
+                    ctx.strokeRect(-18, 4, 8, 16);
+                    ctx.fillRect(10, 4, 8, 16);
+                    ctx.strokeRect(10, 4, 8, 16);
+                }
+                ctx.restore();
+            }
+
+            function drawSWAT(x, y, scale) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Тело (черная броня)
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(-14, 0, 28, 38);
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-14, 0, 28, 38);
+                // Жилет
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-12, 4, 24, 20);
+                // Голова в шлеме
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(0, -12, 16, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#555';
+                ctx.stroke();
+                // Забрало
+                ctx.fillStyle = '#444';
+                ctx.beginPath();
+                ctx.ellipse(0, -12, 10, 12, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.rect(-6, -16, 12, 4);
+                ctx.fill();
+                // Щит
+                ctx.fillStyle = '#3a3a6e';
+                ctx.fillRect(-24, -2, 10, 28);
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-24, -2, 10, 28);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('SWAT', -19, 16);
+                // Дубинка
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fillRect(18, -6, 5, 26);
+                ctx.restore();
+            }
+
+            function drawCivilian(x, y, scale) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                // Тело
+                ctx.fillStyle = '#e6b85c';
+                ctx.fillRect(-10, 0, 20, 32);
+                ctx.strokeStyle = '#b8843c';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(-10, 0, 20, 32);
+                // Голова
+                ctx.fillStyle = '#f5d5b8';
+                ctx.beginPath();
+                ctx.arc(0, -10, 13, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#c49a6c';
+                ctx.stroke();
+                // Глаза и рот
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(-4, -12, 2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(4, -12, 2, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(0, -5, 4, 0.1, Math.PI-0.1); ctx.stroke();
+                // Руки (радостно вверх)
+                ctx.strokeStyle = '#f5d5b8';
+                ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(-10, 6); ctx.lineTo(-22, -8); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(10, 6); ctx.lineTo(22, -8); ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawCityBackground() {
+                // Небо
+                const grad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+                grad.addColorStop(0, '#4a90e2');
+                grad.addColorStop(1, '#b8d4f0');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+                // Здания
+                const buildings = [
+                    { x: 20, w: 80, h: 130, c: '#7a8a9a' },
+                    { x: 120, w: 65, h: 100, c: '#8a9aaa' },
+                    { x: 210, w: 90, h: 150, c: '#6a7a8a' },
+                    { x: 560, w: 85, h: 140, c: '#7a8a9a' },
+                    { x: 660, w: 70, h: 110, c: '#8a9aaa' },
+                    { x: 740, w: 60, h: 125, c: '#6a7a8a' }
+                ];
+                for (let b of buildings) {
+                    ctx.fillStyle = b.c;
+                    ctx.fillRect(b.x, H * 0.62 - b.h + 20, b.w, b.h);
+                    ctx.strokeStyle = '#4a5a6a';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(b.x, H * 0.62 - b.h + 20, b.w, b.h);
+                    // Окна
+                    for (let wy = H * 0.60 - b.h + 25; wy < H * 0.62; wy += 18) {
+                        for (let wx = b.x + 8; wx < b.x + b.w - 8; wx += 16) {
+                            ctx.fillStyle = '#ffe8a0';
+                            ctx.fillRect(wx, wy, 8, 10);
+                            ctx.strokeStyle = '#333';
+                            ctx.lineWidth = 0.8;
+                            ctx.strokeRect(wx, wy, 8, 10);
+                        }
+                    }
+                }
+                // Дорога
+                ctx.fillStyle = '#555';
+                ctx.fillRect(0, H * 0.64, W, H * 0.08);
+                ctx.strokeStyle = '#ffd740';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([20, 15]);
+                ctx.beginPath();
+                ctx.moveTo(0, H * 0.68);
+                ctx.lineTo(W, H * 0.68);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            function getSceneInfo() {
+                let idx = 0;
+                for (let i = SCENES.length - 1; i >= 0; i--) {
+                    if (animationTime >= SCENES[i].start) {
+                        idx = i;
+                        break;
+                    }
+                }
+                const start = SCENES[idx].start;
+                const end = (idx < SCENES.length - 1) ? SCENES[idx + 1].start : TOTAL_DURATION;
+                const progress = (end - start) > 0 ? (animationTime - start) / (end - start) : 1;
+                return { idx, progress: Math.min(1, Math.max(0, progress)) };
+            }
+
+            function render() {
+                ctx.clearRect(0, 0, W, H);
+                const { idx, progress } = getSceneInfo();
+                drawCityBackground();
+
+                if (idx === 0) {
+                    // Встреча: Нуб слева, Паук справа
+                    drawNoob(180, H * 0.48, 1.0, false, 0);
+                    drawSpiderMan(620, H * 0.48, 1.2, 'stand');
+                    // Облачко диалога
+                    ctx.fillStyle = '#fff';
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.ellipse(320, H * 0.22, 80, 40, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Здорово, дружище!', 320, H * 0.23);
+                    // Махание рукой нуба
+                } else if (idx === 1) {
+                    // Удар бутылкой
+                    const swingPhase = Math.min(1, progress * 2.5);
+                    const bottleAngle = swingPhase * 1.2;
+                    drawNoob(350, H * 0.48, 1.1, true, bottleAngle);
+                    if (progress < 0.8) {
+                        drawSpiderMan(550, H * 0.48, 1.1, 'stand');
+                    } else {
+                        drawSpiderMan(560, H * 0.52, 1.1, 'hurt');
+                    }
+                    if (progress > 0.7) {
+                        ctx.fillStyle = '#ffaa00';
+                        ctx.font = 'bold 28px Arial';
+                        ctx.fillText('БАМ!', 490, H * 0.28);
+                    }
+                } else if (idx === 2) {
+                    // Спецназ арестовывает нуба
+                    drawSpiderMan(600, H * 0.52, 1.0, 'hurt');
+                    // Нуб пытается убежать
+                    const nubX = 400 - progress * 150;
+                    drawNoob(nubX, H * 0.48, 0.95, false, 0);
+                    // Спецназовцы (2-3)
+                    drawSWAT(480, H * 0.50, 0.95);
+                    drawSWAT(540, H * 0.50, 0.95);
+                    if (progress > 0.6) {
+                        // Ещё один хватает
+                        drawSWAT(440, H * 0.50, 0.9);
+                        ctx.fillStyle = '#ff4444';
+                        ctx.font = 'bold 18px Arial';
+                        ctx.fillText('АРЕСТ!', 500, H * 0.30);
+                    }
+                } else if (idx === 3) {
+                    // Победа, толпа радуется
+                    drawSWAT(300, H * 0.50, 1.0);
+                    drawNoob(360, H * 0.52, 0.8, false, 0); // арестованный нуб
+                    // Толпа радостных людей
+                    const peopleX = [500, 550, 610, 670, 720];
+                    for (let i = 0; i < peopleX.length; i++) {
+                        const bounce = Math.sin(animationTime * 5 + i) * 5;
+                        drawCivilian(peopleX[i], H * 0.52 + bounce, 0.75);
+                    }
+                    // Конфетти
+                    for (let i = 0; i < 15; i++) {
+                        const cx = 400 + Math.sin(animationTime * 3 + i) * 200;
+                        const cy = H * 0.2 + Math.cos(animationTime * 4 + i) * 80;
+                        ctx.fillStyle = `hsl(${i * 25}, 80%, 60%)`;
+                        ctx.fillRect(cx, cy, 6, 6);
+                    }
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🏆 ПОБЕДА СПЕЦНАЗА! 🏆', W/2, H * 0.25);
+                    ctx.font = '16px Arial';
+                    ctx.fillText('Все люди радуются!', W/2, H * 0.32);
+                }
+
+                // Обновление текста сцены
+                document.getElementById('sceneInfo').innerHTML = `Сцена <span style="color:#e63946;">${idx+1}/${SCENES.length}</span> — ${SCENES[idx].name}`;
+            }
+
+            function animationLoop(ts) {
+                if (!lastTimestamp) lastTimestamp = ts;
+                const dt = Math.min(0.1, (ts - lastTimestamp) / 1000);
+                if (isPlaying && animationTime < TOTAL_DURATION) {
+                    animationTime += dt;
+                    if (animationTime >= TOTAL_DURATION) animationTime = TOTAL_DURATION;
+                }
+                lastTimestamp = ts;
+                render();
+                animFrameId = requestAnimationFrame(animationLoop);
+            }
+
+            function restart() {
+                animationTime = 0;
+                isPlaying = true;
+                lastTimestamp = null;
+            }
+
+            function skip() {
+                if (animationTime >= TOTAL_DURATION - 0.3) {
+                    restart();
+                    return;
+                }
+                const { idx } = getSceneInfo();
+                if (idx < SCENES.length - 1) {
+                    animationTime = SCENES[idx + 1].start + 0.05;
+                } else {
+                    animationTime = TOTAL_DURATION - 0.1;
+                }
+                isPlaying = true;
+                lastTimestamp = null;
+            }
+
+            // Обработчики
+            document.getElementById('restartBtn').addEventListener('click', restart);
+            document.getElementById('skipBtn').addEventListener('click', skip);
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const relX = (e.clientX - rect.left) / rect.width;
+                if (relX > 0.5) skip();
+                else restart();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (animationTime >= TOTAL_DURATION) restart();
+                    else {
+                        isPlaying = !isPlaying;
+                        if (isPlaying) lastTimestamp = null;
+                    }
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    skip();
+                } else if (e.code === 'KeyR') {
+                    e.preventDefault();
+                    restart();
+                }
+            });
+
+            animFrameId = requestAnimationFrame(animationLoop);
+            console.log('Мультфильм "Человек-паук, Нубик и спецназ" запущен.');
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Iron Citadel</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <canvas id="game" width="480" height="270" aria-label="Игра Iron Citadel"></canvas>
+      <section id="start" class="overlay">
+        <p class="eyebrow">ОДИН УРОВЕНЬ · БЕЗ ЗВУКА</p>
+        <h1>IRON CITADEL</h1>
+        <p>Промышленная крепость заражена. Найдите ключ, зачистите коридоры и доберитесь до шлюза.</p>
+        <button id="play">НАЧАТЬ</button>
+        <small>W/S — вперёд/назад · A/D или мышь — поворот · Q/E — шаг вбок · клик/пробел — огонь · Shift — бег</small>
+      </section>
+      <section id="message" class="message" aria-live="polite"></section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>

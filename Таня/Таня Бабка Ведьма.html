@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔥 Бабка Ведьма 🔥</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            background: #1a0a2e;
+            border-radius: 12px;
+            box-shadow: 0 0 60px rgba(255, 80, 0, 0.3);
+            max-width: 100vw;
+            max-height: 100vh;
+            cursor: pointer;
+        }
+        #info {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 14px;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 20px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            pointer-events: none;
+            user-select: none;
+        }
+        @media (max-width: 600px) {
+            #info {
+                font-size: 10px;
+                bottom: 10px;
+                padding: 4px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="c"></canvas>
+    <div id="info">✦ кликни чтобы начать ✦</div>
+
+    <script>
+        // ============================================================
+        //  МУЛЬТФИЛЬМ "БАБКА ВЕДЬМА"  —  полная история в canvas
+        // ============================================================
+
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+
+        // ---- размеры ----
+        const W = 960;
+        const H = 640;
+        canvas.width = W;
+        canvas.height = H;
+
+        // ---- состояние ----
+        let scene = -1; // -1 = титур, 0..N = сцены
+        let frame = 0;
+        let playing = false;
+        let clock = 0; // кадры внутри сцены
+
+        // ---- персонажи / объекты ----
+        const chars = {
+            grandma: { x: 420, y: 280, w: 60, h: 100 },
+            soldiers: [
+                { x: 120, y: 340, w: 40, h: 80 },
+                { x: 180, y: 330, w: 40, h: 80 },
+                { x: 240, y: 345, w: 40, h: 80 },
+            ],
+            villagers: [
+                { x: 50, y: 480, w: 30, h: 60 },
+                { x: 100, y: 490, w: 30, h: 60 },
+                { x: 150, y: 475, w: 30, h: 60 },
+                { x: 800, y: 485, w: 30, h: 60 },
+                { x: 850, y: 495, w: 30, h: 60 },
+                { x: 900, y: 480, w: 30, h: 60 },
+            ]
+        };
+
+        // ---- частицы (огонь, искры, дым) ----
+        let particles = [];
+        let explosionParticles = [];
+
+        // ---- бомбы ----
+        let bombs = [];
+
+        // ---- диалоги ----
+        let dialogue = {
+            text: '',
+            speaker: '',
+            visible: false,
+            timer: 0,
+        };
+
+        // ---- эффекты ----
+        let shakeX = 0,
+            shakeY = 0;
+        let flash = 0;
+        let fireIntensity = 0;
+        let celebrationActive = false;
+
+        // ============================================================
+        //  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // ============================================================
+
+        function rand(min, max) { return Math.random() * (max - min) + min; }
+
+        function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+
+        // ---- частицы огня ----
+        function spawnFire(x, y, count, spread, size, life, color1, color2) {
+            for (let i = 0; i < count; i++) {
+                const angle = rand(0, Math.PI * 2);
+                const speed = rand(0.5, 4);
+                particles.push({
+                    x: x + rand(-spread, spread),
+                    y: y + rand(-spread, spread),
+                    vx: Math.cos(angle) * speed + rand(-0.5, 0.5),
+                    vy: Math.sin(angle) * speed - rand(1, 3),
+                    size: rand(size * 0.5, size),
+                    life: rand(life * 0.6, life),
+                    maxLife: life,
+                    color1: color1 || '#ff6600',
+                    color2: color2 || '#ffcc00',
+                    type: 'fire',
+                });
+            }
+        }
+
+        function spawnExplosion(x, y, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = rand(0, Math.PI * 2);
+                const speed = rand(2, 12);
+                explosionParticles.push({
+                    x: x + rand(-20, 20),
+                    y: y + rand(-20, 20),
+                    vx: Math.cos(angle) * speed * rand(0.5, 1.5),
+                    vy: Math.sin(angle) * speed * rand(0.5, 1.5) - rand(0, 3),
+                    size: rand(4, 20),
+                    life: rand(20, 60),
+                    maxLife: 60,
+                    color: `hsl(${randInt(20, 60)}, 100%, ${randInt(50, 80)}%)`,
+                    type: 'spark',
+                });
+            }
+            // дым
+            for (let i = 0; i < count * 0.6; i++) {
+                const angle = rand(0, Math.PI * 2);
+                const speed = rand(0.5, 3);
+                particles.push({
+                    x: x + rand(-30, 30),
+                    y: y + rand(-30, 30),
+                    vx: Math.cos(angle) * speed * 0.3,
+                    vy: -rand(0.3, 1.5),
+                    size: rand(20, 60),
+                    life: rand(40, 100),
+                    maxLife: 100,
+                    color1: 'rgba(80,80,80,0.5)',
+                    color2: 'rgba(40,40,40,0.3)',
+                    type: 'smoke',
+                });
+            }
+        }
+
+        // ============================================================
+        //  РИСОВАНИЕ ПЕРСОНАЖЕЙ
+        // ============================================================
+
+        function drawGrandma(x, y, w, h, frame) {
+            const cx = x + w / 2;
+            const by = y + h;
+            const bob = Math.sin(frame * 0.04) * 2;
+
+            // тело (платье)
+            ctx.fillStyle = '#2a1a3a';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.55, w * 0.5, h * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // платье низ
+            ctx.fillStyle = '#3d1f4a';
+            ctx.beginPath();
+            ctx.moveTo(cx - w * 0.6, y + h * 0.55);
+            ctx.quadraticCurveTo(cx - w * 0.7, y + h * 0.85, cx - w * 0.5, y + h);
+            ctx.quadraticCurveTo(cx, y + h * 1.1, cx + w * 0.5, y + h);
+            ctx.quadraticCurveTo(cx + w * 0.7, y + h * 0.85, cx + w * 0.6, y + h * 0.55);
+            ctx.fill();
+
+            // голова
+            ctx.fillStyle = '#e8d5c4';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.2 + bob, w * 0.35, h * 0.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // шляпа ведьмы
+            ctx.fillStyle = '#1a0a1a';
+            ctx.beginPath();
+            ctx.moveTo(cx - w * 0.5, y + h * 0.15 + bob);
+            ctx.quadraticCurveTo(cx - w * 0.3, y - h * 0.2 + bob, cx, y - h * 0.45 + bob);
+            ctx.quadraticCurveTo(cx + w * 0.3, y - h * 0.2 + bob, cx + w * 0.5, y + h * 0.15 + bob);
+            ctx.fill();
+            // поля шляпы
+            ctx.fillStyle = '#1a0a1a';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.15 + bob, w * 0.55, h * 0.06, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // глаза (злые)
+            ctx.fillStyle = '#ff4444';
+            ctx.beginPath();
+            ctx.arc(cx - w * 0.12, y + h * 0.18 + bob, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(cx + w * 0.12, y + h * 0.18 + bob, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(cx - w * 0.1, y + h * 0.2 + bob, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(cx + w * 0.14, y + h * 0.2 + bob, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // нос крючком
+            ctx.strokeStyle = '#c4a090';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx, y + h * 0.22 + bob);
+            ctx.quadraticCurveTo(cx + w * 0.2, y + h * 0.25 + bob, cx + w * 0.1, y + h * 0.3 + bob);
+            ctx.stroke();
+
+            // рот (злая улыбка)
+            ctx.strokeStyle = '#8a2a2a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, y + h * 0.28 + bob, w * 0.12, 0, Math.PI);
+            ctx.stroke();
+
+            // метла
+            ctx.strokeStyle = '#6a4a2a';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx + w * 0.5, y + h * 0.5);
+            ctx.lineTo(cx + w * 0.9, y + h * 0.7);
+            ctx.stroke();
+            ctx.fillStyle = '#8a6a3a';
+            for (let i = 0; i < 6; i++) {
+                const a = i / 6 * Math.PI * 0.6 + 0.2;
+                ctx.beginPath();
+                ctx.moveTo(cx + w * 0.9, y + h * 0.7);
+                ctx.lineTo(cx + w * 0.9 + Math.cos(a) * 12, y + h * 0.7 + Math.sin(a) * 12);
+                ctx.stroke();
+            }
+        }
+
+        function drawSoldier(x, y, w, h, frame, idx) {
+            const cx = x + w / 2;
+            const by = y + h;
+            const bob = Math.sin(frame * 0.05 + idx) * 1.5;
+
+            // тело (бронежилет)
+            ctx.fillStyle = '#3a4a3a';
+            ctx.fillRect(cx - w * 0.35, y + h * 0.3 + bob, w * 0.7, h * 0.4);
+
+            // ноги
+            ctx.fillStyle = '#2a3a2a';
+            ctx.fillRect(cx - w * 0.25, y + h * 0.7 + bob, w * 0.15, h * 0.3);
+            ctx.fillRect(cx + w * 0.1, y + h * 0.7 + bob, w * 0.15, h * 0.3);
+
+            // голова (каска)
+            ctx.fillStyle = '#4a5a4a';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.2 + bob, w * 0.3, h * 0.15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // каска
+            ctx.fillStyle = '#3a4a3a';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.18 + bob, w * 0.32, h * 0.12, 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+
+            // лицо
+            ctx.fillStyle = '#e0d0c0';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h * 0.22 + bob, w * 0.18, h * 0.1, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // глаза (строгие)
+            ctx.fillStyle = '#222';
+            ctx.fillRect(cx - w * 0.08, y + h * 0.2 + bob, 3, 3);
+            ctx.fillRect(cx + w * 0.05, y + h * 0.2 + bob, 3, 3);
+
+            // оружие (автомат)
+            ctx.fillStyle = '#222';
+            ctx.fillRect(cx + w * 0.3, y + h * 0.35 + bob, w * 0.4, 5);
+            ctx.fillRect(cx + w * 0.6, y + h * 0.3 + bob, 8, h * 0.15);
+
+            // ботинки
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(cx - w * 0.3, y + h * 0.95 + bob, w * 0.25, h * 0.08);
+            ctx.fillRect(cx + w * 0.05, y + h * 0.95 + bob, w * 0.25, h * 0.08);
+        }
+
+        function drawVillager(x, y, w, h, frame, idx) {
+            const cx = x + w / 2;
+            const by = y + h;
+            const bob = Math.sin(frame * 0.06 + idx * 2) * 3;
+            const joy = celebrationActive ? 1 : 0;
+
+            // тело
+            ctx.fillStyle = '#5a4a3a';
+            ctx.fillRect(cx - w * 0.3, y + h * 0.35 + bob * joy * 0.3, w * 0.6, h * 0.45);
+
+            // голова
+            ctx.fillStyle = '#e8d5c4';
+            ctx.beginPath();
+            ctx.arc(cx, y + h * 0.2 + bob * joy * 0.3, w * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+
+            // волосы
+            ctx.fillStyle = '#4a3a2a';
+            ctx.beginPath();
+            ctx.arc(cx, y + h * 0.15 + bob * joy * 0.3, w * 0.28, 0, Math.PI);
+            ctx.fill();
+
+            // глаза (радостные)
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(cx - w * 0.08, y + h * 0.18 + bob * joy * 0.3, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(cx + w * 0.08, y + h * 0.18 + bob * joy * 0.3, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // рот (улыбка)
+            ctx.strokeStyle = '#8a3a2a';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, y + h * 0.24 + bob * joy * 0.3, w * 0.1, 0, Math.PI);
+            ctx.stroke();
+
+            // руки вверх (праздник)
+            if (joy > 0.5) {
+                ctx.strokeStyle = '#e8d5c4';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(cx - w * 0.3, y + h * 0.4 + bob * 0.3);
+                ctx.lineTo(cx - w * 0.5, y + h * 0.1 + bob * 0.5);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx + w * 0.3, y + h * 0.4 + bob * 0.3);
+                ctx.lineTo(cx + w * 0.5, y + h * 0.1 + bob * 0.5);
+                ctx.stroke();
+            }
+        }
+
+        function drawHouse(x, y, w, h, burnLevel) {
+            // burnLevel 0..1
+
+            // стены
+            const wallColor = lerpColor('#8a7a5a', '#2a1a0a', burnLevel);
+            ctx.fillStyle = wallColor;
+            ctx.fillRect(x, y, w, h);
+
+            // крыша
+            ctx.fillStyle = lerpColor('#6a3a2a', '#1a0a0a', burnLevel);
+            ctx.beginPath();
+            ctx.moveTo(x - 20, y);
+            ctx.lineTo(x + w / 2, y - h * 0.5);
+            ctx.lineTo(x + w + 20, y);
+            ctx.closePath();
+            ctx.fill();
+
+            // дымоход
+            ctx.fillStyle = lerpColor('#5a4a3a', '#1a1a1a', burnLevel);
+            ctx.fillRect(x + w * 0.7, y - h * 0.35, 20, 30);
+
+            // окно
+            const glassColor = burnLevel > 0.3 ?
+                `rgba(255, ${Math.floor(200 - burnLevel * 150)}, 0, ${0.3 + burnLevel * 0.5})` :
+                '#7ac0ff';
+            ctx.fillStyle = glassColor;
+            ctx.fillRect(x + w * 0.2, y + h * 0.2, w * 0.25, h * 0.3);
+            ctx.strokeStyle = lerpColor('#4a3a2a', '#1a0a0a', burnLevel);
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x + w * 0.2, y + h * 0.2, w * 0.25, h * 0.3);
+            // крест на окне
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.325, y + h * 0.2);
+            ctx.lineTo(x + w * 0.325, y + h * 0.5);
+            ctx.moveTo(x + w * 0.2, y + h * 0.35);
+            ctx.lineTo(x + w * 0.45, y + h * 0.35);
+            ctx.stroke();
+
+            // дверь
+            ctx.fillStyle = lerpColor('#5a3a2a', '#1a0a0a', burnLevel);
+            ctx.fillRect(x + w * 0.65, y + h * 0.5, w * 0.2, h * 0.5);
+            ctx.fillStyle = '#ffcc44';
+            ctx.beginPath();
+            ctx.arc(x + w * 0.78, y + h * 0.75, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // огонь на доме
+            if (burnLevel > 0.05) {
+                const intensity = Math.min(burnLevel * 1.5, 1);
+                const count = Math.floor(intensity * 30);
+                for (let i = 0; i < count; i++) {
+                    const fx = x + rand(5, w - 5);
+                    const fy = y + rand(5, h - 5);
+                    const fs = rand(4, 14 * intensity);
+                    const alpha = rand(0.3, 0.9) * intensity;
+                    const hue = randInt(20, 50);
+                    ctx.fillStyle = `hsla(${hue}, 100%, ${randInt(50, 80)}%, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, fs, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // большой огонь на крыше
+                for (let i = 0; i < Math.floor(intensity * 15); i++) {
+                    const fx = x + rand(-10, w + 10);
+                    const fy = y - h * 0.4 + rand(-10, 10);
+                    const fs = rand(8, 22 * intensity);
+                    const alpha = rand(0.4, 0.9) * intensity;
+                    const hue = randInt(25, 55);
+                    ctx.fillStyle = `hsla(${hue}, 100%, ${randInt(50, 80)}%, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, fs, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function lerpColor(c1, c2, t) {
+            const r1 = parseInt(c1.slice(1, 3), 16),
+                g1 = parseInt(c1.slice(3, 5), 16),
+                b1 = parseInt(c1.slice(5, 7), 16);
+            const r2 = parseInt(c2.slice(1, 3), 16),
+                g2 = parseInt(c2.slice(3, 5), 16),
+                b2 = parseInt(c2.slice(5, 7), 16);
+            const r = Math.round(lerp(r1, r2, t));
+            const g = Math.round(lerp(g1, g2, t));
+            const b = Math.round(lerp(b1, b2, t));
+            return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+        }
+
+        // ============================================================
+        //  ДИАЛОГИ
+        // ============================================================
+
+        function showDialogue(text, speaker, duration) {
+            dialogue.text = text;
+            dialogue.speaker = speaker;
+            dialogue.visible = true;
+            dialogue.timer = duration || 120;
+        }
+
+        function drawDialogue() {
+            if (!dialogue.visible) return;
+            const alpha = Math.min(dialogue.timer / 30, 1);
+            ctx.globalAlpha = alpha;
+
+            // фон
+            const bx = 80,
+                by = 420,
+                bw = 800,
+                bh = 100;
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 30;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, bw, bh, 16);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // имя говорящего
+            ctx.fillStyle = '#ffcc44';
+            ctx.font = 'bold 22px "Comic Sans MS", cursive, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(dialogue.speaker, bx + 24, by + 36);
+
+            // текст
+            ctx.fillStyle = '#fff';
+            ctx.font = '26px "Comic Sans MS", cursive, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(dialogue.text, bx + 24, by + 76);
+
+            ctx.globalAlpha = 1;
+        }
+
+        // ============================================================
+        //  СЦЕНЫ
+        // ============================================================
+
+        let sceneStartFrame = 0;
+
+        function startScene(s) {
+            scene = s;
+            clock = 0;
+            sceneStartFrame = frame;
+            // сброс диалога при смене сцены
+            if (s !== 2 && s !== 3) {
+                dialogue.visible = false;
+            }
+            if (s === 5) {
+                // взрыв!
+                spawnExplosion(460, 260, 120);
+                flash = 20;
+                shakeX = 10;
+                shakeY = 8;
+                fireIntensity = 0;
+                bombs = [];
+            }
+            if (s === 6) {
+                // пожар
+                fireIntensity = 0.3;
+                celebrationActive = false;
+            }
+            if (s === 7) {
+                celebrationActive = true;
+                // люди радуются
+                for (let i = 0; i < 30; i++) {
+                    spawnFire(rand(0, W), rand(0, H), 3, 20, 8, 20, '#ffaa44', '#ffdd66');
+                }
+            }
+        }
+
+        // ============================================================
+        //  ОБНОВЛЕНИЕ
+        // ============================================================
+
+        function update() {
+            frame++;
+            clock++;
+
+            // --- тряска ---
+            shakeX *= 0.9;
+            shakeY *= 0.9;
+            if (Math.abs(shakeX) < 0.01) shakeX = 0;
+            if (Math.abs(shakeY) < 0.01) shakeY = 0;
+
+            // --- вспышка ---
+            if (flash > 0) flash *= 0.92;
+            if (flash < 0.05) flash = 0;
+
+            // --- диалог ---
+            if (dialogue.visible) {
+                dialogue.timer--;
+                if (dialogue.timer <= 0) dialogue.visible = false;
+            }
+
+            // --- частицы ---
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx || 0;
+                p.y += p.vy || 0;
+                p.vy = (p.vy || 0) + 0.05;
+                p.life--;
+                p.size *= 0.995;
+                if (p.life <= 0 || p.size < 0.5) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                const p = explosionParticles[i];
+                p.x += p.vx || 0;
+                p.y += p.vy || 0;
+                p.vy = (p.vy || 0) + 0.08;
+                p.life--;
+                p.size *= 0.99;
+                if (p.life <= 0 || p.size < 0.5) {
+                    explosionParticles.splice(i, 1);
+                }
+            }
+
+            // --- бомбы ---
+            for (let i = bombs.length - 1; i >= 0; i--) {
+                const b = bombs[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.vy += 0.15;
+                b.rot += 0.08;
+                if (b.y > 500) {
+                    // взрыв бомбы
+                    spawnExplosion(b.x, b.y, 40);
+                    shakeX = 6;
+                    shakeY = 5;
+                    flash = 10;
+                    bombs.splice(i, 1);
+                    fireIntensity = Math.min(fireIntensity + 0.12, 1);
+                }
+            }
+
+            // --- логика сцен ---
+            switch (scene) {
+                case -1:
+                    // титур
+                    if (clock > 120 && playing) {
+                        startScene(0);
+                    }
+                    break;
+
+                case 0:
+                    // дом, бабка внутри
+                    if (clock > 80) {
+                        startScene(1);
+                    }
+                    break;
+
+                case 1:
+                    // приезд спецназа
+                    if (clock > 100) {
+                        showDialogue('ТЫ ПОДЖИГАЛА ДОМ?', 'СПЕЦНАЗ', 100);
+                        startScene(2);
+                    }
+                    break;
+
+                case 2:
+                    // диалог вопрос
+                    if (clock > 120) {
+                        showDialogue('ДА! Я САМАЯ СТРАШНАЯ ВЕДЬМА!', 'БАБКА', 90);
+                        startScene(3);
+                    }
+                    break;
+
+                case 3:
+                    // ответ
+                    if (clock > 110) {
+                        startScene(4);
+                    }
+                    break;
+
+                case 4:
+                    // кидают бомбы
+                    if (clock === 10) {
+                        bombs.push({ x: 200, y: 200, vx: 4, vy: -3, rot: 0 });
+                        bombs.push({ x: 250, y: 180, vx: 5, vy: -2, rot: 0 });
+                        bombs.push({ x: 180, y: 220, vx: 3, vy: -4, rot: 0 });
+                    }
+                    if (clock === 30) {
+                        bombs.push({ x: 220, y: 190, vx: 4.5, vy: -3.5, rot: 0 });
+                        bombs.push({ x: 280, y: 210, vx: 3.5, vy: -2.5, rot: 0 });
+                    }
+                    if (clock > 80 && bombs.length === 0) {
+                        startScene(5);
+                    }
+                    break;
+
+                case 5:
+                    // взрыв
+                    if (clock > 60) {
+                        startScene(6);
+                    }
+                    break;
+
+                case 6:
+                    // пожар
+                    if (clock > 120) {
+                        // добавляем огонь постоянно
+                        spawnFire(460 + rand(-80, 80), 220 + rand(-60, 60), 5, 30, 12, 30, '#ff4400', '#ff8800');
+                        spawnFire(460 + rand(-120, 120), 160 + rand(-40, 40), 3, 40, 16, 35, '#ff6600', '#ffcc00');
+                        fireIntensity = Math.min(fireIntensity + 0.003, 1);
+                        if (fireIntensity > 0.9) {
+                            // весь экран в огне
+                            for (let i = 0; i < 8; i++) {
+                                spawnFire(rand(0, W), rand(0, H), 3, 50, 20, 25, '#ff4400', '#ffaa00');
+                            }
+                        }
+                    }
+                    if (clock > 280) {
+                        startScene(7);
+                    }
+                    break;
+
+                case 7:
+                    // праздник
+                    if (clock % 3 === 0) {
+                        spawnFire(rand(100, 400), rand(400, 550), 1, 15, 5, 15, '#ffaa44', '#ffdd66');
+                        spawnFire(rand(600, 900), rand(400, 550), 1, 15, 5, 15, '#ffaa44', '#ffdd66');
+                    }
+                    if (clock > 200) {
+                        // конец
+                        if (clock % 60 < 30) {
+                            ctx.fillStyle = 'rgba(255,200,100,0.05)';
+                            ctx.fillRect(0, 0, W, H);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        // ============================================================
+        //  РИСОВАНИЕ
+        // ============================================================
+
+        function draw() {
+            ctx.save();
+
+            // --- тряска ---
+            const sx = (Math.random() - 0.5) * shakeX;
+            const sy = (Math.random() - 0.5) * shakeY;
+            ctx.translate(sx, sy);
+
+            // --- фон ---
+            if (scene >= 6 && fireIntensity > 0.3) {
+                // небо в огне
+                const r = Math.floor(30 + fireIntensity * 100);
+                const g = Math.floor(10 + fireIntensity * 40);
+                const b = Math.floor(10 + fireIntensity * 10);
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+            } else if (scene >= 5) {
+                ctx.fillStyle = '#1a0a0a';
+            } else {
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#0a0a2e');
+                grad.addColorStop(0.5, '#1a0a3e');
+                grad.addColorStop(1, '#2a1a3a');
+                ctx.fillStyle = grad;
+            }
+            ctx.fillRect(0, 0, W, H);
+
+            // --- луна ---
+            if (scene < 6) {
+                ctx.fillStyle = 'rgba(255,230,200,0.9)';
+                ctx.shadowColor = 'rgba(255,200,150,0.4)';
+                ctx.shadowBlur = 60;
+                ctx.beginPath();
+                ctx.arc(780, 80, 55, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255,240,220,0.6)';
+                ctx.beginPath();
+                ctx.arc(790, 70, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // --- земля ---
+            if (scene < 7) {
+                ctx.fillStyle = '#1a2a1a';
+                ctx.fillRect(0, 500, W, H);
+                ctx.fillStyle = '#2a3a2a';
+                ctx.fillRect(0, 510, W, 10);
+            } else {
+                // земля после пожара
+                ctx.fillStyle = '#1a0a0a';
+                ctx.fillRect(0, 500, W, H);
+            }
+
+            // --- сцены ---
+            switch (scene) {
+                case -1:
+                    drawTitle();
+                    break;
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                    drawScene0to4();
+                    break;
+                case 5:
+                    drawScene5();
+                    break;
+                case 6:
+                    drawScene6();
+                    break;
+                case 7:
+                    drawScene7();
+                    break;
+            }
+
+            // --- диалог поверх всего ---
+            drawDialogue();
+
+            // --- вспышка ---
+            if (flash > 0.5) {
+                ctx.fillStyle = `rgba(255,255,200,${Math.min(flash / 20, 0.6)})`;
+                ctx.fillRect(0, 0, W, H);
+            }
+
+            // --- частицы (поверх всего) ---
+            drawParticles();
+
+            // --- информационная строка ---
+            if (scene === -1 && !playing) {
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.font = '18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('🖱 кликни чтобы начать', W / 2, H - 40);
+            }
+
+            ctx.restore();
+        }
+
+        // ============================================================
+        //  РИСОВАНИЕ ОТДЕЛЬНЫХ СЦЕН
+        // ============================================================
+
+        function drawTitle() {
+            ctx.textAlign = 'center';
+
+            // тень
+            ctx.shadowColor = 'rgba(255,100,0,0.3)';
+            ctx.shadowBlur = 40;
+
+            ctx.fillStyle = '#ff6633';
+            ctx.font = 'bold 72px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillText('🔥 БАБКА ВЕДЬМА 🔥', W / 2, 220);
+
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffcc88';
+            ctx.font = '28px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillText('страшная история в картинках', W / 2, 290);
+
+            ctx.fillStyle = '#aa8866';
+            ctx.font = '18px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillText('кликни чтобы начать', W / 2, 400);
+
+            // маленькая бабка в углу
+            drawGrandma(700, 350, 70, 110, frame);
+            // спецназ
+            drawSoldier(150, 380, 50, 90, frame, 0);
+            drawSoldier(210, 375, 50, 90, frame, 1);
+            drawSoldier(270, 385, 50, 90, frame, 2);
+        }
+
+        function drawScene0to4() {
+            // дом
+            const burn = (scene === 4) ? Math.min(clock / 60, 0.5) : 0;
+            drawHouse(350, 280, 240, 220, burn);
+
+            // бабка (внутри или снаружи)
+            const gx = 420,
+                gy = 320;
+            drawGrandma(gx, gy, 60, 100, frame);
+
+            // спецназ (сцена 1+)
+            if (scene >= 1) {
+                const soldiers = chars.soldiers;
+                for (let i = 0; i < soldiers.length; i++) {
+                    const s = soldiers[i];
+                    const offsetX = (scene === 1) ? Math.min(clock / 2, 1) * (s.x - 100) + 100 : s.x;
+                    const offsetY = (scene === 1) ? Math.min(clock / 2, 1) * (s.y - 50) + 50 : s.y;
+                    drawSoldier(offsetX, offsetY, s.w, s.h, frame, i);
+                }
+            }
+
+            // люди (сцена 0)
+            if (scene === 0) {
+                for (let i = 0; i < chars.villagers.length; i++) {
+                    const v = chars.villagers[i];
+                    drawVillager(v.x, v.y, v.w, v.h, frame, i);
+                }
+            }
+
+            // бомбы (сцена 4)
+            for (const b of bombs) {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.rot || 0);
+                ctx.fillStyle = '#3a3a3a';
+                ctx.shadowColor = 'rgba(255,100,0,0.5)';
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#5a5a5a';
+                ctx.fillRect(-4, -6, 8, 4);
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+
+            // люди (сцена 1+ — наблюдают)
+            if (scene >= 1) {
+                for (let i = 0; i < chars.villagers.length; i++) {
+                    const v = chars.villagers[i];
+                    const scale = (scene >= 2) ? 1 : 0.8;
+                    drawVillager(v.x, v.y, v.w * scale, v.h * scale, frame, i);
+                }
+            }
+        }
+
+        function drawScene5() {
+            // взрыв — рисуем только частицы и фон
+            ctx.fillStyle = 'rgba(255,150,50,0.15)';
+            ctx.fillRect(0, 0, W, H);
+
+            // дом разрушен
+            drawHouse(350, 280, 240, 220, 0.8);
+
+            // бабка падает
+            const fall = Math.min(clock / 20, 1);
+            drawGrandma(420, 320 + fall * 60, 60, 100 - fall * 20, frame);
+
+            // спецназ отступает
+            for (let i = 0; i < 3; i++) {
+                const s = chars.soldiers[i];
+                const offset = i * 15;
+                drawSoldier(s.x - offset * 0.5, s.y - 10, s.w, s.h, frame, i);
+            }
+
+            // люди в ужасе
+            for (let i = 0; i < chars.villagers.length; i++) {
+                const v = chars.villagers[i];
+                const sc = 0.8 + Math.sin(frame * 0.1 + i) * 0.05;
+                drawVillager(v.x, v.y, v.w * sc, v.h * sc, frame, i);
+            }
+
+            // искры и пламя от взрыва
+            for (const p of explosionParticles) {
+                const alpha = p.life / p.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = p.color || '#ff8800';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function drawScene6() {
+            // эпический пожар на весь экран
+            const intensity = Math.min(fireIntensity, 1);
+
+            // фон — огненный
+            const r = Math.floor(40 + intensity * 120);
+            const g = Math.floor(10 + intensity * 40);
+            const b = Math.floor(5 + intensity * 10);
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(0, 0, W, H);
+
+            // дым
+            for (let i = 0; i < 20; i++) {
+                const x = rand(0, W);
+                const y = rand(0, H * 0.6);
+                const s = rand(30, 100);
+                const alpha = rand(0.05, 0.2) * intensity;
+                ctx.fillStyle = `rgba(30,30,30,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(x, y, s, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // огненные частицы
+            for (const p of particles) {
+                if (p.type === 'fire') {
+                    const alpha = (p.life / p.maxLife) * 0.9;
+                    ctx.globalAlpha = alpha;
+                    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+                    grad.addColorStop(0, p.color2 || '#ffcc44');
+                    grad.addColorStop(0.5, p.color1 || '#ff6600');
+                    grad.addColorStop(1, 'rgba(200,40,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // остатки дома
+            drawHouse(350, 280, 240, 220, 1);
+
+            // бабка исчезает в огне
+            if (clock < 100) {
+                const fade = 1 - clock / 100;
+                ctx.globalAlpha = fade;
+                drawGrandma(420, 380, 60, 80, frame);
+                ctx.globalAlpha = 1;
+            }
+
+            // спецназ смотрит
+            for (let i = 0; i < 3; i++) {
+                const s = chars.soldiers[i];
+                drawSoldier(s.x - i * 20, s.y + 20, s.w, s.h, frame, i);
+            }
+
+            // люди в ужасе/радости (смешанные чувства)
+            for (let i = 0; i < chars.villagers.length; i++) {
+                const v = chars.villagers[i];
+                const joy = Math.max(0, Math.min((clock - 150) / 60, 1));
+                const sc = 0.8 + joy * 0.2;
+                drawVillager(v.x, v.y, v.w * sc, v.h * sc, frame, i);
+            }
+
+            // надпись
+            if (clock > 150) {
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(255,200,100,0.5)';
+                ctx.shadowBlur = 40;
+                ctx.fillStyle = `rgba(255,200,100,${Math.min((clock - 150) / 60, 1)})`;
+                ctx.font = 'bold 48px "Comic Sans MS", cursive, sans-serif';
+                ctx.fillText('🔥 ДОМ СГОРЕЛ! 🔥', W / 2, 120);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function drawScene7() {
+            // праздник! все радуются
+
+            // фон — светлое небо
+            const grad = ctx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, '#ffcc66');
+            grad.addColorStop(0.5, '#ff8844');
+            grad.addColorStop(1, '#cc4422');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // солнце
+            ctx.fillStyle = 'rgba(255,255,200,0.9)';
+            ctx.shadowColor = 'rgba(255,200,100,0.6)';
+            ctx.shadowBlur = 80;
+            ctx.beginPath();
+            ctx.arc(480, 100, 70, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // земля
+            ctx.fillStyle = '#3a7a3a';
+            ctx.fillRect(0, 500, W, H);
+            ctx.fillStyle = '#4a8a4a';
+            ctx.fillRect(0, 510, W, 20);
+
+            // люди радуются
+            for (let i = 0; i < chars.villagers.length; i++) {
+                const v = chars.villagers[i];
+                const jump = Math.sin(frame * 0.06 + i * 1.5) * 8;
+                drawVillager(v.x, v.y + jump, v.w, v.h, frame, i);
+            }
+
+            // добавим ещё людей
+            for (let i = 0; i < 8; i++) {
+                const x = 60 + i * 110;
+                const y = 480 + Math.sin(i * 0.7) * 10;
+                const idx = i + 10;
+                const jump = Math.sin(frame * 0.05 + i * 2.3) * 10;
+                drawVillager(x, y + jump, 28, 55, frame, idx);
+            }
+
+            // конфетти
+            for (let i = 0; i < 40; i++) {
+                const x = (i * 37 + frame * 0.5) % W;
+                const y = (i * 53 + frame * 0.7) % (H * 0.8);
+                const s = rand(4, 10);
+                const hue = (i * 60 + frame) % 360;
+                ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+                ctx.globalAlpha = 0.7 + Math.sin(frame * 0.1 + i) * 0.3;
+                ctx.fillRect(x, y, s, s * 0.6);
+                ctx.globalAlpha = 1;
+            }
+
+            // большая надпись
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 20;
+
+            const pulse = 1 + Math.sin(frame * 0.04) * 0.04;
+            ctx.font = `bold ${Math.floor(56 * pulse)}px "Comic Sans MS", cursive, sans-serif`;
+            ctx.fillStyle = '#fff';
+            ctx.fillText('🎉 ВЕДЬМА ПОБЕЖДЕНА! 🎉', W / 2, 180);
+
+            ctx.font = 'bold 32px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillStyle = '#ffeecc';
+            ctx.fillText('👏 ВСЕ РАДУЮТСЯ! 👏', W / 2, 250);
+
+            ctx.shadowBlur = 0;
+
+            // финальная подпись
+            if (clock > 180) {
+                const alpha2 = Math.min((clock - 180) / 60, 1);
+                ctx.globalAlpha = alpha2;
+                ctx.fillStyle = 'rgba(255,200,150,0.6)';
+                ctx.font = '18px "Comic Sans MS", cursive, sans-serif';
+                ctx.fillText('★ КОНЕЦ ★', W / 2, 610);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ============================================================
+        //  ЧАСТИЦЫ (общая отрисовка)
+        // ============================================================
+
+        function drawParticles() {
+            // дым
+            for (const p of particles) {
+                if (p.type === 'smoke') {
+                    const alpha = (p.life / p.maxLife) * 0.5;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = p.color1 || 'rgba(80,80,80,0.3)';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+            // искры
+            for (const p of explosionParticles) {
+                const alpha = p.life / p.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = p.color || '#ff8800';
+                ctx.shadowColor = 'rgba(255,200,100,0.5)';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, Math.max(p.size * 0.3, 1), 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ============================================================
+        //  ПОЛИФИЛЛ ДЛЯ roundRect
+        // ============================================================
+
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+                const rad = (r) => Math.min(r || 0, Math.min(w, h) / 2);
+                this.moveTo(x + rad(r.tl), y);
+                this.lineTo(x + w - rad(r.tr), y);
+                this.quadraticCurveTo(x + w, y, x + w, y + rad(r.tr));
+                this.lineTo(x + w, y + h - rad(r.br));
+                this.quadraticCurveTo(x + w, y + h, x + w - rad(r.br), y + h);
+                this.lineTo(x + rad(r.bl), y + h);
+                this.quadraticCurveTo(x, y + h, x, y + h - rad(r.bl));
+                this.lineTo(x, y + rad(r.tl));
+                this.quadraticCurveTo(x, y, x + rad(r.tl), y);
+                this.closePath();
+                return this;
+            };
+        }
+
+        // ============================================================
+        //  ЦИКЛ АНИМАЦИИ
+        // ============================================================
+
+        function loop() {
+            if (playing) {
+                update();
+            }
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // ============================================================
+        //  ЗАПУСК
+        // ============================================================
+
+        canvas.addEventListener('click', () => {
+            if (!playing) {
+                playing = true;
+                if (scene === -1) {
+                    startScene(0);
+                }
+            }
+        });
+
+        // если надо — автозапуск через 1 секунду
+        setTimeout(() => {
+            if (!playing) {
+                // не автозапускаем, ждём клик
+            }
+        }, 1000);
+
+        // старт
+        startScene(-1);
+        loop();
+
+        // ============================================================
+        //  ОБРАБОТКА РАЗМЕРА
+        // ============================================================
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const maxW = window.innerWidth * 0.95;
+            const maxH = window.innerHeight * 0.92;
+            const scale = Math.min(maxW / W, maxH / H, 1.2);
+            canvas.style.width = Math.floor(W * scale) + 'px';
+            canvas.style.height = Math.floor(H * scale) + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        console.log('🔥 Мультфильм "Бабка Ведьма" запущен! 🔥');
+        console.log('Кликни на экран, чтобы начать историю.');
+    </script>
+</body>
+</html>

@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Брейнрот Сборщик - 3D игра (инвертированное управление)</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            height: 100vh;
+            width: 100vw;
+            cursor: default;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 28px;
+            pointer-events: none;
+        }
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 1px;
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #crosshair::after {
+            height: 2px;
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        #crosshair .dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: #fff;
+            border-radius: 50%;
+        }
+
+        #top-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+
+        #inventory-panel {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 14px 18px;
+            color: #fff;
+            min-width: 220px;
+            max-height: 350px;
+            overflow-y: auto;
+            transition: all 0.3s;
+        }
+        #inventory-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            letter-spacing: 1px;
+            color: #ffcc00;
+            text-transform: uppercase;
+        }
+        .inv-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+            gap: 10px;
+        }
+        .inv-item .name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .inv-item .count {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 2px 8px;
+            font-weight: bold;
+            font-size: 12px;
+            min-width: 22px;
+            text-align: center;
+        }
+        .inv-item .price {
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .inv-empty {
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        #wallet-panel {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            border-radius: 16px;
+            padding: 14px 20px;
+            color: #fff;
+            text-align: right;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+        }
+        #wallet-panel .label {
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+        #wallet-panel .balance {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+        #wallet-panel .total-items {
+            font-size: 11px;
+            color: #ccc;
+            margin-top: 2px;
+        }
+
+        #bottom-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 25px;
+            padding: 10px 24px;
+            color: #fff;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            text-align: center;
+            pointer-events: none;
+            transition: all 0.3s;
+        }
+        #bottom-hint .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 3px 8px;
+            margin: 0 3px;
+            font-weight: bold;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        #bottom-hint .highlight {
+            color: #ffcc00;
+        }
+
+        #overlay-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 20px 35px;
+            border-radius: 20px;
+            font-size: 18px;
+            letter-spacing: 1px;
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 0.4s;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        #overlay-message .icon {
+            font-size: 40px;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        #shop-indicator {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff6600;
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s;
+            letter-spacing: 1px;
+            box-shadow: 0 0 25px rgba(255, 100, 0, 0.6);
+        }
+        #shop-indicator.visible {
+            opacity: 1;
+        }
+
+        @keyframes float {
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 35px rgba(255, 215, 0, 0.7);
+            }
+        }
+        #wallet-panel {
+            animation: pulse 2.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-layer">
+            <div id="crosshair"><div class="dot"></div></div>
+
+            <div id="top-panel">
+                <div id="inventory-panel">
+                    <h3>🎒 Инвентарь</h3>
+                    <div id="inv-list"><div class="inv-empty">Пусто — собирай брейнроты!</div></div>
+                </div>
+                <div id="wallet-panel">
+                    <div class="label">💰 Кошелёк</div>
+                    <div class="balance" id="balance-display">0</div>
+                    <div class="total-items" id="total-items-display">предметов: 0</div>
+                </div>
+            </div>
+
+            <!-- ИЗМЕНЕНА ПОДСКАЗКА: инвертированное управление -->
+            <div id="bottom-hint">
+                <span class="key">W/↑</span> назад &nbsp;|&nbsp;
+                <span class="key">S/↓</span> вперёд &nbsp;|&nbsp;
+                <span class="key">A/←</span> влево &nbsp;|&nbsp;
+                <span class="key">D/→</span> вправо &nbsp;|&nbsp;
+                <span class="key">Мышь</span> — камера &nbsp;|&nbsp;
+                <span class="key highlight">E</span> — подобрать/продать &nbsp;|&nbsp;
+                <span class="key">Пробел</span> — прыжок
+            </div>
+
+            <div id="shop-indicator">🏪 Нажми <b>E</b> чтобы продать всё!</div>
+            <div id="overlay-message">
+                <span class="icon">🖱️</span> Кликни чтобы играть
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ==================== DOM ЭЛЕМЕНТЫ ====================
+        const container = document.getElementById('game-container');
+        const invListEl = document.getElementById('inv-list');
+        const balanceDisplay = document.getElementById('balance-display');
+        const totalItemsDisplay = document.getElementById('total-items-display');
+        const overlayMessage = document.getElementById('overlay-message');
+        const shopIndicator = document.getElementById('shop-indicator');
+        const bottomHint = document.getElementById('bottom-hint');
+
+        // ==================== ТРИЖДЫ ====================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 25, 70);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        container.appendChild(renderer.domElement);
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 80);
+        camera.position.set(0, 8, 10);
+        camera.lookAt(0, 0, 0);
+
+        const ambientLight = new THREE.AmbientLight(0x8899bb, 0.8);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfff5e8, 4.5);
+        sunLight.position.set(15, 25, 10);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 80;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
+        sunLight.shadow.bias = -0.0003;
+        sunLight.shadow.normalBias = 0.02;
+        scene.add(sunLight);
+
+        const fillLight = new THREE.DirectionalLight(0xaaccff, 1.2);
+        fillLight.position.set(-5, 3, -8);
+        scene.add(fillLight);
+
+        // ==================== ПОЛ ====================
+        const groundGeometry = new THREE.PlaneGeometry(60, 60);
+        const groundMaterial = new THREE.MeshPhongMaterial({
+            color: 0x5da84d,
+            specular: 0x111111,
+            shininess: 3,
+            flatShading: false,
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.05;
+        ground.receiveShadow = true;
+        ground.name = 'ground';
+        scene.add(ground);
+
+        const pathMat = new THREE.MeshPhongMaterial({ color: 0xc9b896, specular: 0x000000, shininess: 1 });
+        for (let i = 0; i < 8; i++) {
+            const px = (Math.random() - 0.5) * 40;
+            const pz = (Math.random() - 0.5) * 40;
+            const path = new THREE.Mesh(new THREE.PlaneGeometry(1.5 + Math.random() * 2, 3 + Math.random() * 4),
+            pathMat);
+            path.rotation.x = -Math.PI / 2;
+            path.position.set(px, 0.01, pz);
+            path.receiveShadow = true;
+            scene.add(path);
+        }
+
+        // ==================== ДЕРЕВЬЯ ====================
+        function createTree(x, z, scale = 1) {
+            const group = new THREE.Group();
+            const trunkMat = new THREE.MeshPhongMaterial({ color: 0x8B5E3C, specular: 0x111111, shininess: 2 });
+            const leavesMat = new THREE.MeshPhongMaterial({ color: 0x3d7a28, specular: 0x111111, shininess: 3 });
+
+            const trunkH = 2.5 * scale;
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, trunkH, 8), trunkMat);
+            trunk.position.y = trunkH / 2;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            group.add(trunk);
+
+            const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(1.0 * scale, 1.6 * scale, 10), leavesMat);
+            leaves1.position.y = trunkH + 0.3 * scale;
+            leaves1.castShadow = true;
+            leaves1.receiveShadow = true;
+            group.add(leaves1);
+
+            const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(0.75 * scale, 1.3 * scale, 10), leavesMat);
+            leaves2.position.y = trunkH + 1.1 * scale;
+            leaves2.castShadow = true;
+            leaves2.receiveShadow = true;
+            group.add(leaves2);
+
+            const leaves3 = new THREE.Mesh(new THREE.ConeGeometry(0.5 * scale, 1.0 * scale, 8), leavesMat);
+            leaves3.position.y = trunkH + 1.7 * scale;
+            leaves3.castShadow = true;
+            leaves3.receiveShadow = true;
+            group.add(leaves3);
+
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        const trees = [];
+        const treePositions = [];
+        for (let i = 0; i < 20; i++) {
+            const tx = (Math.random() - 0.5) * 44;
+            const tz = (Math.random() - 0.5) * 44;
+            if (Math.abs(tx - 20) < 6 && Math.abs(tz) < 6) continue;
+            if (Math.abs(tx) < 3 && Math.abs(tz) < 3) continue;
+            let tooClose = false;
+            for (const tp of treePositions) {
+                if (Math.hypot(tx - tp.x, tz - tp.z) < 3) { tooClose = true; break; }
+            }
+            if (tooClose) continue;
+            treePositions.push({ x: tx, z: tz });
+            const tree = createTree(tx, tz, 0.7 + Math.random() * 1.0);
+            tree.userData = { x: tx, z: tz, radius: 0.8 };
+            trees.push(tree);
+            scene.add(tree);
+        }
+
+        // ==================== МАГАЗИН ====================
+        const shopGroup = new THREE.Group();
+        shopGroup.position.set(20, 0, 0);
+        const shopX = 20;
+        const shopZ = 0;
+
+        const wallMat = new THREE.MeshPhongMaterial({ color: 0xe8d5b7, specular: 0x222222, shininess: 5 });
+        const roofMat = new THREE.MeshPhongMaterial({ color: 0xc44b3c, specular: 0x111111, shininess: 10 });
+        const floorMat = new THREE.MeshPhongMaterial({ color: 0xa0845c, specular: 0x000000, shininess: 2 });
+        const trimMat = new THREE.MeshPhongMaterial({ color: 0x5c3d2e, specular: 0x111111, shininess: 8 });
+
+        const shopFloor = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.2, 6), floorMat);
+        shopFloor.position.set(0, 0.1, 0.5);
+        shopFloor.receiveShadow = true;
+        shopGroup.add(shopFloor);
+
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(5.5, 3.5, 0.4), wallMat);
+        backWall.position.set(0, 1.85, 3.2);
+        backWall.castShadow = true;
+        backWall.receiveShadow = true;
+        shopGroup.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 6), wallMat);
+        leftWall.position.set(-2.55, 1.85, 0.5);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        shopGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 6), wallMat);
+        rightWall.position.set(2.55, 1.85, 0.5);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        shopGroup.add(rightWall);
+
+        const frontLeft = new THREE.Mesh(new THREE.BoxGeometry(1.6, 3.5, 0.4), wallMat);
+        frontLeft.position.set(-1.7, 1.85, -2.5);
+        frontLeft.castShadow = true;
+        frontLeft.receiveShadow = true;
+        shopGroup.add(frontLeft);
+
+        const frontRight = new THREE.Mesh(new THREE.BoxGeometry(1.6, 3.5, 0.4), wallMat);
+        frontRight.position.set(1.7, 1.85, -2.5);
+        frontRight.castShadow = true;
+        frontRight.receiveShadow = true;
+        shopGroup.add(frontRight);
+
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.4), trimMat);
+        lintel.position.set(0, 3.3, -2.5);
+        lintel.castShadow = true;
+        shopGroup.add(lintel);
+
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 1.5, 4), roofMat);
+        roof.position.set(0, 3.5 + 0.6, 0.5);
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        roof.receiveShadow = true;
+        shopGroup.add(roof);
+
+        const signBoard = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.7, 0.15), new THREE.MeshPhongMaterial({
+            color: 0xffaa00,
+            emissive: 0x331100,
+            specular: 0xffffff,
+            shininess: 40,
+        }));
+        signBoard.position.set(0, 3.1, -2.6);
+        shopGroup.add(signBoard);
+
+        const beaconPole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 5, 8), new THREE
+        .MeshPhongMaterial({ color: 0x666666, specular: 0x333333, shininess: 20 }));
+        beaconPole.position.set(0, 4.2, 0.5);
+        beaconPole.castShadow = true;
+        shopGroup.add(beaconPole);
+
+        const beaconLight = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), new THREE.MeshPhongMaterial({
+            color: 0xffdd00,
+            emissive: 0xff8800,
+            emissiveIntensity: 1.5,
+            specular: 0xffffff,
+            shininess: 80,
+        }));
+        beaconLight.position.set(0, 6.9, 0.5);
+        beaconLight.castShadow = true;
+        shopGroup.add(beaconLight);
+        beaconLight.name = 'beacon';
+
+        scene.add(shopGroup);
+
+        const shopColliders = [
+            { minX: shopX - 2.75, maxX: shopX + 2.75, minZ: shopZ + 3.0, maxZ: shopZ + 3.4, name: 'back' },
+            { minX: shopX - 2.75, maxX: shopX - 2.35, minZ: shopZ - 2.5, maxZ: shopZ + 3.4, name: 'left' },
+            { minX: shopX + 2.35, maxX: shopX + 2.75, minZ: shopZ - 2.5, maxZ: shopZ + 3.4, name: 'right' },
+            { minX: shopX - 2.5, maxX: shopX - 1.1, minZ: shopZ - 2.9, maxZ: shopZ - 2.5, name: 'frontL' },
+            { minX: shopX + 1.1, maxX: shopX + 2.5, minZ: shopZ - 2.9, maxZ: shopZ - 2.5, name: 'frontR' },
+        ];
+
+        const shopInteriorZone = {
+            minX: shopX - 2.3,
+            maxX: shopX + 2.3,
+            minZ: shopZ - 2.3,
+            maxZ: shopZ + 2.8,
+        };
+
+        function isInsideShopInterior(px, pz) {
+            return px > shopInteriorZone.minX && px < shopInteriorZone.maxX &&
+                pz > shopInteriorZone.minZ && pz < shopInteriorZone.maxZ;
+        }
+
+        // ==================== ТИПЫ БРЕЙНРОТОВ ====================
+        const BRAINROT_TYPES = [
+            { name: 'Скибиди Туалет', color: 0xff3333, emissive: 0x330000, value: 50, shape: 'cylinder', radius: 0.45,
+                height: 0.7 },
+            { name: 'Сигма', color: 0x3366ff, emissive: 0x000033, value: 30, shape: 'box', size: 0.55 },
+            { name: 'Рицц', color: 0xffd700, emissive: 0x331100, value: 45, shape: 'sphere', radius: 0.4 },
+            { name: 'Огайо', color: 0x888888, emissive: 0x111111, value: 10, shape: 'box', size: 0.4 },
+            { name: 'Гримейс Шейк', color: 0x33ff33, emissive: 0x003300, value: 25, shape: 'cone', radius: 0.4,
+            height: 0.7 },
+            { name: 'Фанум Такс', color: 0x9933ff, emissive: 0x110033, value: 75, shape: 'octahedron', radius: 0.45 },
+        ];
+
+        // ==================== ПРЕДМЕТЫ НА КАРТЕ ====================
+        const collectibles = [];
+        const collectiblesGroup = new THREE.Group();
+        scene.add(collectiblesGroup);
+        const MAX_COLLECTIBLES = 22;
+
+        function createCollectibleMesh(typeDef) {
+            let geometry;
+            switch (typeDef.shape) {
+                case 'cylinder':
+                    geometry = new THREE.CylinderGeometry(typeDef.radius, typeDef.radius, typeDef.height, 16);
+                    break;
+                case 'box':
+                    geometry = new THREE.BoxGeometry(typeDef.size, typeDef.size, typeDef.size);
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(typeDef.radius, 16, 12);
+                    break;
+                case 'cone':
+                    geometry = new THREE.ConeGeometry(typeDef.radius, typeDef.height, 16);
+                    break;
+                case 'octahedron':
+                    geometry = new THREE.OctahedronGeometry(typeDef.radius);
+                    break;
+                default:
+                    geometry = new THREE.SphereGeometry(0.4, 12, 8);
+            }
+            const material = new THREE.MeshPhongMaterial({
+                color: typeDef.color,
+                emissive: typeDef.emissive,
+                emissiveIntensity: 0.4,
+                specular: 0x444444,
+                shininess: 30,
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            const ringGeo = new THREE.TorusGeometry(typeDef.radius * 1.15, 0.06, 8, 16);
+            const ringMat = new THREE.MeshPhongMaterial({
+                color: typeDef.color,
+                emissive: typeDef.color,
+                emissiveIntensity: 0.7,
+                specular: 0xffffff,
+                shininess: 60,
+                transparent: true,
+                opacity: 0.7,
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.name = 'ring';
+            mesh.add(ring);
+            return mesh;
+        }
+
+        function spawnCollectible(forcedTypeIndex = null) {
+            const typeIndex = forcedTypeIndex !== null ? forcedTypeIndex : Math.floor(Math.random() * BRAINROT_TYPES
+                .length);
+            const typeDef = BRAINROT_TYPES[typeIndex];
+            const mesh = createCollectibleMesh(typeDef);
+
+            let sx, sz;
+            let attempts = 0;
+            do {
+                sx = (Math.random() - 0.5) * 42;
+                sz = (Math.random() - 0.5) * 42;
+                attempts++;
+            } while (
+                attempts < 30 && (
+                    (Math.abs(sx - shopX) < 7 && Math.abs(sz - shopZ) < 7) ||
+                    (Math.abs(sx) < 4 && Math.abs(sz) < 4) ||
+                    trees.some(t => Math.hypot(sx - t.userData.x, sz - t.userData.z) < 2.2)
+                )
+            );
+
+            mesh.position.set(sx, 0.55, sz);
+            mesh.userData = {
+                typeIndex,
+                typeDef,
+                collected: false,
+                baseY: 0.55,
+                floatOffset: Math.random() * Math.PI * 2,
+                floatSpeed: 1.2 + Math.random() * 1.8,
+                spinSpeed: 0.8 + Math.random() * 2.5,
+                respawnTimer: 0,
+            };
+            collectiblesGroup.add(mesh);
+            collectibles.push(mesh);
+            return mesh;
+        }
+
+        for (let i = 0; i < MAX_COLLECTIBLES; i++) {
+            spawnCollectible();
+        }
+
+        // ==================== ИГРОК ====================
+        const playerGroup = new THREE.Group();
+        const playerData = {
+            x: 0,
+            y: 0,
+            z: 0,
+            velocityY: 0,
+            onGround: true,
+            rotationY: 0,
+            targetRotationY: 0,
+            radius: 0.55,
+        };
+
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x4488cc, specular: 0x222222, shininess: 8 });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.4), bodyMat);
+        body.position.y = 1.15;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        playerGroup.add(body);
+
+        const headMat = new THREE.MeshPhongMaterial({ color: 0xffd5b8, specular: 0x332211, shininess: 12 });
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), headMat);
+        head.position.y = 1.8;
+        head.castShadow = true;
+        head.receiveShadow = true;
+        playerGroup.add(head);
+
+        const eyeMat = new THREE.MeshPhongMaterial({ color: 0x111111, emissive: 0x000000, specular: 0xffffff,
+            shininess: 80 });
+        const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), eyeMat);
+        leftEye.position.set(-0.1, 1.86, 0.28);
+        playerGroup.add(leftEye);
+        const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), eyeMat);
+        rightEye.position.set(0.1, 1.86, 0.28);
+        playerGroup.add(rightEye);
+
+        const hairMat = new THREE.MeshPhongMaterial({ color: 0x332211, specular: 0x111111, shininess: 3 });
+        const hair = new THREE.Mesh(new THREE.SphereGeometry(0.33, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2.3), hairMat);
+        hair.position.y = 1.88;
+        hair.castShadow = true;
+        playerGroup.add(hair);
+
+        const limbMat = new THREE.MeshPhongMaterial({ color: 0x4488cc, specular: 0x222222, shininess: 6 });
+        const leftArmGroup = new THREE.Group();
+        leftArmGroup.position.set(-0.38, 1.55, 0);
+        const leftArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), limbMat);
+        leftArmMesh.position.y = -0.25;
+        leftArmMesh.castShadow = true;
+        leftArmMesh.receiveShadow = true;
+        leftArmGroup.add(leftArmMesh);
+        playerGroup.add(leftArmGroup);
+
+        const rightArmGroup = new THREE.Group();
+        rightArmGroup.position.set(0.38, 1.55, 0);
+        const rightArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), limbMat);
+        rightArmMesh.position.y = -0.25;
+        rightArmMesh.castShadow = true;
+        rightArmMesh.receiveShadow = true;
+        rightArmGroup.add(rightArmMesh);
+        playerGroup.add(rightArmGroup);
+
+        const pantsMat = new THREE.MeshPhongMaterial({ color: 0x3a3a5c, specular: 0x111111, shininess: 4 });
+        const leftLegGroup = new THREE.Group();
+        leftLegGroup.position.set(-0.16, 0.7, 0);
+        const leftLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.65, 0.2), pantsMat);
+        leftLegMesh.position.y = -0.22;
+        leftLegMesh.castShadow = true;
+        leftLegMesh.receiveShadow = true;
+        leftLegGroup.add(leftLegMesh);
+        playerGroup.add(leftLegGroup);
+
+        const rightLegGroup = new THREE.Group();
+        rightLegGroup.position.set(0.16, 0.7, 0);
+        const rightLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.65, 0.2), pantsMat);
+        rightLegMesh.position.y = -0.22;
+        rightLegMesh.castShadow = true;
+        rightLegMesh.receiveShadow = true;
+        rightLegGroup.add(rightLegMesh);
+        playerGroup.add(rightLegGroup);
+
+        playerGroup.position.set(playerData.x, playerData.y, playerData.z);
+        playerGroup.castShadow = true;
+        playerGroup.receiveShadow = true;
+        scene.add(playerGroup);
+
+        // ==================== ЧАСТИЦЫ ====================
+        const particlesGroup = new THREE.Group();
+        scene.add(particlesGroup);
+        const activeParticles = [];
+
+        function spawnParticles(x, y, z, color, count = 10) {
+            for (let i = 0; i < count; i++) {
+                const geo = new THREE.SphereGeometry(0.06 + Math.random() * 0.08, 6, 4);
+                const mat = new THREE.MeshPhongMaterial({
+                    color,
+                    emissive: color,
+                    emissiveIntensity: 0.6,
+                    specular: 0xffffff,
+                    shininess: 50,
+                });
+                const particle = new THREE.Mesh(geo, mat);
+                particle.position.set(x, y, z);
+                particle.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 4,
+                        3 + Math.random() * 5,
+                        (Math.random() - 0.5) * 4
+                    ),
+                    life: 0.6 + Math.random() * 0.5,
+                    age: 0,
+                };
+                particlesGroup.add(particle);
+                activeParticles.push(particle);
+            }
+        }
+
+        // ==================== СОСТОЯНИЕ ВВОДА ====================
+        const keys = {};
+        let mouseDeltaX = 0;
+        let mouseDeltaY = 0;
+        let pointerLocked = false;
+        let ePressed = false;
+        let eWasPressed = false;
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'KeyE') ePressed = true;
+            if (e.code === 'Space') e.preventDefault();
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            if (e.code === 'KeyE') ePressed = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (pointerLocked) {
+                mouseDeltaX += e.movementX;
+                mouseDeltaY += e.movementY;
+            }
+        });
+
+        renderer.domElement.addEventListener('click', () => {
+            if (!pointerLocked) {
+                renderer.domElement.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            pointerLocked = document.pointerLockElement === renderer.domElement;
+            if (pointerLocked) {
+                overlayMessage.style.opacity = '0';
+                setTimeout(() => { overlayMessage.textContent = ''; }, 400);
+            } else {
+                overlayMessage.innerHTML = '<span class="icon">🖱️</span> Кликни чтобы играть';
+                overlayMessage.style.opacity = '1';
+                mouseDeltaX = 0;
+                mouseDeltaY = 0;
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==================== ИНВЕНТАРЬ И КОШЕЛЁК ====================
+        const inventory = {};
+        BRAINROT_TYPES.forEach((_, i) => { inventory[i] = 0; });
+        let walletBalance = 0;
+        let totalCollectedItems = 0;
+
+        function updateUI() {
+            let hasItems = false;
+            let invHTML = '';
+            for (let i = 0; i < BRAINROT_TYPES.length; i++) {
+                if (inventory[i] > 0) {
+                    hasItems = true;
+                    invHTML += `
+                        <div class="inv-item">
+                            <span class="name">${BRAINROT_TYPES[i].name}</span>
+                            <span class="count">${inventory[i]}</span>
+                            <span class="price">${BRAINROT_TYPES[i].value}₽</span>
+                        </div>`;
+                }
+            }
+            if (!hasItems) {
+                invHTML = '<div class="inv-empty">Пусто — собирай брейнроты!</div>';
+            }
+            invListEl.innerHTML = invHTML;
+            balanceDisplay.textContent = walletBalance;
+            totalItemsDisplay.textContent = `предметов: ${totalCollectedItems}`;
+        }
+
+        function collectItem(itemMesh) {
+            if (itemMesh.userData.collected) return;
+            const typeDef = itemMesh.userData.typeDef;
+            const typeIndex = itemMesh.userData.typeIndex;
+            inventory[typeIndex]++;
+            totalCollectedItems++;
+            const pos = itemMesh.position;
+            spawnParticles(pos.x, pos.y, pos.z, typeDef.color, 12);
+            itemMesh.userData.collected = true;
+            itemMesh.visible = false;
+            itemMesh.userData.respawnTimer = 6 + Math.random() * 10;
+            updateUI();
+        }
+
+        function sellAllItems() {
+            let totalValue = 0;
+            let soldCount = 0;
+            for (let i = 0; i < BRAINROT_TYPES.length; i++) {
+                if (inventory[i] > 0) {
+                    totalValue += inventory[i] * BRAINROT_TYPES[i].value;
+                    soldCount += inventory[i];
+                    inventory[i] = 0;
+                }
+            }
+            if (soldCount > 0) {
+                walletBalance += totalValue;
+                totalCollectedItems -= soldCount;
+                const shopCenter = new THREE.Vector3(shopX, 2, shopZ + 0.5);
+                spawnParticles(shopCenter.x, shopCenter.y, shopCenter.z, 0xffd700, 25);
+                spawnParticles(shopCenter.x, shopCenter.y, shopCenter.z, 0x00ff00, 20);
+            }
+            updateUI();
+        }
+
+        // ==================== КАМЕРА ====================
+        let cameraHorizontalAngle = Math.PI;
+        let cameraVerticalAngle = 0.45;
+        const cameraDistance = 7.5;
+        const cameraHeightOffset = 2.5;
+        const cameraMinVertical = 0.1;
+        const cameraMaxVertical = 1.2;
+        const mouseSensitivity = 0.003;
+
+        function updateCamera() {
+            if (pointerLocked) {
+                cameraHorizontalAngle -= mouseDeltaX * mouseSensitivity;
+                cameraVerticalAngle += mouseDeltaY * mouseSensitivity;
+                cameraVerticalAngle = Math.max(cameraMinVertical, Math.min(cameraMaxVertical, cameraVerticalAngle));
+                mouseDeltaX = 0;
+                mouseDeltaY = 0;
+            }
+
+            const px = playerData.x;
+            const py = playerData.y + cameraHeightOffset;
+            const pz = playerData.z;
+
+            const camX = px + cameraDistance * Math.sin(cameraHorizontalAngle) * Math.cos(cameraVerticalAngle);
+            const camY = py + cameraDistance * Math.sin(cameraVerticalAngle);
+            const camZ = pz + cameraDistance * Math.cos(cameraHorizontalAngle) * Math.cos(cameraVerticalAngle);
+
+            const finalCamY = Math.max(camY, 0.8);
+            camera.position.lerp(new THREE.Vector3(camX, finalCamY, camZ), 0.15);
+            camera.lookAt(px, py - 0.3, pz);
+        }
+
+        // ==================== ИГРОВОЙ ЦИКЛ ====================
+        const clock = new THREE.Clock();
+        let gameTime = 0;
+
+        function checkCollisionWithWalls(px, pz) {
+            let correctedX = px;
+            let correctedZ = pz;
+            const r = playerData.radius;
+
+            for (const wall of shopColliders) {
+                const wMinX = wall.minX - r;
+                const wMaxX = wall.maxX + r;
+                const wMinZ = wall.minZ - r;
+                const wMaxZ = wall.maxZ + r;
+                if (correctedX > wMinX && correctedX < wMaxX && correctedZ > wMinZ && correctedZ < wMaxZ) {
+                    const overlapLeft = correctedX - wMinX;
+                    const overlapRight = wMaxX - correctedX;
+                    const overlapFront = correctedZ - wMinZ;
+                    const overlapBack = wMaxZ - correctedZ;
+                    const minOverlap = Math.min(overlapLeft, overlapRight, overlapFront, overlapBack);
+                    if (minOverlap === overlapLeft) correctedX = wMinX;
+                    else if (minOverlap === overlapRight) correctedX = wMaxX;
+                    else if (minOverlap === overlapFront) correctedZ = wMinZ;
+                    else correctedZ = wMaxZ;
+                }
+            }
+
+            for (const tree of trees) {
+                const tx = tree.userData.x;
+                const tz = tree.userData.z;
+                const tr = tree.userData.radius + r;
+                const dx = correctedX - tx;
+                const dz = correctedZ - tz;
+                const dist = Math.hypot(dx, dz);
+                if (dist < tr && dist > 0.001) {
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+                    correctedX = tx + nx * tr;
+                    correctedZ = tz + nz * tr;
+                }
+            }
+
+            const mapLimit = 24;
+            correctedX = Math.max(-mapLimit, Math.min(mapLimit, correctedX));
+            correctedZ = Math.max(-mapLimit, Math.min(mapLimit, correctedZ));
+
+            return { x: correctedX, z: correctedZ };
+        }
+
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.15);
+            gameTime += dt;
+
+            const eJustPressed = ePressed && !eWasPressed;
+            eWasPressed = ePressed;
+
+            // === ИНВЕРТИРОВАННОЕ УПРАВЛЕНИЕ ===
+            let moveX = 0;
+            let moveZ = 0;
+            if (pointerLocked) {
+                // W / Стрелка вверх → назад (отрицательное Z)
+                if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+                // S / Стрелка вниз → вперёд (положительное Z)
+                if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+                // A / Стрелка влево → вправо (положительное X, но с учётом системы координат)
+                if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+                // D / Стрелка вправо → влево (отрицательное X)
+                if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+            }
+
+            const inputMag = Math.hypot(moveX, moveZ);
+            if (inputMag > 1) {
+                moveX /= inputMag;
+                moveZ /= inputMag;
+            }
+
+            const forwardX = Math.sin(cameraHorizontalAngle);
+            const forwardZ = Math.cos(cameraHorizontalAngle);
+            const rightX = Math.cos(cameraHorizontalAngle);
+            const rightZ = -Math.sin(cameraHorizontalAngle);
+
+            const worldMoveX = moveX * rightX + moveZ * forwardX;
+            const worldMoveZ = moveX * rightZ + moveZ * forwardZ;
+            const moveSpeed = 5.5;
+            const isMoving = Math.abs(worldMoveX) > 0.001 || Math.abs(worldMoveZ) > 0.001;
+
+            if (isMoving) {
+                playerData.targetRotationY = Math.atan2(worldMoveX, worldMoveZ);
+            }
+
+            let rotDiff = playerData.targetRotationY - playerData.rotationY;
+            while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+            while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+            playerData.rotationY += rotDiff * Math.min(dt * 12, 1);
+            playerGroup.rotation.y = playerData.rotationY;
+
+            const gravity = 18;
+            if (playerData.onGround && keys['Space'] && pointerLocked) {
+                playerData.velocityY = 8.5;
+                playerData.onGround = false;
+            }
+            playerData.velocityY -= gravity * dt;
+            playerData.y += playerData.velocityY * dt;
+            if (playerData.y <= 0) {
+                playerData.y = 0;
+                playerData.velocityY = 0;
+                playerData.onGround = true;
+            }
+
+            const newRawX = playerData.x + worldMoveX * moveSpeed * dt;
+            const newRawZ = playerData.z + worldMoveZ * moveSpeed * dt;
+            const corrected = checkCollisionWithWalls(newRawX, newRawZ);
+            playerData.x = corrected.x;
+            playerData.z = corrected.z;
+
+            playerGroup.position.set(playerData.x, playerData.y, playerData.z);
+
+            const walkSpeed = 10;
+            const walkAmplitude = isMoving ? 0.6 : 0;
+            const swing = Math.sin(gameTime * walkSpeed) * walkAmplitude;
+            leftArmGroup.rotation.x = swing;
+            rightArmGroup.rotation.x = -swing;
+            leftLegGroup.rotation.x = -swing;
+            rightLegGroup.rotation.x = swing;
+
+            if (!isMoving) {
+                const idleSwing = Math.sin(gameTime * 1.8) * 0.08;
+                leftArmGroup.rotation.x = idleSwing;
+                rightArmGroup.rotation.x = -idleSwing;
+                leftLegGroup.rotation.x = -idleSwing * 0.4;
+                rightLegGroup.rotation.x = idleSwing * 0.4;
+            }
+
+            for (const item of collectibles) {
+                if (item.userData.collected) continue;
+                const dx = playerData.x - item.position.x;
+                const dz = playerData.z - item.position.z;
+                const dist = Math.hypot(dx, dz);
+                if (dist < 1.4) {
+                    collectItem(item);
+                }
+            }
+
+            for (const item of collectibles) {
+                if (item.userData.collected) {
+                    item.userData.respawnTimer -= dt;
+                    if (item.userData.respawnTimer <= 0) {
+                        const typeIndex = item.userData.typeIndex;
+                        let sx, sz;
+                        let attempts = 0;
+                        do {
+                            sx = (Math.random() - 0.5) * 42;
+                            sz = (Math.random() - 0.5) * 42;
+                            attempts++;
+                        } while (
+                            attempts < 30 && (
+                                (Math.abs(sx - shopX) < 7 && Math.abs(sz - shopZ) < 7) ||
+                                (Math.abs(sx - playerData.x) < 5 && Math.abs(sz - playerData.z) < 5) ||
+                                trees.some(t => Math.hypot(sx - t.userData.x, sz - t.userData.z) < 2.2)
+                            )
+                        );
+                        item.position.set(sx, 0.55, sz);
+                        item.userData.collected = false;
+                        item.userData.baseY = 0.55;
+                        item.userData.floatOffset = Math.random() * Math.PI * 2;
+                        item.visible = true;
+                        item.userData.respawnTimer = 0;
+                    }
+                }
+            }
+
+            for (const item of collectibles) {
+                if (item.userData.collected) continue;
+                const ud = item.userData;
+                const floatY = Math.sin(gameTime * ud.floatSpeed + ud.floatOffset) * 0.35;
+                item.position.y = ud.baseY + floatY;
+                item.rotation.y += ud.spinSpeed * dt;
+                if (item.children.length > 0 && item.children[0].name === 'ring') {
+                    item.children[0].rotation.z += ud.spinSpeed * 1.3 * dt;
+                }
+            }
+
+            const beacon = shopGroup.getObjectByName('beacon');
+            if (beacon) {
+                beacon.rotation.y += dt * 1.2;
+                const beaconGlow = 0.7 + Math.sin(gameTime * 3) * 0.3;
+                beacon.material.emissiveIntensity = 1.0 + beaconGlow;
+            }
+
+            const insideShop = isInsideShopInterior(playerData.x, playerData.z);
+            if (insideShop) {
+                shopIndicator.classList.add('visible');
+                if (eJustPressed && totalCollectedItems > 0) {
+                    sellAllItems();
+                }
+            } else {
+                shopIndicator.classList.remove('visible');
+            }
+
+            for (let i = activeParticles.length - 1; i >= 0; i--) {
+                const p = activeParticles[i];
+                p.userData.age += dt;
+                if (p.userData.age >= p.userData.life) {
+                    particlesGroup.remove(p);
+                    p.geometry.dispose();
+                    p.material.dispose();
+                    activeParticles.splice(i, 1);
+                } else {
+                    const progress = p.userData.age / p.userData.life;
+                    p.userData.velocity.y -= 12 * dt;
+                    p.position.x += p.userData.velocity.x * dt;
+                    p.position.y += p.userData.velocity.y * dt;
+                    p.position.z += p.userData.velocity.z * dt;
+                    p.material.opacity = 1 - progress;
+                    p.material.transparent = true;
+                    p.scale.setScalar(1 - progress * 0.7);
+                }
+            }
+
+            updateCamera();
+            renderer.render(scene, camera);
+        }
+
+        updateUI();
+        overlayMessage.innerHTML = '<span class="icon">🖱️</span> Кликни чтобы играть';
+        overlayMessage.style.opacity = '1';
+        shopIndicator.classList.remove('visible');
+
+        camera.position.set(0, 9, 10);
+        camera.lookAt(0, 0, 0);
+
+        requestAnimationFrame(animate);
+
+        console.log('🎮 Брейнрот Сборщик (инвертированное управление)');
+        console.log('W/↑ — назад | S/↓ — вперёд | A/← — вправо | D/→ — влево');
+    </script>
+</body>
+</html>
