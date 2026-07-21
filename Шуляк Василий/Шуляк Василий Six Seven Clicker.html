@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Six Seven Clicker 🧠</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0b0e14;
+            color: #fff;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 20% 30%, #1a1f2b, #0b0e14);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 12px 10px 16px;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(18, 22, 32, 0.85);
+            backdrop-filter: blur(6px);
+            border-radius: 32px 32px 20px 20px;
+            padding: 14px 16px 10px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            margin-bottom: 12px;
+        }
+
+        .title {
+            font-size: 15px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #f0c060;
+            text-shadow: 0 0 12px #f0a03080;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .balance {
+            font-size: 42px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #f7d875, #f5b342);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px #f5b34240;
+            text-align: center;
+            margin: 2px 0 6px;
+        }
+
+        .balance span {
+            font-size: 24px;
+            -webkit-text-fill-color: #f0c060;
+            opacity: 0.8;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            font-size: 12px;
+            color: #9aacbf;
+            padding: 5px 0;
+            border-top: 1px solid #2a3444;
+            margin-top: 4px;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .stats span {
+            background: #1a2330;
+            padding: 3px 12px;
+            border-radius: 40px;
+            border: 1px solid #2d3a4e;
+            font-size: 11px;
+        }
+
+        .stats .click-power { color: #f5d742; }
+        .stats .auto-power { color: #6fc7ff; }
+        .stats .prestige-level { color: #ff6bff; }
+
+        .click-area {
+            margin: 4px auto 12px;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.07s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 12px 0 #7a4f0e, 0 16px 32px rgba(0, 0, 0, 0.6), 0 0 60px rgba(245, 179, 66, 0.2);
+            border: 3px solid #ffdd77;
+            background: radial-gradient(circle at 30% 30%, #f5c542, #d48c1a);
+        }
+
+        .click-area:active {
+            transform: scale(0.92);
+            box-shadow: 0 6px 0 #7a4f0e, 0 10px 24px rgba(0, 0, 0, 0.7);
+        }
+
+        .click-area img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .click-area .brainrot {
+            position: absolute;
+            bottom: 16px;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            padding: 4px 16px;
+            border-radius: 30px;
+            color: #f5d742;
+            border: 1px solid #f5b34260;
+            letter-spacing: 1px;
+            font-weight: 600;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            flex: 1;
+            min-width: 55px;
+            padding: 8px 4px;
+            border: none;
+            border-radius: 16px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: #1a2330;
+            color: #6a7a8e;
+            border: 1px solid #2d3a4e;
+            letter-spacing: 0.3px;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #f5b342, #d48c1a);
+            color: #1a1a1a;
+            border-color: #ffdd77;
+            box-shadow: 0 4px 20px #f5b34240;
+        }
+
+        .tab-btn:active { transform: scale(0.95); }
+
+        .tab-content {
+            display: none;
+            background: rgba(18, 22, 32, 0.85);
+            backdrop-filter: blur(6px);
+            border-radius: 20px;
+            padding: 12px 10px;
+            border: 1px solid #2d3a4e;
+            min-height: 250px;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content::-webkit-scrollbar {
+            width: 3px;
+        }
+        .tab-content::-webkit-scrollbar-thumb {
+            background: #f5b34260;
+            border-radius: 10px;
+        }
+
+        .shop-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .shop-item {
+            background: #1e2736;
+            border-radius: 30px;
+            padding: 8px 14px 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #2d3a4e;
+            transition: all 0.15s;
+            box-shadow: 0 3px 0 #0b0f16;
+            cursor: pointer;
+            gap: 8px;
+        }
+
+        .shop-item:active {
+            transform: scale(0.97);
+            box-shadow: 0 1px 0 #0b0f16;
+        }
+
+        .shop-item .info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .shop-item .name {
+            font-weight: 700;
+            font-size: 14px;
+            color: #f0e6d3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .shop-item .name .badge {
+            background: #f5b34230;
+            padding: 0px 8px;
+            border-radius: 20px;
+            font-size: 10px;
+            color: #f5b342;
+            margin-left: 4px;
+            border: 1px solid #f5b34240;
+        }
+
+        .shop-item .desc {
+            font-size: 11px;
+            color: #a0b3c9;
+            margin-top: 1px;
+        }
+
+        .shop-item .price {
+            background: #2b364a;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 13px;
+            color: #f5d742;
+            border: 1px solid #f5b34230;
+            white-space: nowrap;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .shop-item .price.disabled {
+            opacity: 0.35;
+            filter: grayscale(0.5);
+        }
+
+        .shop-item.owned {
+            border-color: #6bff8b60;
+            background: #1a2a1a;
+        }
+
+        .shop-item.owned .price {
+            color: #6bff8b;
+            border-color: #6bff8b40;
+        }
+
+        .shop-item.prestige {
+            border-color: #ff6bff60;
+            background: #2a1a2a;
+        }
+
+        .shop-item.prestige .price {
+            color: #ff6bff;
+            border-color: #ff6bff40;
+        }
+
+        .history-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .history-item {
+            background: #1a2330;
+            border-radius: 12px;
+            padding: 8px 12px;
+            border-left: 3px solid #f5b342;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-item .h-time {
+            color: #6a7a8e;
+            font-size: 10px;
+        }
+
+        .history-item .h-desc {
+            color: #c8d6e5;
+            flex: 1;
+            margin: 0 8px;
+        }
+
+        .history-item .h-price {
+            color: #f5d742;
+            font-weight: 600;
+        }
+
+        .history-empty {
+            text-align: center;
+            color: #6a7a8e;
+            padding: 30px 0;
+            font-size: 14px;
+        }
+
+        .phone-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .phone-message {
+            background: #1a2330;
+            border-radius: 12px;
+            padding: 10px 14px;
+            border-left: 3px solid #f5b342;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .phone-message .msg-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #6a7a8e;
+            margin-bottom: 3px;
+        }
+
+        .phone-message .msg-header .sender {
+            color: #f5b342;
+            font-weight: 600;
+        }
+
+        .phone-message .msg-text {
+            font-size: 13px;
+            color: #c8d6e5;
+            margin: 4px 0;
+        }
+
+        .phone-message .msg-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .phone-message .msg-actions button {
+            padding: 4px 16px;
+            border: none;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .phone-message .msg-actions button:active {
+            transform: scale(0.92);
+        }
+
+        .btn-accept {
+            background: #6bff8b;
+            color: #0b0e14;
+        }
+
+        .btn-accept:hover {
+            background: #5ae07a;
+        }
+
+        .btn-decline {
+            background: #ff6b6b;
+            color: #0b0e14;
+        }
+
+        .btn-decline:hover {
+            background: #e05a5a;
+        }
+
+        .phone-empty {
+            text-align: center;
+            color: #6a7a8e;
+            padding: 30px 0;
+            font-size: 14px;
+        }
+
+        .float-text {
+            position: fixed;
+            pointer-events: none;
+            font-weight: 800;
+            font-size: 26px;
+            color: #f5d742;
+            text-shadow: 0 0 20px #f5b342, 0 4px 8px #00000080;
+            animation: floatUp 1s ease forwards;
+            z-index: 999;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-100px) scale(0.8); }
+        }
+
+        .explosion {
+            position: fixed;
+            pointer-events: none;
+            z-index: 998;
+            animation: explode 0.5s ease-out forwards;
+        }
+
+        .explosion-particle {
+            position: absolute;
+            border-radius: 50%;
+            animation: particleFly 0.5s ease-out forwards;
+        }
+
+        @keyframes explode {
+            0% { transform: scale(0.3); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        @keyframes particleFly {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+
+        .money-shower {
+            position: fixed;
+            pointer-events: none;
+            z-index: 997;
+            font-size: 22px;
+            animation: moneyRain 1.2s ease-out forwards;
+        }
+
+        @keyframes moneyRain {
+            0% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translateY(300px) rotate(720deg) scale(0.2); opacity: 0; }
+        }
+
+        .notification {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a2330;
+            border: 1px solid #f5b342;
+            border-radius: 16px;
+            padding: 10px 24px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 1000;
+            animation: notifIn 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+            max-width: 90%;
+            text-align: center;
+        }
+
+        @keyframes notifIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .click-area img {
+            transition: transform 0.07s ease;
+        }
+
+        .click-area:active img {
+            transform: scale(0.92);
+        }
+
+        @media (max-width: 460px) {
+            .container { padding: 8px 6px 12px; }
+            .click-area { width: 150px; height: 150px; }
+            .balance { font-size: 30px; }
+            .tab-btn { font-size: 10px; padding: 6px 2px; min-width: 40px; }
+            .shop-item { padding: 6px 10px; }
+            .shop-item .name { font-size: 12px; }
+            .shop-item .price { font-size: 11px; padding: 3px 8px; min-width: 50px; }
+            .phone-message .msg-text { font-size: 12px; }
+            .stats span { font-size: 10px; padding: 2px 8px; }
+            .history-item { font-size: 11px; padding: 6px 10px; }
+            .click-area .brainrot { font-size: 11px; padding: 3px 12px; bottom: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div class="title">🧠 BRAINROT CLICKER</div>
+        <div class="balance" id="balanceDisplay">0 <span>₽</span></div>
+        <div class="stats">
+            <span>💰 клик: <span class="click-power" id="clickPowerDisplay">1</span></span>
+            <span>⚡ авто: <span class="auto-power" id="autoPowerDisplay">0</span></span>
+            <span>📦 <span id="ownedCount">0</span></span>
+            <span>👑 <span class="prestige-level" id="prestigeDisplay">0</span></span>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: center;">
+        <div class="click-area" id="clickButton">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='95' fill='%23f5c542'/%3E%3Ccircle cx='100' cy='100' r='85' fill='%23e8b83a'/%3E%3Ctext x='100' y='130' font-size='80' font-weight='900' text-anchor='middle' fill='%23ffffff' stroke='%23d48c1a' stroke-width='4' font-family='Arial'%3E67%3C/text%3E%3Ctext x='100' y='170' font-size='22' font-weight='700' text-anchor='middle' fill='%23ffffff' opacity='0.8' font-family='Arial'%3ESIX SEVEN%3C/text%3E%3C/svg%3E" alt="Six Seven" id="sixSevenImage">
+            <div class="brainrot">💀 брейнрот</div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="shop">🏪 Магазин</button>
+        <button class="tab-btn" data-tab="upgrade">⬆️ Улучшить</button>
+        <button class="tab-btn" data-tab="history">📜 История</button>
+        <button class="tab-btn" data-tab="phone">📱 Телефон</button>
+    </div>
+
+    <div class="tab-content active" id="tab-shop">
+        <div class="shop-grid" id="shopContainer"></div>
+    </div>
+
+    <div class="tab-content" id="tab-upgrade">
+        <div class="shop-grid" id="upgradeContainer"></div>
+    </div>
+
+    <div class="tab-content" id="tab-history">
+        <div class="history-container" id="historyContainer">
+            <div class="history-empty">📜 История покупок пуста</div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-phone">
+        <div class="phone-container" id="phoneContainer">
+            <div class="phone-empty">📱 Нет новых сообщений</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ========== ИГРОВОЕ СОСТОЯНИЕ ==========
+        let money = 500;
+        let clickPower = 1;
+        let autoPower = 0;
+        let autoInterval = null;
+        let totalEarned = 0;
+        let prestigeLevel = 0;
+        let prestigeBonus = 1;
+        let purchaseHistory = [];
+        let phoneMessages = [];
+        let phoneInterval = null;
+        let firstMessageSent = false;
+
+        // ========== ВИДЫ SIX SEVEN ==========
+        const sixSevenTypes = [
+            { id: 'basic', name: 'Базовый 67', bonus: 1, basePrice: 0, desc: 'Стартовый', emoji: '⭐', owned: true },
+            { id: 'us67', name: 'US Six Seven', bonus: 2, basePrice: 800, desc: '+2 за клик', emoji: '🇺🇸', owned: false },
+            { id: 'ru67', name: 'RU Six Seven', bonus: 5, basePrice: 4000, desc: '+5 за клик', emoji: '🇷🇺', owned: false },
+            { id: 'giga67', name: 'Гига Six Seven', bonus: 15, basePrice: 20000, desc: '+15 за клик', emoji: '💪', owned: false },
+            { id: 'brain67', name: 'Брейнрот 67', bonus: 40, basePrice: 80000, desc: '+40 за клик', emoji: '🧠', owned: false },
+            { id: 'legend67', name: 'Легендарный 67', bonus: 120, basePrice: 300000, desc: '+120 за клик', emoji: '👑', owned: false },
+            { id: 'cosmic67', name: 'Космический 67', bonus: 350, basePrice: 1000000, desc: '+350 за клик', emoji: '🌌', owned: false },
+            { id: 'demon67', name: 'Демонический 67', bonus: 1000, basePrice: 3500000, desc: '+1000 за клик', emoji: '👿', owned: false },
+            { id: 'angel67', name: 'Ангельский 67', bonus: 2800, basePrice: 12000000, desc: '+2800 за клик', emoji: '😇', owned: false },
+            { id: 'god67', name: 'Божественный 67', bonus: 8000, basePrice: 45000000, desc: '+8000 за клик', emoji: '⚡', owned: false },
+            { id: 'void67', name: 'Войд 67', bonus: 25000, basePrice: 150000000, desc: '+25000 за клик', emoji: '🌑', owned: false },
+            { id: 'infinite67', name: 'Бесконечный 67', bonus: 100000, basePrice: 500000000, desc: '+100000 за клик', emoji: '♾️', owned: false }
+        ];
+
+        // ========== УЛУЧШЕНИЯ ==========
+        const upgradeTypes = [
+            { id: 'upg_power', name: '⚡ Усиление клика', basePrice: 500, priceMultiplier: 2.0, bonus: 1, desc: '+1 к силе клика' },
+            { id: 'upg_auto', name: '🤖 Улучшение автокликера', basePrice: 3000, priceMultiplier: 2.3, bonus: 1, desc: '+1 авто-клик/сек' },
+            { id: 'upg_multi', name: '💎 Множитель дохода', basePrice: 10000, priceMultiplier: 2.8, bonus: 0.15, desc: '+15% ко всему доходу' },
+            { id: 'upg_crit', name: '🎯 Критический удар', basePrice: 25000, priceMultiplier: 3.0, bonus: 0.05, desc: '+5% шанс крита (x3)' },
+            { id: 'upg_luck', name: '🍀 Удача', basePrice: 75000, priceMultiplier: 3.5, bonus: 0.1, desc: '+10% к шансу крита' }
+        ];
+
+        // ========== СОСТОЯНИЯ ==========
+        let ownedSixSeven = ['basic'];
+        let upgradeLevels = {};
+        upgradeTypes.forEach(u => upgradeLevels[u.id] = 0);
+        let totalMultiplier = 1;
+        let autoLevel = 0;
+        let critChance = 0;
+
+        // ========== ФУНКЦИИ ==========
+        function getPriceForSixSeven(type) {
+            return Math.floor(type.basePrice * (1 + prestigeLevel * 0.2));
+        }
+
+        function getPriceForUpgrade(upgrade) {
+            const level = upgradeLevels[upgrade.id] || 0;
+            return Math.floor(upgrade.basePrice * Math.pow(upgrade.priceMultiplier, level) * (1 + prestigeLevel * 0.1));
+        }
+
+        function getTotalBonus() {
+            let total = 0;
+            ownedSixSeven.forEach(id => {
+                const type = sixSevenTypes.find(t => t.id === id);
+                if (type) total += type.bonus;
+            });
+            const powerLevel = upgradeLevels['upg_power'] || 0;
+            total += powerLevel * 1;
+            return total;
+        }
+
+        function getAutoIncome() {
+            const autoLevelBonus = upgradeLevels['upg_auto'] || 0;
+            return autoLevel + autoLevelBonus;
+        }
+
+        function getMultiplier() {
+            const multiLevel = upgradeLevels['upg_multi'] || 0;
+            return (1 + (multiLevel * 0.15)) * prestigeBonus;
+        }
+
+        function getCritChance() {
+            const critLevel = upgradeLevels['upg_crit'] || 0;
+            const luckLevel = upgradeLevels['upg_luck'] || 0;
+            return Math.min(0.7, (critLevel * 0.05) + (luckLevel * 0.1));
+        }
+
+        function getBestSixSeven() {
+            let best = null;
+            ownedSixSeven.forEach(id => {
+                const type = sixSevenTypes.find(t => t.id === id);
+                if (type && (!best || type.bonus > best.bonus)) {
+                    best = type;
+                }
+            });
+            return best;
+        }
+
+        function addToHistory(text, price) {
+            purchaseHistory.unshift({
+                time: new Date().toLocaleTimeString(),
+                text: text,
+                price: price
+            });
+            if (purchaseHistory.length > 50) purchaseHistory.pop();
+            renderHistory();
+        }
+
+        function updateUI() {
+            document.getElementById('balanceDisplay').innerHTML = formatMoney(Math.floor(money)) + ' <span>₽</span>';
+            document.getElementById('clickPowerDisplay').textContent = Math.floor(clickPower);
+            document.getElementById('autoPowerDisplay').textContent = getAutoIncome();
+            document.getElementById('ownedCount').textContent = ownedSixSeven.length;
+            document.getElementById('prestigeDisplay').textContent = prestigeLevel;
+            renderShop();
+            renderUpgrades();
+            renderPhone(); // ВАЖНО: всегда обновляем телефон
+        }
+
+        function formatMoney(num) {
+            if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // ========== РЕНДЕР МАГАЗИНА ==========
+        function renderShop() {
+            const container = document.getElementById('shopContainer');
+            container.innerHTML = '';
+
+            sixSevenTypes.forEach(type => {
+                if (type.id === 'basic') return;
+
+                const isOwned = ownedSixSeven.includes(type.id);
+                const price = getPriceForSixSeven(type);
+                const canAfford = money >= price;
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'shop-item' + (isOwned ? ' owned' : '');
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'name';
+                nameSpan.innerHTML = `${type.emoji} ${type.name} ${isOwned ? '✅' : ''}`;
+                const descSpan = document.createElement('span');
+                descSpan.className = 'desc';
+                descSpan.textContent = type.desc;
+
+                infoDiv.appendChild(nameSpan);
+                infoDiv.appendChild(descSpan);
+
+                const priceSpan = document.createElement('span');
+                priceSpan.className = 'price' + (canAfford || isOwned ? '' : ' disabled');
+                priceSpan.textContent = isOwned ? '✅ Владеет' : `💰 ${formatMoney(price)}`;
+
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(priceSpan);
+
+                if (!isOwned) {
+                    itemDiv.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        buySixSeven(type.id);
+                    });
+                }
+
+                container.appendChild(itemDiv);
+            });
+        }
+
+        // ========== РЕНДЕР УЛУЧШЕНИЙ ==========
+        function renderUpgrades() {
+            const container = document.getElementById('upgradeContainer');
+            container.innerHTML = '';
+
+            upgradeTypes.forEach(upgrade => {
+                const level = upgradeLevels[upgrade.id] || 0;
+                const price = getPriceForUpgrade(upgrade);
+                const canAfford = money >= price;
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'shop-item';
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'name';
+                let descText = upgrade.desc;
+                if (upgrade.id === 'upg_power') descText = `+${level * 1} к силе клика`;
+                if (upgrade.id === 'upg_auto') descText = `+${level * 1} авто-клик/сек`;
+                if (upgrade.id === 'upg_multi') descText = `+${(level * 15)}% ко всему доходу`;
+                if (upgrade.id === 'upg_crit') descText = `${Math.min(70, Math.floor((level * 5)))}% шанс крита (x3)`;
+                if (upgrade.id === 'upg_luck') descText = `+${(level * 10)}% к шансу крита`;
+
+                nameSpan.innerHTML = `${upgrade.name} <span class="badge">ур. ${level}</span>`;
+                const descSpan = document.createElement('span');
+                descSpan.className = 'desc';
+                descSpan.textContent = descText;
+
+                infoDiv.appendChild(nameSpan);
+                infoDiv.appendChild(descSpan);
+
+                const priceSpan = document.createElement('span');
+                priceSpan.className = 'price' + (canAfford ? '' : ' disabled');
+                priceSpan.textContent = `💰 ${formatMoney(price)}`;
+
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(priceSpan);
+
+                itemDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    buyUpgrade(upgrade.id);
+                });
+
+                container.appendChild(itemDiv);
+            });
+
+            // Престиж
+            if (ownedSixSeven.length >= 3) {
+                const prestigeDiv = document.createElement('div');
+                prestigeDiv.className = 'shop-item prestige';
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'name';
+                nameSpan.innerHTML = `👑 ПРЕСТИЖ <span class="badge">ур. ${prestigeLevel}</span>`;
+                const descSpan = document.createElement('span');
+                descSpan.className = 'desc';
+                descSpan.textContent = `Сбросить прогресс за x2 множитель (нужно ${formatMoney(1000000 * (prestigeLevel + 1))})`;
+
+                infoDiv.appendChild(nameSpan);
+                infoDiv.appendChild(descSpan);
+
+                const priceSpan = document.createElement('span');
+                const prestigePrice = 1000000 * (prestigeLevel + 1);
+                const canPrestige = money >= prestigePrice;
+                priceSpan.className = 'price' + (canPrestige ? '' : ' disabled');
+                priceSpan.textContent = `💰 ${formatMoney(prestigePrice)}`;
+
+                prestigeDiv.appendChild(infoDiv);
+                prestigeDiv.appendChild(priceSpan);
+
+                prestigeDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    doPrestige();
+                });
+
+                container.appendChild(prestigeDiv);
+            }
+        }
+
+        // ========== ИСТОРИЯ ==========
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '';
+
+            if (purchaseHistory.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'history-empty';
+                empty.textContent = '📜 История покупок пуста';
+                container.appendChild(empty);
+                return;
+            }
+
+            purchaseHistory.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <span class="h-time">${item.time}</span>
+                    <span class="h-desc">${item.text}</span>
+                    <span class="h-price">-${formatMoney(item.price)} ₽</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ========== ТЕЛЕФОН ==========
+        function renderPhone() {
+            const container = document.getElementById('phoneContainer');
+            container.innerHTML = '';
+
+            if (!phoneMessages || phoneMessages.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'phone-empty';
+                empty.textContent = '📱 Нет новых сообщений';
+                container.appendChild(empty);
+                return;
+            }
+
+            // Показываем все сообщения, включая обработанные
+            phoneMessages.forEach((msg, index) => {
+                const div = document.createElement('div');
+                div.className = 'phone-message';
+
+                const header = document.createElement('div');
+                header.className = 'msg-header';
+                header.innerHTML = `<span class="sender">📨 Six Seven Corp</span><span>${msg.time || 'только что'}</span>`;
+
+                const text = document.createElement('div');
+                text.className = 'msg-text';
+                text.textContent = msg.text;
+
+                const actions = document.createElement('div');
+                actions.className = 'msg-actions';
+
+                if (!msg.handled) {
+                    const acceptBtn = document.createElement('button');
+                    acceptBtn.className = 'btn-accept';
+                    acceptBtn.textContent = '✅ Принять';
+                    acceptBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handlePhoneAccept(index);
+                    });
+
+                    const declineBtn = document.createElement('button');
+                    declineBtn.className = 'btn-decline';
+                    declineBtn.textContent = '❌ Отклонить';
+                    declineBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handlePhoneDecline(index);
+                    });
+
+                    actions.appendChild(acceptBtn);
+                    actions.appendChild(declineBtn);
+                } else {
+                    const status = document.createElement('span');
+                    status.style.color = msg.accepted ? '#6bff8b' : '#ff6b6b';
+                    status.style.fontSize = '12px';
+                    status.textContent = msg.accepted ? '✅ Принято' : '❌ Отклонено';
+                    actions.appendChild(status);
+                }
+
+                div.appendChild(header);
+                div.appendChild(text);
+                div.appendChild(actions);
+                container.appendChild(div);
+            });
+        }
+
+        function handlePhoneAccept(index) {
+            const msg = phoneMessages[index];
+            if (!msg || msg.handled) return;
+
+            const best = getBestSixSeven();
+            if (!best || best.id === 'basic') {
+                showNotification('❌ У вас нет сикс севена для продажи!');
+                return;
+            }
+
+            const price = Math.floor(best.basePrice * 2.5 * (1 + prestigeLevel * 0.2));
+            money += price;
+            totalEarned += price;
+
+            const idx = ownedSixSeven.indexOf(best.id);
+            if (idx > -1) {
+                ownedSixSeven.splice(idx, 1);
+            }
+
+            msg.handled = true;
+            msg.accepted = true;
+
+            clickPower = (getTotalBonus() + 1) * getMultiplier();
+            spawnMoneyEffect();
+            showNotification(`✅ Продано! +${formatMoney(price)} ₽`);
+            addToHistory(`📱 Продал ${best.emoji} ${best.name}`, -price);
+            updateUI();
+        }
+
+        function handlePhoneDecline(index) {
+            const msg = phoneMessages[index];
+            if (!msg || msg.handled) return;
+
+            msg.handled = true;
+            msg.accepted = false;
+            showNotification('❌ Предложение отклонено');
+            renderPhone();
+        }
+
+        function generatePhoneMessage() {
+            const best = getBestSixSeven();
+            if (!best || best.id === 'basic') return;
+
+            const price = Math.floor(best.basePrice * 2.5 * (1 + prestigeLevel * 0.2));
+            const msg = {
+                time: new Date().toLocaleTimeString(),
+                text: `📞 Срочно! Выкупаем ${best.emoji} ${best.name} за ${formatMoney(price)} ₽ (в 2.5 раза дороже). Соглашайтесь!`,
+                handled: false,
+                accepted: false
+            };
+
+            phoneMessages.unshift(msg);
+            if (phoneMessages.length > 15) phoneMessages.pop();
+
+            showNotification('📱 Новое сообщение в телефоне!');
+            renderPhone(); // ВАЖНО: сразу обновляем телефон
+        }
+
+        // ========== ПОКУПКА SIX SEVEN ==========
+        function buySixSeven(typeId) {
+            const type = sixSevenTypes.find(t => t.id === typeId);
+            if (!type || ownedSixSeven.includes(typeId)) return;
+
+            const price = getPriceForSixSeven(type);
+            if (money < price) return;
+
+            money -= price;
+            ownedSixSeven.push(typeId);
+
+            spawnMoneyEffect();
+            showFloatingText('🎉 ' + type.name + ' куплен!');
+
+            clickPower = (getTotalBonus() + 1) * getMultiplier();
+            addToHistory(`🛒 Купил ${type.emoji} ${type.name}`, price);
+            updateUI();
+        }
+
+        // ========== ПОКУПКА УЛУЧШЕНИЙ ==========
+        function buyUpgrade(upgradeId) {
+            const upgrade = upgradeTypes.find(u => u.id === upgradeId);
+            if (!upgrade) return;
+
+            const price = getPriceForUpgrade(upgrade);
+            if (money < price) return;
+
+            money -= price;
+            upgradeLevels[upgrade.id] = (upgradeLevels[upgrade.id] || 0) + 1;
+
+            clickPower = (getTotalBonus() + 1) * getMultiplier();
+            critChance = getCritChance();
+
+            const autoIncome = getAutoIncome();
+            if (autoInterval) {
+                clearInterval(autoInterval);
+            }
+            if (autoIncome > 0) {
+                autoInterval = setInterval(() => {
+                    let income = autoIncome * getMultiplier();
+                    if (Math.random() < critChance) {
+                        income *= 3;
+                    }
+                    money += income;
+                    totalEarned += income;
+                    updateUI();
+                }, 1000);
+            }
+
+            spawnMoneyEffect();
+            showFloatingText('⬆️ ' + upgrade.name + ' улучшен!');
+            addToHistory(`⬆️ Улучшил ${upgrade.name}`, price);
+            updateUI();
+        }
+
+        // ========== ПРЕСТИЖ ==========
+        function doPrestige() {
+            const prestigePrice = 1000000 * (prestigeLevel + 1);
+            if (money < prestigePrice) return;
+            if (ownedSixSeven.length < 3) {
+                showNotification('❌ Нужно минимум 3 сикс севена для престижа!');
+                return;
+            }
+
+            money -= prestigePrice;
+            prestigeLevel++;
+            prestigeBonus = 1 + (prestigeLevel * 0.5);
+
+            ownedSixSeven = ['basic'];
+            upgradeLevels = {};
+            upgradeTypes.forEach(u => upgradeLevels[u.id] = 0);
+            autoLevel = 0;
+
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+            }
+
+            clickPower = (getTotalBonus() + 1) * getMultiplier();
+            showNotification(`👑 ПРЕСТИЖ! Уровень ${prestigeLevel}! Множитель x${prestigeBonus.toFixed(1)}`);
+            addToHistory(`👑 ПРЕСТИЖ! Уровень ${prestigeLevel}`, prestigePrice);
+            updateUI();
+        }
+
+        // ========== ЭФФЕКТЫ ==========
+        function spawnExplosion(x, y) {
+            const explosion = document.createElement('div');
+            explosion.className = 'explosion';
+            explosion.style.left = (x - 50) + 'px';
+            explosion.style.top = (y - 50) + 'px';
+            explosion.style.width = '100px';
+            explosion.style.height = '100px';
+
+            const cols = ['#ff6b6b', '#f5d742', '#6bcfff', '#6bff8b', '#c97bff', '#ff6bff', '#ff9f43', '#00d2d3', '#fd79a8'];
+            for (let i = 0; i < 16; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'explosion-particle';
+                const angle = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+                const distance = 30 + Math.random() * 70;
+                const size = 4 + Math.random() * 8;
+                particle.style.width = size + 'px';
+                particle.style.height = size + 'px';
+                particle.style.background = cols[Math.floor(Math.random() * cols.length)];
+                particle.style.setProperty('--tx', Math.cos(angle) * distance + 'px');
+                particle.style.setProperty('--ty', Math.sin(angle) * distance + 'px');
+                particle.style.left = (50 - size/2) + 'px';
+                particle.style.top = (50 - size/2) + 'px';
+                explosion.appendChild(particle);
+            }
+
+            document.body.appendChild(explosion);
+            setTimeout(() => explosion.remove(), 600);
+        }
+
+        function spawnMoneyEffect() {
+            const symbols = ['💰', '💎', '✨', '🪙', '💵', '💸', '🎉', '⭐'];
+            const container = document.querySelector('.container');
+            const rect = container.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            for (let i = 0; i < 20; i++) {
+                const el = document.createElement('div');
+                el.className = 'money-shower';
+                el.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 20 + Math.random() * 150;
+                el.style.left = (centerX + Math.cos(angle) * dist - 12) + 'px';
+                el.style.top = (centerY + Math.sin(angle) * dist - 12) + 'px';
+                el.style.fontSize = (14 + Math.random() * 24) + 'px';
+                el.style.animationDuration = (0.8 + Math.random() * 0.6) + 's';
+                el.style.animationDelay = (Math.random() * 0.3) + 's';
+                document.body.appendChild(el);
+                setTimeout(() => el.remove(), 1500);
+            }
+        }
+
+        function showFloatingText(text) {
+            const el = document.createElement('div');
+            el.className = 'float-text';
+            el.textContent = text;
+            el.style.left = (window.innerWidth/2 - 50) + 'px';
+            el.style.top = (window.innerHeight/2 - 20) + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function showNotification(text) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+
+            const el = document.createElement('div');
+            el.className = 'notification';
+            el.textContent = text;
+            document.body.appendChild(el);
+            setTimeout(() => {
+                el.style.opacity = '0';
+                el.style.transition = 'opacity 0.5s';
+                setTimeout(() => el.remove(), 500);
+            }, 3500);
+        }
+
+        // ========== ОБРАБОТЧИК КЛИКА ==========
+        function handleClick(e) {
+            let income = clickPower;
+            
+            if (Math.random() < critChance) {
+                income *= 3;
+                showFloatingText('🔥 КРИТ! x3');
+            }
+
+            money += income;
+            totalEarned += income;
+
+            const x = e.clientX || e.pageX;
+            const y = e.clientY || e.pageY;
+            spawnExplosion(x, y);
+
+            showFloatingText('+' + Math.floor(income));
+            updateUI();
+        }
+
+        // ========== ВКЛАДКИ ==========
+        function setupTabs() {
+            const tabs = document.querySelectorAll('.tab-btn');
+            const contents = {
+                shop: document.getElementById('tab-shop'),
+                upgrade: document.getElementById('tab-upgrade'),
+                history: document.getElementById('tab-history'),
+                phone: document.getElementById('tab-phone')
+            };
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+
+                    const tabName = this.dataset.tab;
+                    Object.keys(contents).forEach(key => {
+                        contents[key].classList.toggle('active', key === tabName);
+                    });
+
+                    // Обновляем содержимое при переключении
+                    if (tabName === 'phone') renderPhone();
+                    if (tabName === 'history') renderHistory();
+                });
+            });
+        }
+
+        // ========== ИНИЦИАЛИЗАЦИЯ ==========
+        function init() {
+            const clickBtn = document.getElementById('clickButton');
+            clickBtn.addEventListener('click', handleClick);
+
+            clickPower = (getTotalBonus() + 1) * getMultiplier();
+            critChance = getCritChance();
+
+            // Авто-кликер
+            if (autoInterval) clearInterval(autoInterval);
+            const autoIncome = getAutoIncome();
+            if (autoIncome > 0) {
+                autoInterval = setInterval(() => {
+                    let income = autoIncome * getMultiplier();
+                    if (Math.random() < critChance) {
+                        income *= 3;
+                    }
+                    money += income;
+                    totalEarned += income;
+                    updateUI();
+                }, 1000);
+            }
+
+            // Телефон - первое сообщение через 15 секунд
+            setTimeout(() => {
+                generatePhoneMessage();
+                firstMessageSent = true;
+            }, 15000);
+
+            // Затем каждую минуту
+            phoneInterval = setInterval(() => {
+                if (firstMessageSent && ownedSixSeven.length > 1) {
+                    generatePhoneMessage();
+                }
+            }, 60000);
+
+            setupTabs();
+            updateUI();
+
+            document.addEventListener('dblclick', (e) => e.preventDefault());
+
+            setTimeout(() => {
+                showNotification('💡 Советы: покупайте Six Seven, улучшайте их и следите за телефоном!');
+            }, 2000);
+
+            addToHistory('🎮 Начало игры', 0);
+        }
+
+        // Запускаем игру
+        init();
+    })();
+</script>
+
+</body>
+</html>

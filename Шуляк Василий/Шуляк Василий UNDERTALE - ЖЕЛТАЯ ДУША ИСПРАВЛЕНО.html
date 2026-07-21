@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNDERTALE: ЖЕЛТАЯ ДУША [ИСПРАВЛЕНО]</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+        #gameWrapper {
+            background: #111;
+            padding: 10px;
+            border: 4px solid #ffdd00;
+            border-radius: 10px;
+            box-shadow: 0 0 60px #ffdd00, inset 0 0 30px #ffaa00;
+            position: relative;
+            transition: border-color 0.5s;
+        }
+        #gameWrapper.secret-mode {
+            border-color: #ff00ff;
+            box-shadow: 0 0 80px #ff00ff, inset 0 0 40px #ff00ff;
+        }
+        canvas {
+            display: block;
+            background: #1a1a2e;
+            border: 2px solid #ffdd00;
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 18px;
+            text-shadow: 0 0 10px #ffdd00;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #hpBar {
+            width: 200px;
+            height: 14px;
+            background: #331100;
+            border: 2px solid #ff8800;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        #hpFill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff6600, #ffdd00);
+            transition: width 0.1s;
+        }
+        #hpText {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #ffdd00;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        #bossName {
+            font-size: 22px;
+            color: #ffdd00;
+            text-shadow: 0 0 15px #ffdd00, 0 0 30px #ff8800;
+            animation: glitch 0.3s infinite;
+            text-align: right;
+            transition: color 0.5s;
+        }
+        #bossName.secret {
+            color: #ff00ff;
+            text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff;
+            animation: secretGlitch 0.1s infinite;
+        }
+        @keyframes glitch {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(3deg); }
+            40% { transform: skew(-3deg); }
+            60% { transform: skew(2deg); }
+            80% { transform: skew(-2deg); }
+            100% { transform: skew(0deg); }
+        }
+        @keyframes secretGlitch {
+            0% { transform: skew(0deg) scale(1); opacity: 1; }
+            25% { transform: skew(5deg) scale(1.05); opacity: 0.8; }
+            50% { transform: skew(-5deg) scale(0.95); opacity: 1; }
+            75% { transform: skew(3deg) scale(1.02); opacity: 0.9; }
+            100% { transform: skew(0deg) scale(1); opacity: 1; }
+        }
+        
+        #hotbar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 3px;
+            background: rgba(0,0,0,0.9);
+            padding: 8px 15px;
+            border-radius: 12px;
+            border: 2px solid #ff8800;
+            box-shadow: 0 0 30px rgba(255, 136, 0, 0.3);
+            z-index: 10;
+            pointer-events: none;
+            min-width: 280px;
+            justify-content: center;
+            transition: all 0.5s;
+        }
+        #hotbar.secret-mode {
+            border-color: #ff00ff;
+            box-shadow: 0 0 50px rgba(255, 0, 255, 0.5);
+        }
+        .hp-segment {
+            width: 18px;
+            height: 22px;
+            background: #331100;
+            border: 1px solid #ff8800;
+            border-radius: 2px;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .hp-segment.filled {
+            background: linear-gradient(180deg, #ffdd00, #ff6600);
+            box-shadow: 0 0 10px rgba(255, 136, 0, 0.5);
+        }
+        .hp-segment.low {
+            background: linear-gradient(180deg, #ff4400, #ff0000);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+            animation: pulseLow 0.3s infinite;
+        }
+        .hp-segment.secret {
+            background: linear-gradient(180deg, #ff00ff, #aa00ff);
+            box-shadow: 0 0 25px rgba(255, 0, 255, 0.8);
+            animation: pulseSecret 0.2s infinite;
+        }
+        .hp-segment.empty {
+            background: #1a0a00;
+            border-color: #442200;
+        }
+        @keyframes pulseLow {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+        @keyframes pulseSecret {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.1) rotate(5deg); }
+            75% { transform: scale(1.1) rotate(-5deg); }
+        }
+        
+        #hotbar-label {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff8800;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #ff8800;
+            white-space: nowrap;
+            transition: color 0.5s;
+        }
+        #hotbar-label.secret {
+            color: #ff00ff;
+            text-shadow: 0 0 20px #ff00ff;
+        }
+        #bossHPText {
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffdd00;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ffdd00;
+            transition: color 0.5s;
+        }
+        #bossHPText.secret {
+            color: #ff00ff;
+            text-shadow: 0 0 20px #ff00ff;
+        }
+
+        #deathScreen, #winScreen {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 50;
+            border-radius: 8px;
+            text-align: center;
+            padding: 20px;
+        }
+        #deathScreen {
+            color: #ff6600;
+            text-shadow: 0 0 30px #ff8800;
+        }
+        #winScreen {
+            color: #ffdd00;
+            text-shadow: 0 0 30px #ffdd00;
+        }
+        #deathScreen .title, #winScreen .title {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        #deathScreen .sub, #winScreen .sub {
+            font-size: 20px;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+        #deathScreen button, #winScreen button {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: transparent;
+            color: #ffdd00;
+            border: 2px solid #ffdd00;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: 0.3s;
+        }
+        #deathScreen button:hover, #winScreen button:hover {
+            background: #ffdd00;
+            color: #000;
+            box-shadow: 0 0 30px #ffdd00;
+        }
+
+        #attackIndicator {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff8800;
+            font-size: 16px;
+            background: rgba(0,0,0,0.9);
+            padding: 6px 25px;
+            border-radius: 20px;
+            border: 2px solid #ff8800;
+            pointer-events: none;
+            z-index: 10;
+            font-family: 'Courier New', monospace;
+            white-space: nowrap;
+            transition: all 0.3s;
+            text-shadow: 0 0 20px rgba(255, 136, 0, 0.5);
+        }
+        #attackIndicator.warning {
+            color: #ff2200;
+            border-color: #ff2200;
+            animation: blinkWarning 0.3s infinite;
+        }
+        #attackIndicator.secret {
+            color: #ff00ff;
+            border-color: #ff00ff;
+            text-shadow: 0 0 30px rgba(255, 0, 255, 0.8);
+            animation: blinkSecret 0.15s infinite;
+        }
+        @keyframes blinkWarning {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        @keyframes blinkSecret {
+            0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+            50% { opacity: 0.7; transform: translateX(-50%) scale(1.05); }
+        }
+
+        #cooldownBar {
+            position: absolute;
+            bottom: 72px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 3px;
+            background: rgba(255, 136, 0, 0.2);
+            border-radius: 2px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        #cooldownFill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff4400, #ffdd00);
+            border-radius: 2px;
+            transition: width 0.1s;
+        }
+
+        #stats {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            color: #888;
+            font-size: 12px;
+            z-index: 10;
+            pointer-events: none;
+            line-height: 1.8;
+            font-family: 'Courier New', monospace;
+        }
+        #stats .highlight {
+            color: #ffdd00;
+        }
+        #stats .secret-text {
+            color: #ff00ff;
+            text-shadow: 0 0 10px #ff00ff;
+            animation: pulseSecret 0.3s infinite;
+        }
+
+        #secretIndicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff00ff;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 60px #ff00ff, 0 0 120px #ff00ff;
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0;
+            transition: all 0.5s;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+        }
+        #secretIndicator.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameWrapper">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui">
+        <div id="hpText">
+            ⭐
+            <div id="hpBar"><div id="hpFill"></div></div>
+            <span id="hpValue">100</span>
+        </div>
+        <div id="bossName">⚡ БОСС.АМАЛЬГАМА ⚡</div>
+    </div>
+
+    <div id="stats">
+        <div>Комбо: <span class="highlight" id="comboDisplay">0</span></div>
+        <div>Урон: <span class="highlight" id="dmgDisplay">2</span></div>
+        <div>Dash: <span class="highlight" id="dashDisplay">✅</span></div>
+        <div id="secretStats" style="display:none;">🔮 Секретные: <span class="secret-text" id="secretCount">0</span></div>
+    </div>
+
+    <div id="hotbar">
+        <div id="hotbar-label">⚔️ HP БОССА</div>
+        <div id="bossHPText">300/300</div>
+    </div>
+
+    <div id="secretIndicator">⚡ СЕКРЕТНАЯ АТАКА ⚡</div>
+
+    <div id="attackIndicator">⚔️ ГОТОВИМ АТАКУ...</div>
+    <div id="cooldownBar"><div id="cooldownFill"></div></div>
+
+    <div id="deathScreen">
+        <div class="title">💀 ТЫ ПРОИГРАЛ 💀</div>
+        <div class="sub">«Секретные атаки были слишком сильны...»</div>
+        <button onclick="restartGame()">🔁 ПОПЫТАТЬСЯ СНОВА</button>
+    </div>
+
+    <div id="winScreen">
+        <div class="title">🎉 ПОБЕДА! 🎉</div>
+        <div class="sub">«Ты одолел ВСЕ секретные атаки! Легенда!»</div>
+        <button onclick="restartGame()">🔄 ИГРАТЬ СНОВА</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const hpFill = document.getElementById('hpFill');
+    const hpValue = document.getElementById('hpValue');
+    const deathScreen = document.getElementById('deathScreen');
+    const winScreen = document.getElementById('winScreen');
+    const attackIndicator = document.getElementById('attackIndicator');
+    const cooldownFill = document.getElementById('cooldownFill');
+    const comboDisplay = document.getElementById('comboDisplay');
+    const dashDisplay = document.getElementById('dashDisplay');
+    const bossHPText = document.getElementById('bossHPText');
+    const hotbar = document.getElementById('hotbar');
+    const bossName = document.getElementById('bossName');
+    const secretIndicator = document.getElementById('secretIndicator');
+    const secretStats = document.getElementById('secretStats');
+    const secretCountDisplay = document.getElementById('secretCount');
+    const gameWrapper = document.getElementById('gameWrapper');
+
+    // === ИГРОК ===
+    const player = {
+        x: 400, y: 500,
+        radius: 10,
+        hp: 100,
+        maxHp: 100,
+        speed: 5.5,
+        invincible: 0,
+        bullets: [],
+        shootCooldown: 0,
+        bulletSpeed: 9,
+        dashCooldown: 0,
+        isDashing: false,
+        damage: 2
+    };
+
+    // === БОСС ===
+    const boss = {
+        x: 400, y: 150,
+        radius: 40,
+        hp: 300,
+        maxHp: 300,
+        attackTimer: 0,
+        attackCooldown: 30,
+        attackType: 0,
+        isAttacking: false,
+        attackDuration: 0,
+        attackCount: 0,
+        enrageMode: false,
+        secretMode: false,
+        secretAttacksUsed: 0,
+        secretAttackCooldown: 0
+    };
+
+    // === СПИСКИ АТАК ===
+    let stars = [];
+    let circles = [];
+    let arrows = [];
+    let waves = [];
+    let orbs = [];
+    let spikes = [];
+    let ghosts = [];
+    let meteors = [];
+    let chains = [];
+    let rings = [];
+    let lasers = [];
+    let bombs = [];
+    let tornados = [];
+    let mirrors = [];
+    let blackHoles = [];
+    let dimensionRifts = [];
+    let soulTraps = [];
+    let timeStops = [];
+
+    let keys = {};
+    let frameCount = 0;
+    let gameOver = false;
+    let gameWon = false;
+    let mouseX = 400, mouseY = 300;
+    let screenShake = 0;
+    let comboCount = 0;
+    let secretTriggered = false;
+
+    // === УПРАВЛЕНИЕ ===
+    document.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+        if (e.key === ' ' || e.key === 'z' || e.key === 'x') {
+            e.preventDefault();
+            shootBullet();
+        }
+        if (e.key === 'Shift' || e.key === 'ShiftLeft' || e.key === 'ShiftRight') {
+            e.preventDefault();
+            dash();
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        mouseX = (e.clientX - rect.left) * scaleX;
+        mouseY = (e.clientY - rect.top) * scaleY;
+    });
+
+    canvas.addEventListener('click', () => {
+        shootBullet();
+    });
+
+    // === СТРЕЛЬБА ===
+    function shootBullet() {
+        if (gameOver || gameWon) return;
+        if (player.shootCooldown > 0) return;
+        
+        let dx = mouseX - player.x;
+        let dy = mouseY - player.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 1) dist = 1;
+        
+        let bullet = {
+            x: player.x,
+            y: player.y,
+            vx: (dx / dist) * player.bulletSpeed,
+            vy: (dy / dist) * player.bulletSpeed,
+            radius: 5,
+            life: 80,
+            damage: player.damage
+        };
+        player.bullets.push(bullet);
+        player.shootCooldown = 6;
+    }
+
+    // === РЫВОК ===
+    function dash() {
+        if (gameOver || gameWon) return;
+        if (player.dashCooldown > 0) return;
+        if (player.isDashing) return;
+        
+        player.isDashing = true;
+        let dx = mouseX - player.x;
+        let dy = mouseY - player.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 1) dist = 1;
+        
+        player.x += (dx / dist) * 130;
+        player.y += (dy / dist) * 130;
+        player.x = Math.max(15, Math.min(785, player.x));
+        player.y = Math.max(15, Math.min(585, player.y));
+        player.invincible = 25;
+        player.dashCooldown = 45;
+        
+        setTimeout(() => {
+            player.isDashing = false;
+        }, 100);
+    }
+
+    // === РЕСТАРТ ===
+    window.restartGame = function() {
+        player.hp = 100;
+        player.x = 400; player.y = 500;
+        player.bullets = [];
+        boss.hp = 300;
+        boss.maxHp = 300;
+        boss.attackCount = 0;
+        boss.enrageMode = false;
+        boss.secretMode = false;
+        boss.secretAttacksUsed = 0;
+        boss.secretAttackCooldown = 0;
+        boss.attackTimer = 0;
+        boss.isAttacking = false;
+        stars = [];
+        circles = [];
+        arrows = [];
+        waves = [];
+        orbs = [];
+        spikes = [];
+        ghosts = [];
+        meteors = [];
+        chains = [];
+        rings = [];
+        lasers = [];
+        bombs = [];
+        tornados = [];
+        mirrors = [];
+        blackHoles = [];
+        dimensionRifts = [];
+        soulTraps = [];
+        timeStops = [];
+        gameOver = false;
+        gameWon = false;
+        deathScreen.style.display = 'none';
+        winScreen.style.display = 'none';
+        player.invincible = 60;
+        screenShake = 0;
+        comboCount = 0;
+        secretTriggered = false;
+        resetSecretUI();
+        updateUI();
+        updateHotbar();
+    };
+
+    function resetSecretUI() {
+        secretIndicator.classList.remove('show');
+        gameWrapper.classList.remove('secret-mode');
+        bossName.classList.remove('secret');
+        hotbar.classList.remove('secret-mode');
+        document.getElementById('hotbar-label').classList.remove('secret');
+        bossHPText.classList.remove('secret');
+        attackIndicator.classList.remove('secret');
+        secretStats.style.display = 'none';
+        bossName.textContent = '⚡ БОСС.АМАЛЬГАМА ⚡';
+        document.getElementById('hotbar-label').textContent = '⚔️ HP БОССА';
+    }
+
+    // === ГЕНЕРАЦИЯ АТАК ===
+    function generateAttack() {
+        boss.attackCount++;
+        
+        // Проверка на секретные атаки
+        let hpPercent = boss.hp / boss.maxHp;
+        if (hpPercent < 0.25 && !boss.secretMode) {
+            boss.secretMode = true;
+            triggerSecretMode();
+        }
+        
+        // Если секретный режим активен, есть шанс на секретную атаку
+        let isSecretAttack = false;
+        if (boss.secretMode && boss.secretAttackCooldown <= 0) {
+            if (Math.random() < 0.4) {
+                isSecretAttack = true;
+                boss.secretAttackCooldown = 3;
+                boss.secretAttacksUsed++;
+                secretCountDisplay.textContent = boss.secretAttacksUsed;
+            }
+        }
+        
+        if (boss.secretAttackCooldown > 0) {
+            boss.secretAttackCooldown--;
+        }
+
+        let difficulty = Math.min(boss.attackCount / 3, 2.5);
+        let enrageBonus = boss.enrageMode ? 1 : 0;
+        let secretBonus = isSecretAttack ? 2 : 0;
+        let totalDiff = difficulty + enrageBonus * 0.5 + secretBonus * 0.5;
+        
+        // Выбираем атаку
+        if (isSecretAttack) {
+            boss.attackType = 16 + Math.floor(Math.random() * 4);
+        } else {
+            boss.attackType = Math.floor(Math.random() * 15);
+        }
+        
+        boss.isAttacking = true;
+        boss.attackDuration = 180 + totalDiff * 40;
+        
+        const attackNames = [
+            '⭐ ЗВЕЗДОПАД', '⭕ КРУГОВОРОТ', '➡️ СТРЕЛЫ СУДЬБЫ',
+            '〰️ ВОЛНЫ ХАОСА', '🟣 БРОУНОВСКИЕ ОРБЫ', '🔺 ШИПЫ ИЗ БЕЗДНЫ',
+            '👻 ПРИЗРАЧНЫЙ РОЙ', '☄️ МЕТЕОРИТНЫЙ ДОЖДЬ', '⚡ ЦЕПНЫЕ МОЛНИИ',
+            '🌀 КОЛЬЦА СМЕРТИ', '🔫 ЛАЗЕРНЫЙ ЗАЛП', '💥 БОМБАРДИРОВКА',
+            '🌪️ УРАГАННЫЙ ВИХРЬ', '🔄 ЗЕРКАЛЬНЫЙ КОШМАР', '💀 АПОКАЛИПСИС',
+            '🕳️ ЧЕРНАЯ ДЫРА ★', '🌀 РАЗРЫВ РЕАЛЬНОСТИ ★', '💜 ЛОВУШКА ДУШ ★', '⏰ ОСТАНОВКА ВРЕМЕНИ ★'
+        ];
+        
+        attackIndicator.textContent = isSecretAttack ? `★ ${attackNames[boss.attackType]} ★` : `⚔️ ${attackNames[boss.attackType]}`;
+        attackIndicator.className = isSecretAttack ? 'secret' : '';
+        
+        if (isSecretAttack) {
+            showSecretIndicator();
+        }
+        
+        setTimeout(() => {
+            attackIndicator.textContent = isSecretAttack ? '★ СЕКРЕТНАЯ АТАКА! ★' : '⚔️ АТАКА!';
+            attackIndicator.className = isSecretAttack ? 'secret warning' : 'warning';
+        }, 600);
+
+        // Генерируем атаку
+        switch(boss.attackType) {
+            case 0: generateStars(totalDiff); break;
+            case 1: generateCircles(totalDiff); break;
+            case 2: generateArrows(totalDiff); break;
+            case 3: generateWaves(totalDiff); break;
+            case 4: generateOrbs(totalDiff); break;
+            case 5: generateSpikes(totalDiff); break;
+            case 6: generateGhosts(totalDiff); break;
+            case 7: generateMeteors(totalDiff); break;
+            case 8: generateChains(totalDiff); break;
+            case 9: generateRings(totalDiff); break;
+            case 10: generateLasers(totalDiff); break;
+            case 11: generateBombs(totalDiff); break;
+            case 12: generateTornados(totalDiff); break;
+            case 13: generateMirrors(totalDiff); break;
+            case 14: generateApocalypse(totalDiff); break;
+            case 15: generateStars(totalDiff * 0.7); break;
+            case 16: generateBlackHole(totalDiff); break;
+            case 17: generateDimensionRift(totalDiff); break;
+            case 18: generateSoulTrap(totalDiff); break;
+            case 19: generateTimeStop(totalDiff); break;
+        }
+    }
+
+    // === СЕКРЕТНЫЙ РЕЖИМ ===
+    function triggerSecretMode() {
+        secretTriggered = true;
+        gameWrapper.classList.add('secret-mode');
+        bossName.classList.add('secret');
+        bossName.textContent = '★ БОСС.АМАЛЬГАМА [СЕКРЕТ] ★';
+        hotbar.classList.add('secret-mode');
+        document.getElementById('hotbar-label').classList.add('secret');
+        document.getElementById('hotbar-label').textContent = '★ СЕКРЕТНЫЙ РЕЖИМ ★';
+        bossHPText.classList.add('secret');
+        secretStats.style.display = 'block';
+        attackIndicator.classList.add('secret');
+        
+        showSecretIndicator();
+        setTimeout(() => {
+            secretIndicator.textContent = '★ СЕКРЕТНЫЕ АТАКИ АКТИВИРОВАНЫ ★';
+            secretIndicator.classList.add('show');
+        }, 500);
+        setTimeout(() => {
+            secretIndicator.classList.remove('show');
+        }, 3000);
+        
+        boss.attackCooldown = 20;
+    }
+
+    function showSecretIndicator() {
+        secretIndicator.textContent = '★ СЕКРЕТНАЯ АТАКА ★';
+        secretIndicator.classList.add('show');
+        setTimeout(() => {
+            secretIndicator.classList.remove('show');
+        }, 1500);
+    }
+
+    // === ГЕНЕРАТОРЫ АТАК ===
+    function generateStars(diff) {
+        let count = 15 + diff * 10;
+        for (let i = 0; i < count; i++) {
+            stars.push({
+                x: Math.random() * 800,
+                y: -20 - Math.random() * 100,
+                size: 6 + Math.random() * 10 + diff * 3,
+                speed: 2 + Math.random() * 3 + diff * 0.5,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 0.1,
+                color: `hsl(${40 + Math.random() * 20}, 100%, ${60 + Math.random() * 20}%)`
+            });
+        }
+    }
+
+    function generateCircles(diff) {
+        let count = 6 + diff * 4;
+        for (let i = 0; i < count; i++) {
+            let angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+            circles.push({
+                x: 400 + Math.cos(angle) * 200,
+                y: 300 + Math.sin(angle) * 150,
+                radius: 12 + Math.random() * 12 + diff * 4,
+                angle: angle,
+                orbitSpeed: 0.02 + Math.random() * 0.025 + diff * 0.015,
+                orbitRadius: 150 + Math.random() * 80 + diff * 30,
+                phase: Math.random() * Math.PI * 2,
+                color: `hsl(${Math.random() * 360}, 100%, 60%)`
+            });
+        }
+    }
+
+    function generateArrows(diff) {
+        let count = 12 + diff * 8;
+        for (let i = 0; i < count; i++) {
+            let side = Math.floor(Math.random() * 4);
+            let arrow = {
+                x: 0, y: 0,
+                vx: 0, vy: 0,
+                size: 12 + diff * 3,
+                life: 200
+            };
+            let speed = 2.5 + Math.random() * 3 + diff * 0.5;
+            switch(side) {
+                case 0: arrow.x = Math.random() * 800; arrow.y = -20; arrow.vy = speed; break;
+                case 1: arrow.x = Math.random() * 800; arrow.y = 620; arrow.vy = -speed; break;
+                case 2: arrow.x = -20; arrow.y = Math.random() * 600; arrow.vx = speed; break;
+                case 3: arrow.x = 820; arrow.y = Math.random() * 600; arrow.vx = -speed; break;
+            }
+            arrows.push(arrow);
+        }
+    }
+
+    function generateWaves(diff) {
+        let count = 6 + diff * 4;
+        for (let i = 0; i < count; i++) {
+            let angle = (i / count) * Math.PI * 2;
+            waves.push({
+                x: 400 + Math.cos(angle) * 50,
+                y: 300 + Math.sin(angle) * 50,
+                angle: angle,
+                speed: 2 + Math.random() * 1.5 + diff * 0.5,
+                radius: 20,
+                maxRadius: 180 + Math.random() * 120 + diff * 50,
+                width: 6 + Math.random() * 8 + diff * 3,
+                color: `hsl(${30 + Math.random() * 30}, 100%, 50%)`
+            });
+        }
+    }
+
+    function generateOrbs(diff) {
+        let count = 8 + diff * 6;
+        for (let i = 0; i < count; i++) {
+            orbs.push({
+                x: Math.random() * 800,
+                y: Math.random() * 600,
+                radius: 8 + Math.random() * 10 + diff * 3,
+                vx: (Math.random() - 0.5) * (3 + diff * 0.5),
+                vy: (Math.random() - 0.5) * (3 + diff * 0.5),
+                pulse: Math.random() * Math.PI * 2,
+                color: `hsl(${Math.random() * 360}, 100%, 60%)`
+            });
+        }
+    }
+
+    function generateSpikes(diff) {
+        let count = 6 + diff * 4;
+        let spacing = 800 / count;
+        for (let i = 0; i < count; i++) {
+            spikes.push({
+                x: spacing * i + spacing/2 + (Math.random() - 0.5) * 40,
+                y: 600,
+                height: 0,
+                maxHeight: 50 + Math.random() * 70 + diff * 30,
+                growSpeed: 2.5 + Math.random() * 2.5 + diff * 0.5,
+                isGrowing: true,
+                width: 12 + Math.random() * 18 + diff * 5,
+                delay: i * 8,
+                color: `hsl(${10 + Math.random() * 20}, 100%, 50%)`
+            });
+        }
+    }
+
+    function generateGhosts(diff) {
+        let count = 5 + diff * 5;
+        for (let i = 0; i < count; i++) {
+            ghosts.push({
+                x: 100 + Math.random() * 600,
+                y: 100 + Math.random() * 300,
+                radius: 10 + Math.random() * 12 + diff * 3,
+                speed: 0.6 + Math.random() * 1 + diff * 0.4,
+                phase: Math.random() * Math.PI * 2,
+                color: `hsl(${260 + Math.random() * 60}, 100%, 60%)`
+            });
+        }
+    }
+
+    function generateMeteors(diff) {
+        let count = 10 + diff * 10;
+        for (let i = 0; i < count; i++) {
+            meteors.push({
+                x: Math.random() * 800,
+                y: -50 - Math.random() * 300,
+                radius: 12 + Math.random() * 18 + diff * 5,
+                speed: 4 + Math.random() * 3 + diff * 0.5,
+                angle: Math.PI / 4 + (Math.random() - 0.5) * 0.5,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 0.12,
+                trail: [],
+                color: `hsl(${20 + Math.random() * 20}, 100%, ${50 + Math.random() * 20}%)`
+            });
+        }
+    }
+
+    function generateChains(diff) {
+        let count = 4 + diff * 3;
+        for (let i = 0; i < count; i++) {
+            chains.push({
+                x: 100 + Math.random() * 600,
+                y: 100 + Math.random() * 300,
+                radius: 18 + diff * 10,
+                speed: 2.5 + diff * 0.5,
+                phase: Math.random() * Math.PI * 2,
+                chainLength: 120 + diff * 50,
+                segments: 10 + diff * 5,
+                color: `hsl(${200 + Math.random() * 60}, 100%, ${50 + Math.random() * 20}%)`
+            });
+        }
+    }
+
+    function generateRings(diff) {
+        let count = 3 + diff * 3;
+        for (let i = 0; i < count; i++) {
+            rings.push({
+                x: 400,
+                y: 300,
+                radius: 40 + i * 70 + diff * 25,
+                speed: (0.025 + diff * 0.015) * (i % 2 === 0 ? 1 : -1),
+                angle: Math.random() * Math.PI * 2,
+                thickness: 4 + diff * 3,
+                bullets: [],
+                bulletCount: 14 + diff * 8,
+                bulletSpeed: 2.5 + diff * 0.5,
+                color: `hsl(${i * 120 + 60}, 100%, 60%)`,
+                spawnTimer: 0
+            });
+        }
+    }
+
+    function generateLasers(diff) {
+        let count = 5 + diff * 3;
+        for (let i = 0; i < count; i++) {
+            lasers.push({
+                x: 100 + i * (600 / (count - 1 || 1)),
+                y: -20 - Math.random() * 100,
+                width: 12 + diff * 6,
+                speed: 2 + diff * 0.5,
+                color: `hsl(${0 + i * 30}, 100%, 50%)`,
+                active: true,
+                phase: i * 0.5
+            });
+        }
+    }
+
+    function generateBombs(diff) {
+        let count = 12 + diff * 12;
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            bombs.push({
+                x: 400 + Math.cos(angle) * (200 + Math.random() * 200),
+                y: 300 + Math.sin(angle) * (150 + Math.random() * 150),
+                radius: 8 + Math.random() * 12 + diff * 3,
+                targetX: 0,
+                targetY: 0,
+                phase: Math.random() * Math.PI * 2,
+                speed: 1 + Math.random() * 0.5 + diff * 0.2,
+                exploding: false,
+                explosionTimer: 0,
+                color: `hsl(${Math.random() * 60}, 100%, 50%)`
+            });
+        }
+    }
+
+    function generateTornados(diff) {
+        let count = 2 + diff * 2;
+        for (let i = 0; i < count; i++) {
+            tornados.push({
+                x: 200 + i * (400 / (count - 1 || 1)),
+                y: 100 + Math.random() * 200,
+                radius: 30 + diff * 15,
+                speed: 1 + diff * 0.3,
+                angle: 0,
+                rotationSpeed: 0.05 + diff * 0.02,
+                phase: i * 2,
+                color: `hsl(${180 + i * 60}, 100%, 50%)`
+            });
+        }
+    }
+
+    function generateMirrors(diff) {
+        let count = 6 + diff * 3;
+        for (let i = 0; i < count; i++) {
+            let angle = (i / count) * Math.PI * 2;
+            mirrors.push({
+                x: 400 + Math.cos(angle) * 250,
+                y: 300 + Math.sin(angle) * 180,
+                angle: angle,
+                targetAngle: angle,
+                radius: 18 + diff * 8,
+                speed: 0.02 + diff * 0.01,
+                rotation: 0,
+                color: `hsl(${180 + i * 30}, 100%, 50%)`,
+                bullets: []
+            });
+        }
+    }
+
+    function generateApocalypse(diff) {
+        generateStars(diff * 0.5);
+        generateCircles(diff * 0.4);
+        generateArrows(diff * 0.4);
+        generateMeteors(diff * 0.3);
+        generateLasers(diff * 0.3);
+        generateBombs(diff * 0.3);
+    }
+
+    // === СЕКРЕТНЫЕ АТАКИ ===
+    function generateBlackHole(diff) {
+        let count = 2 + diff * 2;
+        for (let i = 0; i < count; i++) {
+            blackHoles.push({
+                x: 200 + Math.random() * 400,
+                y: 150 + Math.random() * 200,
+                radius: 20 + diff * 10,
+                maxRadius: 80 + diff * 30,
+                speed: 0.3 + diff * 0.1,
+                angle: Math.random() * Math.PI * 2,
+                pullStrength: 0.02 + diff * 0.01,
+                particles: [],
+                phase: i * 2,
+                color: `hsl(${280 + Math.random() * 40}, 100%, 50%)`
+            });
+        }
+    }
+
+    function generateDimensionRift(diff) {
+        let count = 3 + diff * 2;
+        for (let i = 0; i < count; i++) {
+            let rift = {
+                x: Math.random() * 800,
+                y: Math.random() * 600,
+                radius: 15 + diff * 8,
+                angle: Math.random() * Math.PI * 2,
+                speed: 0.5 + diff * 0.2,
+                rotation: 0,
+                rotSpeed: 0.02 + diff * 0.01,
+                color: `hsl(${200 + Math.random() * 60}, 100%, 50%)`,
+                shards: []
+            };
+            for (let j = 0; j < 6 + diff * 3; j++) {
+                let angle = (j / (6 + diff * 3)) * Math.PI * 2;
+                rift.shards.push({
+                    x: rift.x + Math.cos(angle) * (rift.radius + 10),
+                    y: rift.y + Math.sin(angle) * (rift.radius + 10),
+                    vx: Math.cos(angle) * (1 + diff * 0.3),
+                    vy: Math.sin(angle) * (1 + diff * 0.3),
+                    life: 80 + diff * 20
+                });
+            }
+            dimensionRifts.push(rift);
+        }
+    }
+
+    function generateSoulTrap(diff) {
+        let count = 4 + diff * 2;
+        for (let i = 0; i < count; i++) {
+            let angle = (i / count) * Math.PI * 2;
+            let trap = {
+                x: 400 + Math.cos(angle) * (150 + diff * 30),
+                y: 300 + Math.sin(angle) * (100 + diff * 20),
+                radius: 15 + diff * 6,
+                angle: angle,
+                orbitSpeed: 0.01 + diff * 0.005,
+                orbitRadius: 150 + diff * 30,
+                phase: Math.random() * Math.PI * 2,
+                color: `hsl(${320 + Math.random() * 40}, 100%, 60%)`,
+                chains: []
+            };
+            for (let j = 0; j < 6; j++) {
+                let chainAngle = (j / 6) * Math.PI * 2;
+                trap.chains.push({
+                    angle: chainAngle,
+                    length: 30 + diff * 12,
+                    width: 2 + diff * 1
+                });
+            }
+            soulTraps.push(trap);
+        }
+    }
+
+    function generateTimeStop(diff) {
+        let count = 25 + diff * 15;
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let dist = 100 + Math.random() * 250;
+            timeStops.push({
+                x: 400 + Math.cos(angle) * dist,
+                y: 300 + Math.sin(angle) * dist * 0.7,
+                radius: 3 + Math.random() * 5 + diff * 2,
+                angle: Math.random() * Math.PI * 2,
+                speed: 0.5 + Math.random() * 0.5 + diff * 0.1,
+                phase: Math.random() * Math.PI * 2,
+                color: `hsl(${Math.random() * 60 + 180}, 100%, 60%)`,
+                timeSlow: 0.5 + Math.random() * 0.3
+            });
+        }
+        // Эффект замедления
+        player.speed = 2;
+        setTimeout(() => {
+            player.speed = 5.5;
+        }, 2000);
+    }
+
+    // === ОБНОВЛЕНИЕ АТАК ===
+    function updateStars() {
+        for (let s of stars) {
+            s.y += s.speed;
+            s.rotation += s.rotSpeed;
+            if (s.y > 650) s.y = -20;
+        }
+    }
+
+    function updateCircles() {
+        for (let c of circles) {
+            c.angle += c.orbitSpeed;
+            c.x = 400 + Math.cos(c.angle) * c.orbitRadius;
+            c.y = 300 + Math.sin(c.angle) * c.orbitRadius * 0.6;
+        }
+    }
+
+    function updateArrows() {
+        for (let a of arrows) {
+            a.x += a.vx;
+            a.y += a.vy;
+            a.life--;
+            if (a.life <= 0) {
+                a.x = -100;
+                a.y = -100;
+            }
+        }
+    }
+
+    function updateWaves() {
+        for (let w of waves) {
+            w.radius += w.speed;
+            if (w.radius > w.maxRadius) {
+                w.radius = 20;
+                w.angle += 0.3;
+                w.x = 400 + Math.cos(w.angle) * 80;
+                w.y = 300 + Math.sin(w.angle) * 80;
+            }
+        }
+    }
+
+    function updateOrbs() {
+        for (let o of orbs) {
+            o.x += o.vx;
+            o.y += o.vy;
+            o.pulse += 0.05;
+            if (o.x < 20 || o.x > 780) o.vx *= -1;
+            if (o.y < 20 || o.y > 580) o.vy *= -1;
+        }
+    }
+
+    function updateSpikes() {
+        for (let s of spikes) {
+            if (s.delay > 0) { s.delay--; continue; }
+            if (s.isGrowing) {
+                s.height += s.growSpeed;
+                if (s.height >= s.maxHeight) {
+                    s.isGrowing = false;
+                }
+            } else {
+                s.height -= s.growSpeed * 0.5;
+                if (s.height <= 0) {
+                    s.height = 0;
+                    s.isGrowing = true;
+                }
+            }
+        }
+    }
+
+    function updateGhosts() {
+        for (let g of ghosts) {
+            let dx = player.x - g.x;
+            let dy = player.y - g.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 1) {
+                g.x += (dx / dist) * g.speed;
+                g.y += (dy / dist) * g.speed;
+            }
+            g.phase += 0.02;
+        }
+    }
+
+    function updateMeteors() {
+        for (let m of meteors) {
+            m.x += Math.cos(m.angle) * m.speed;
+            m.y += Math.sin(m.angle) * m.speed;
+            m.rotation += m.rotSpeed;
+            m.trail.push({x: m.x, y: m.y});
+            if (m.trail.length > 10) m.trail.shift();
+            if (m.y > 650) {
+                m.x = Math.random() * 800;
+                m.y = -50 - Math.random() * 200;
+                m.trail = [];
+            }
+        }
+    }
+
+    function updateChains() {
+        for (let c of chains) {
+            let dx = player.x - c.x;
+            let dy = player.y - c.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 1) {
+                c.x += (dx / dist) * c.speed * 0.3;
+                c.y += (dy / dist) * c.speed * 0.3;
+            }
+            c.phase += 0.05;
+        }
+    }
+
+    function updateRings() {
+        for (let r of rings) {
+            r.angle += r.speed;
+            r.spawnTimer++;
+            if (r.spawnTimer % 20 === 0) {
+                for (let i = 0; i < r.bulletCount; i++) {
+                    let angle = (i / r.bulletCount) * Math.PI * 2 + r.angle;
+                    r.bullets.push({
+                        x: r.x + Math.cos(angle) * r.radius,
+                        y: r.y + Math.sin(angle) * r.radius,
+                        vx: Math.cos(angle) * r.bulletSpeed,
+                        vy: Math.sin(angle) * r.bulletSpeed,
+                        life: 120
+                    });
+                }
+            }
+            for (let i = r.bullets.length - 1; i >= 0; i--) {
+                let b = r.bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                if (b.life <= 0) {
+                    r.bullets.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    function updateLasers() {
+        for (let l of lasers) {
+            if (!l.active) continue;
+            l.y += l.speed;
+            if (l.y > 620) {
+                l.y = -20;
+                l.x = 100 + Math.random() * 600;
+            }
+        }
+    }
+
+    function updateBombs() {
+        for (let b of bombs) {
+            if (b.exploding) {
+                b.explosionTimer--;
+                if (b.explosionTimer <= 0) {
+                    b.exploding = false;
+                    b.x = 400 + (Math.random() - 0.5) * 600;
+                    b.y = 300 + (Math.random() - 0.5) * 400;
+                    b.radius = 8 + Math.random() * 12;
+                }
+                continue;
+            }
+            let dx = player.x - b.x;
+            let dy = player.y - b.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 1) {
+                b.x += (dx / dist) * b.speed * 0.2;
+                b.y += (dy / dist) * b.speed * 0.2;
+            }
+            b.phase += 0.05;
+        }
+    }
+
+    function updateTornados() {
+        for (let t of tornados) {
+            t.angle += t.rotationSpeed;
+            t.x += Math.sin(t.phase + frameCount * 0.01) * t.speed * 0.2;
+            t.y += Math.cos(t.phase + frameCount * 0.01) * t.speed * 0.2;
+            t.x = Math.max(50, Math.min(750, t.x));
+            t.y = Math.max(50, Math.min(550, t.y));
+        }
+    }
+
+    function updateMirrors() {
+        for (let m of mirrors) {
+            m.angle += m.speed;
+            m.rotation += 0.03;
+            m.x = 400 + Math.cos(m.angle) * 250;
+            m.y = 300 + Math.sin(m.angle) * 180;
+            if (frameCount % 30 === 0) {
+                let angle = m.rotation;
+                for (let i = 0; i < 6; i++) {
+                    let a = angle + (i / 6) * Math.PI * 2;
+                    m.bullets.push({
+                        x: m.x,
+                        y: m.y,
+                        vx: Math.cos(a) * 3,
+                        vy: Math.sin(a) * 3,
+                        life: 80
+                    });
+                }
+            }
+            for (let i = m.bullets.length - 1; i >= 0; i--) {
+                let b = m.bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                if (b.life <= 0) {
+                    m.bullets.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    function updateBlackHoles() {
+        for (let h of blackHoles) {
+            h.angle += 0.02;
+            h.radius += h.speed;
+            if (h.radius > h.maxRadius) {
+                h.radius = 20;
+                h.x = 200 + Math.random() * 400;
+                h.y = 150 + Math.random() * 200;
+            }
+            let dx = h.x - player.x;
+            let dy = h.y - player.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 10 && dist < h.radius * 1.5) {
+                player.x += (dx / dist) * h.pullStrength * 2;
+                player.y += (dy / dist) * h.pullStrength * 2;
+            }
+            h.particles.push({
+                x: h.x + Math.cos(h.angle + Math.random()) * h.radius,
+                y: h.y + Math.sin(h.angle + Math.random()) * h.radius,
+                life: 30 + Math.random() * 20
+            });
+            for (let i = h.particles.length - 1; i >= 0; i--) {
+                h.particles[i].life--;
+                if (h.particles[i].life <= 0) {
+                    h.particles.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    function updateDimensionRifts() {
+        for (let r of dimensionRifts) {
+            r.angle += r.speed;
+            r.rotation += r.rotSpeed;
+            r.x += Math.sin(r.angle) * 0.5;
+            r.y += Math.cos(r.angle) * 0.5;
+            r.x = Math.max(20, Math.min(780, r.x));
+            r.y = Math.max(20, Math.min(580, r.y));
+            
+            for (let s of r.shards) {
+                s.x += s.vx;
+                s.y += s.vy;
+                s.life--;
+                let angle = Math.atan2(s.vy, s.vx);
+                let speed = Math.sqrt(s.vx*s.vx + s.vy*s.vy);
+                angle += 0.02;
+                s.vx = Math.cos(angle) * speed;
+                s.vy = Math.sin(angle) * speed;
+            }
+            r.shards = r.shards.filter(s => s.life > 0);
+            if (r.shards.length < 5) {
+                for (let i = 0; i < 3; i++) {
+                    let angle = Math.random() * Math.PI * 2;
+                    r.shards.push({
+                        x: r.x + Math.cos(angle) * (r.radius + 5),
+                        y: r.y + Math.sin(angle) * (r.radius + 5),
+                        vx: Math.cos(angle) * (1 + Math.random()),
+                        vy: Math.sin(angle) * (1 + Math.random()),
+                        life: 60 + Math.random() * 40
+                    });
+                }
+            }
+        }
+    }
+
+    function updateSoulTraps() {
+        for (let t of soulTraps) {
+            t.angle += t.orbitSpeed;
+            t.x = 400 + Math.cos(t.angle) * t.orbitRadius;
+            t.y = 300 + Math.sin(t.angle) * t.orbitRadius * 0.6;
+            t.phase += 0.02;
+            
+            let dx = t.x - player.x;
+            let dy = t.y - player.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < t.radius + player.radius + 20 && dist > 5) {
+                player.x += (dx / dist) * 0.3;
+                player.y += (dy / dist) * 0.3;
+            }
+        }
+    }
+
+    function updateTimeStops() {
+        let timeSlow = false;
+        for (let t of timeStops) {
+            t.angle += t.speed;
+            let pulse = Math.sin(t.phase + frameCount * 0.05) * 2;
+            t.radius += pulse * 0.1;
+            t.radius = Math.max(2, Math.min(15, t.radius));
+            
+            let dx = t.x - player.x;
+            let dy = t.y - player.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < t.radius * 2 + player.radius) {
+                timeSlow = true;
+            }
+        }
+        
+        if (timeSlow && player.invincible <= 0) {
+            player.speed = 2;
+        } else if (!timeSlow) {
+            player.speed = 5.5;
+        }
+    }
+
+    // === ПРОВЕРКА КОЛЛИЗИЙ ===
+    function checkCollisions() {
+        for (let s of stars) {
+            if (distance(player.x, player.y, s.x, s.y) < s.size + player.radius) return true;
+        }
+        for (let c of circles) {
+            if (distance(player.x, player.y, c.x, c.y) < c.radius + player.radius) return true;
+        }
+        for (let a of arrows) {
+            if (a.life > 0 && distance(player.x, player.y, a.x, a.y) < a.size + player.radius) return true;
+        }
+        for (let w of waves) {
+            let dist = distance(player.x, player.y, w.x, w.y);
+            if (Math.abs(dist - w.radius) < w.width/2 + player.radius) return true;
+        }
+        for (let o of orbs) {
+            if (distance(player.x, player.y, o.x, o.y) < o.radius + player.radius) return true;
+        }
+        for (let s of spikes) {
+            if (s.height > 20 && 
+                player.x > s.x - s.width/2 && player.x < s.x + s.width/2 &&
+                player.y > 600 - s.height) return true;
+        }
+        for (let g of ghosts) {
+            if (distance(player.x, player.y, g.x, g.y) < g.radius + player.radius) return true;
+        }
+        for (let m of meteors) {
+            if (distance(player.x, player.y, m.x, m.y) < m.radius + player.radius) return true;
+        }
+        for (let c of chains) {
+            if (distance(player.x, player.y, c.x, c.y) < c.radius + player.radius) return true;
+        }
+        for (let r of rings) {
+            let dist = distance(player.x, player.y, r.x, r.y);
+            if (dist < r.radius + r.thickness/2 + player.radius &&
+                dist > r.radius - r.thickness/2 - player.radius) return true;
+            for (let b of r.bullets) {
+                if (distance(player.x, player.y, b.x, b.y) < 3 + player.radius) return true;
+            }
+        }
+        for (let l of lasers) {
+            if (l.active && player.x > l.x - l.width/2 && player.x < l.x + l.width/2 &&
+                player.y > l.y && player.y < l.y + 600) return true;
+        }
+        for (let b of bombs) {
+            if (b.exploding) {
+                let dist = distance(player.x, player.y, b.x, b.y);
+                if (dist < b.radius * 2 + player.radius) return true;
+            } else if (distance(player.x, player.y, b.x, b.y) < b.radius + player.radius) {
+                b.exploding = true;
+                b.explosionTimer = 30;
+                return true;
+            }
+        }
+        for (let t of tornados) {
+            let dist = distance(player.x, player.y, t.x, t.y);
+            if (dist < t.radius + player.radius) return true;
+        }
+        for (let m of mirrors) {
+            let dist = distance(player.x, player.y, m.x, m.y);
+            if (dist < m.radius + player.radius) return true;
+            for (let b of m.bullets) {
+                if (distance(player.x, player.y, b.x, b.y) < 4 + player.radius) return true;
+            }
+        }
+        for (let h of blackHoles) {
+            let dist = distance(player.x, player.y, h.x, h.y);
+            if (dist < h.radius + player.radius) return true;
+        }
+        for (let r of dimensionRifts) {
+            let dist = distance(player.x, player.y, r.x, r.y);
+            if (dist < r.radius + player.radius) return true;
+            for (let s of r.shards) {
+                if (distance(player.x, player.y, s.x, s.y) < 4 + player.radius) return true;
+            }
+        }
+        for (let t of soulTraps) {
+            let dist = distance(player.x, player.y, t.x, t.y);
+            if (dist < t.radius + player.radius + 10) return true;
+        }
+        for (let t of timeStops) {
+            let dist = distance(player.x, player.y, t.x, t.y);
+            if (dist < t.radius * 1.5 + player.radius) return true;
+        }
+        return false;
+    }
+
+    function distance(x1, y1, x2, y2) {
+        return Math.sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2));
+    }
+
+    // === ОБНОВЛЕНИЕ ===
+    function update() {
+        if (gameOver || gameWon) return;
+        frameCount++;
+
+        // Движение игрока
+        let dx = 0, dy = 0;
+        if (keys['ArrowLeft'] || keys['a']) dx = -1;
+        if (keys['ArrowRight'] || keys['d']) dx = 1;
+        if (keys['ArrowUp'] || keys['w']) dy = -1;
+        if (keys['ArrowDown'] || keys['s']) dy = 1;
+        
+        if (dx !== 0 && dy !== 0) {
+            dx *= 0.707;
+            dy *= 0.707;
+        }
+        
+        player.x += dx * player.speed;
+        player.y += dy * player.speed;
+        player.x = Math.max(15, Math.min(785, player.x));
+        player.y = Math.max(15, Math.min(585, player.y));
+        
+        if (player.invincible > 0) player.invincible--;
+        if (player.shootCooldown > 0) player.shootCooldown--;
+        if (player.dashCooldown > 0) player.dashCooldown--;
+        if (screenShake > 0) screenShake *= 0.9;
+
+        // Пули игрока
+        for (let i = player.bullets.length - 1; i >= 0; i--) {
+            let b = player.bullets[i];
+            b.x += b.vx;
+            b.y += b.vy;
+            b.life--;
+            if (b.life <= 0 || b.x < -50 || b.x > 850 || b.y < -50 || b.y > 650) {
+                player.bullets.splice(i, 1);
+                continue;
+            }
+            
+            let dx2 = b.x - boss.x;
+            let dy2 = b.y - boss.y;
+            if (Math.sqrt(dx2*dx2 + dy2*dy2) < boss.radius + b.radius) {
+                let damage = b.damage;
+                if (boss.secretMode) {
+                    damage *= 1.5;
+                }
+                boss.hp -= damage;
+                player.bullets.splice(i, 1);
+                comboCount++;
+                screenShake = 5;
+                updateHotbar();
+                if (boss.hp <= 0) {
+                    boss.hp = 0;
+                    gameWon = true;
+                    winScreen.style.display = 'flex';
+                }
+                updateUI();
+            }
+        }
+
+        // Атаки босса
+        boss.attackTimer++;
+        let cooldownPercent = (boss.attackTimer / boss.attackCooldown) * 100;
+        cooldownFill.style.width = Math.min(100, cooldownPercent) + '%';
+        
+        if (boss.attackTimer > boss.attackCooldown && !boss.isAttacking) {
+            boss.attackTimer = 0;
+            boss.attackCooldown = 20 + Math.floor(Math.random() * 20);
+            generateAttack();
+        }
+
+        if (boss.isAttacking) {
+            boss.attackDuration--;
+            if (boss.attackDuration <= 0) {
+                boss.isAttacking = false;
+                clearAllAttacks();
+                attackIndicator.textContent = '⚔️ ГОТОВИМ АТАКУ...';
+                attackIndicator.className = '';
+            }
+        }
+
+        // Обновление всех атак
+        updateStars();
+        updateCircles();
+        updateArrows();
+        updateWaves();
+        updateOrbs();
+        updateSpikes();
+        updateGhosts();
+        updateMeteors();
+        updateChains();
+        updateRings();
+        updateLasers();
+        updateBombs();
+        updateTornados();
+        updateMirrors();
+        updateBlackHoles();
+        updateDimensionRifts();
+        updateSoulTraps();
+        updateTimeStops();
+
+        // Проверка коллизий
+        if (player.invincible <= 0 && !player.isDashing) {
+            let hit = checkCollisions();
+            if (hit) {
+                let damage = boss.enrageMode ? 8 : 6;
+                if (boss.secretMode) damage += 2;
+                player.hp -= damage;
+                player.invincible = 20;
+                screenShake = 10;
+                comboCount = 0;
+                if (player.hp <= 0) {
+                    player.hp = 0;
+                    gameOver = true;
+                    deathScreen.style.display = 'flex';
+                }
+                updateUI();
+            }
+        }
+
+        updateUI();
+        updateDashDisplay();
+    }
+
+    function clearAllAttacks() {
+        stars = [];
+        circles = [];
+        arrows = [];
+        waves = [];
+        orbs = [];
+        spikes = [];
+        ghosts = [];
+        meteors = [];
+        chains = [];
+        rings = [];
+        lasers = [];
+        bombs = [];
+        tornados = [];
+        mirrors = [];
+        blackHoles = [];
+        dimensionRifts = [];
+        soulTraps = [];
+        timeStops = [];
+    }
+
+    // === ОБНОВЛЕНИЕ UI ===
+    function updateUI() {
+        let percent = (player.hp / player.maxHp) * 100;
+        hpFill.style.width = Math.max(0, percent) + '%';
+        hpValue.textContent = Math.floor(player.hp);
+        comboDisplay.textContent = comboCount;
+    }
+
+    function updateDashDisplay() {
+        dashDisplay.textContent = player.dashCooldown > 0 ? '⌛' : '✅';
+    }
+
+    function updateHotbar() {
+        let segments = 30;
+        let filled = Math.floor((boss.hp / boss.maxHp) * segments);
+        let hpPercent = boss.hp / boss.maxHp;
+        
+        hotbar.querySelectorAll('.hp-segment').forEach(el => el.remove());
+        
+        for (let i = 0; i < segments; i++) {
+            let segment = document.createElement('div');
+            segment.className = 'hp-segment';
+            if (i < filled) {
+                if (boss.secretMode) {
+                    segment.classList.add('secret');
+                } else if (hpPercent < 0.3) {
+                    segment.classList.add('low');
+                } else {
+                    segment.classList.add('filled');
+                }
+            } else {
+                segment.classList.add('empty');
+            }
+            hotbar.appendChild(segment);
+        }
+        
+        bossHPText.textContent = `${Math.floor(boss.hp)}/${boss.maxHp}`;
+    }
+
+    // === РИСОВАНИЕ ===
+    function draw() {
+        ctx.save();
+        if (screenShake > 0.5) {
+            ctx.translate(
+                (Math.random() - 0.5) * screenShake,
+                (Math.random() - 0.5) * screenShake
+            );
+        }
+        
+        ctx.clearRect(-10, -10, 820, 620);
+
+        // Фон
+        let grad = ctx.createRadialGradient(400, 300, 100, 400, 300, 400);
+        if (boss.secretMode) {
+            grad.addColorStop(0, '#3a0a3e');
+            grad.addColorStop(0.5, '#1a0a2e');
+            grad.addColorStop(1, '#0a0a1a');
+            if (frameCount % 5 === 0) {
+                ctx.fillStyle = `rgba(255, 0, 255, ${0.02 + Math.random() * 0.03})`;
+                ctx.fillRect(-10, -10, 820, 620);
+            }
+        } else {
+            grad.addColorStop(0, boss.enrageMode ? '#3a1a1e' : '#2a1a3e');
+            grad.addColorStop(1, '#0a0a1a');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(-10, -10, 820, 620);
+
+        // Рисуем все атаки
+        drawStars();
+        drawCircles();
+        drawArrows();
+        drawWaves();
+        drawOrbs();
+        drawSpikes();
+        drawGhosts();
+        drawMeteors();
+        drawChains();
+        drawRings();
+        drawLasers();
+        drawBombs();
+        drawTornados();
+        drawMirrors();
+        drawBlackHoles();
+        drawDimensionRifts();
+        drawSoulTraps();
+        drawTimeStops();
+
+        // Босс
+        drawBoss();
+
+        // Пули игрока
+        for (let b of player.bullets) {
+            ctx.save();
+            ctx.shadowColor = boss.secretMode ? '#ff00ff' : '#ffdd00';
+            ctx.shadowBlur = boss.secretMode ? 35 : 25;
+            ctx.fillStyle = boss.secretMode ? '#ff00ff' : '#ffdd00';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(b.x - 1, b.y - 1, b.radius * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Игрок
+        drawPlayer();
+
+        ctx.restore();
+    }
+
+    function drawBoss() {
+        ctx.save();
+        let glowColor = boss.secretMode ? '#ff00ff' : (boss.enrageMode ? '#ff2200' : '#ffdd00');
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = boss.secretMode ? 80 : 50;
+        
+        let aura = ctx.createRadialGradient(boss.x, boss.y, 10, boss.x, boss.y, boss.secretMode ? 150 : 100);
+        if (boss.secretMode) {
+            aura.addColorStop(0, 'rgba(255, 0, 255, 0.5)');
+            aura.addColorStop(0.5, 'rgba(170, 0, 255, 0.2)');
+            aura.addColorStop(1, 'rgba(255, 0, 255, 0)');
+        } else {
+            aura.addColorStop(0, boss.enrageMode ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 220, 0, 0.3)');
+            aura.addColorStop(1, 'rgba(255, 220, 0, 0)');
+        }
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, boss.secretMode ? 150 : 100, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 30;
+        let bodyColor = boss.secretMode ? '#2a0a2e' : (boss.enrageMode ? '#2a0a0a' : '#1a0a2e');
+        ctx.fillStyle = bodyColor;
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = boss.secretMode ? 4 : 3;
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, boss.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = boss.secretMode ? '#ff44ff' : '#00ffff';
+        ctx.beginPath();
+        ctx.arc(boss.x - 14, boss.y - 5, boss.secretMode ? 10 : 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = boss.secretMode ? '#ff00ff' : '#ff44ff';
+        ctx.beginPath();
+        ctx.arc(boss.x + 14, boss.y - 5, boss.secretMode ? 10 : 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(boss.x - 14 + Math.sin(frameCount * 0.07) * 4, boss.y - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(boss.x + 14 + Math.sin(frameCount * 0.07 + 1) * 4, boss.y - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        if (boss.secretMode) {
+            ctx.arc(boss.x, boss.y + 14, 16, 0.1, Math.PI - 0.1);
+            for (let i = -3; i <= 3; i++) {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(boss.x + i * 7 - 3, boss.y + 12, 6, 8);
+            }
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(boss.x - 18, boss.y + 12);
+            ctx.lineTo(boss.x - 14, boss.y + 22);
+            ctx.lineTo(boss.x - 10, boss.y + 12);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(boss.x + 18, boss.y + 12);
+            ctx.lineTo(boss.x + 14, boss.y + 22);
+            ctx.lineTo(boss.x + 10, boss.y + 12);
+            ctx.fill();
+        } else if (boss.enrageMode) {
+            ctx.arc(boss.x, boss.y + 12, 14, 0.1, Math.PI - 0.1);
+            for (let i = -2; i <= 2; i++) {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(boss.x + i * 6 - 2, boss.y + 10, 4, 6);
+            }
+        } else {
+            ctx.arc(boss.x, boss.y + 8, 12, 0.1, Math.PI - 0.1);
+        }
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function drawPlayer() {
+        ctx.save();
+        let pulse = Math.sin(frameCount * 0.1) * 2;
+        let radius = player.radius + pulse;
+        let color = boss.secretMode ? '#ff00ff' : '#ffdd00';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = boss.secretMode ? 40 : 30;
+        
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y + 4);
+        ctx.bezierCurveTo(player.x - radius, player.y - 4, player.x - radius * 1.4, player.y - radius * 1.2, player.x, player.y - radius * 0.8);
+        ctx.bezierCurveTo(player.x + radius * 1.4, player.y - radius * 1.2, player.x + radius, player.y - 4, player.x, player.y + 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(player.x - 3, player.y - 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // === ФУНКЦИИ РИСОВАНИЯ АТАК ===
+    function drawStars() {
+        for (let s of stars) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(s.rotation);
+            ctx.shadowColor = '#ffdd00';
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = s.color || '#ffdd00';
+            ctx.strokeStyle = '#ff8800';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                let angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                let r = (i % 2 === 0) ? s.size : s.size * 0.4;
+                if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawCircles() {
+        for (let c of circles) {
+            ctx.save();
+            ctx.shadowColor = '#ff44ff';
+            ctx.shadowBlur = 20;
+            ctx.strokeStyle = c.color || `hsl(${frameCount * 2 + c.angle * 50}, 100%, 60%)`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 68, 255, 0.1)';
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawArrows() {
+        for (let a of arrows) {
+            if (a.life <= 0) continue;
+            ctx.save();
+            ctx.translate(a.x, a.y);
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = '#00ffff';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, -a.size);
+            ctx.lineTo(a.size * 0.6, 0);
+            ctx.lineTo(0, a.size);
+            ctx.lineTo(-a.size * 0.6, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawWaves() {
+        for (let w of waves) {
+            ctx.save();
+            ctx.shadowColor = '#ff8800';
+            ctx.shadowBlur = 20;
+            ctx.strokeStyle = w.color || `rgba(255, 136, 0, ${0.5 + Math.sin(w.radius * 0.1) * 0.3})`;
+            ctx.lineWidth = w.width;
+            ctx.beginPath();
+            ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawOrbs() {
+        for (let o of orbs) {
+            ctx.save();
+            let size = o.radius + Math.sin(o.pulse) * 3;
+            ctx.shadowColor = '#44ff88';
+            ctx.shadowBlur = 25;
+            ctx.fillStyle = o.color || `hsl(${frameCount * 2 + o.pulse * 20}, 100%, 60%)`;
+            ctx.beginPath();
+            ctx.arc(o.x, o.y, size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.beginPath();
+            ctx.arc(o.x - 3, o.y - 3, size * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawSpikes() {
+        for (let s of spikes) {
+            if (s.height < 5 || s.delay > 0) continue;
+            ctx.save();
+            ctx.shadowColor = '#ff4400';
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = s.color || '#ff4400';
+            ctx.strokeStyle = '#ff8800';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(s.x - s.width/2, 600);
+            ctx.lineTo(s.x, 600 - s.height);
+            ctx.lineTo(s.x + s.width/2, 600);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawGhosts() {
+        for (let g of ghosts) {
+            ctx.save();
+            ctx.shadowColor = '#aa44ff';
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = `rgba(170, 68, 255, ${0.5 + Math.sin(g.phase) * 0.2})`;
+            ctx.strokeStyle = g.color || '#aa44ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(g.x, g.y, g.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(g.x - 4, g.y - 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(g.x + 4, g.y - 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(g.x - 4 + Math.sin(frameCount * 0.02) * 2, g.y - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(g.x + 4 + Math.sin(frameCount * 0.02 + 1) * 2, g.y - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawMeteors() {
+        for (let m of meteors) {
+            ctx.save();
+            for (let i = 0; i < m.trail.length; i++) {
+                let alpha = i / m.trail.length * 0.5;
+                ctx.fillStyle = `rgba(255, 100, 0, ${alpha})`;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(m.trail[i].x, m.trail[i].y, m.radius * (i / m.trail.length), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowColor = '#ff4400';
+            ctx.shadowBlur = 40;
+            ctx.fillStyle = m.color || '#ff6600';
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 2;
+            ctx.translate(m.x, m.y);
+            ctx.rotate(m.rotation);
+            ctx.beginPath();
+            ctx.arc(0, 0, m.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 200, 50, 0.5)';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(-m.radius * 0.3, -m.radius * 0.3, m.radius * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawChains() {
+        for (let c of chains) {
+            ctx.save();
+            ctx.shadowColor = c.color;
+            ctx.shadowBlur = 30;
+            ctx.strokeStyle = c.color;
+            ctx.lineWidth = 4;
+            for (let i = 0; i < c.segments; i++) {
+                let angle = (i / c.segments) * Math.PI * 2 + c.phase;
+                let x = c.x + Math.cos(angle) * c.chainLength * 0.5;
+                let y = c.y + Math.sin(angle) * c.chainLength * 0.3;
+                ctx.beginPath();
+                ctx.arc(x, y, c.radius * 0.4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = `rgba(255, 255, 255, 0.2)`;
+                ctx.fill();
+            }
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 40;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.radius * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawRings() {
+        for (let r of rings) {
+            ctx.save();
+            ctx.shadowColor = r.color;
+            ctx.shadowBlur = 30;
+            ctx.strokeStyle = r.color;
+            ctx.lineWidth = r.thickness;
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            for (let b of r.bullets) {
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = r.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawLasers() {
+        for (let l of lasers) {
+            if (!l.active) continue;
+            ctx.save();
+            ctx.shadowColor = l.color;
+            ctx.shadowBlur = 40;
+            ctx.fillStyle = l.color;
+            ctx.globalAlpha = 0.6;
+            ctx.fillRect(l.x - l.width/2, l.y, l.width, 620);
+            ctx.globalAlpha = 0.3;
+            ctx.shadowBlur = 80;
+            ctx.fillRect(l.x - l.width/4, l.y, l.width/2, 620);
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+    }
+
+    function drawBombs() {
+        for (let b of bombs) {
+            ctx.save();
+            if (b.exploding) {
+                ctx.shadowColor = '#ff4400';
+                ctx.shadowBlur = 60;
+                ctx.fillStyle = `rgba(255, 68, 0, ${b.explosionTimer / 30})`;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius * 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = `rgba(255, 200, 50, ${b.explosionTimer / 30 * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius * 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.shadowColor = b.color;
+                ctx.shadowBlur = 25;
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius + 3, 0, Math.PI * 2 * (1 - (b.phase % 1)));
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawTornados() {
+        for (let t of tornados) {
+            ctx.save();
+            ctx.shadowColor = t.color;
+            ctx.shadowBlur = 30;
+            for (let i = 0; i < 8; i++) {
+                let angle = t.angle + (i / 8) * Math.PI * 2;
+                let radius = t.radius * (0.5 + Math.sin(angle * 3 + t.phase + frameCount * 0.05) * 0.3);
+                let x = t.x + Math.cos(angle) * radius;
+                let y = t.y + Math.sin(angle) * radius * 0.3;
+                ctx.fillStyle = `rgba(100, 200, 255, ${0.1 + Math.sin(angle + frameCount * 0.05) * 0.05})`;
+                ctx.beginPath();
+                ctx.arc(x, y, 10 + Math.sin(angle * 2 + frameCount * 0.05) * 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawMirrors() {
+        for (let m of mirrors) {
+            ctx.save();
+            ctx.shadowColor = m.color;
+            ctx.shadowBlur = 30;
+            ctx.strokeStyle = m.color;
+            ctx.lineWidth = 3;
+            ctx.translate(m.x, m.y);
+            ctx.rotate(m.rotation);
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                let angle = (i / 6) * Math.PI * 2;
+                let r = m.radius;
+                if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.fillStyle = `rgba(100, 200, 255, 0.1)`;
+            ctx.fill();
+            ctx.restore();
+            for (let b of m.bullets) {
+                ctx.save();
+                ctx.shadowColor = m.color;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = m.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+    }
+
+    function drawBlackHoles() {
+        for (let h of blackHoles) {
+            ctx.save();
+            let grad = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.radius);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.1, '#ff00ff');
+            grad.addColorStop(0.4, '#4400aa');
+            grad.addColorStop(0.8, '#220044');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = 50;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(h.x, h.y, h.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 30;
+            ctx.strokeStyle = h.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(h.x, h.y, h.radius * 0.7, h.angle, h.angle + Math.PI * 1.5);
+            ctx.stroke();
+            for (let p of h.particles) {
+                ctx.fillStyle = `rgba(255, 0, 255, ${p.life / 50})`;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawDimensionRifts() {
+        for (let r of dimensionRifts) {
+            ctx.save();
+            ctx.translate(r.x, r.y);
+            ctx.rotate(r.rotation);
+            let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r.radius);
+            grad.addColorStop(0, 'rgba(100, 200, 255, 0.8)');
+            grad.addColorStop(0.5, 'rgba(50, 100, 255, 0.4)');
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.shadowColor = r.color;
+            ctx.shadowBlur = 40;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(0, 0, r.radius, 0, Math.PI * 2);
+            ctx.fill();
+            for (let s of r.shards) {
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = r.color;
+                ctx.globalAlpha = s.life / 100;
+                ctx.fillRect(s.x - r.x - 2, s.y - r.y - 2, 4, 4);
+                ctx.globalAlpha = 1;
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawSoulTraps() {
+        for (let t of soulTraps) {
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            for (let c of t.chains) {
+                let angle = c.angle + t.phase;
+                let x = Math.cos(angle) * c.length;
+                let y = Math.sin(angle) * c.length;
+                ctx.shadowColor = t.color;
+                ctx.shadowBlur = 15;
+                ctx.strokeStyle = t.color;
+                ctx.lineWidth = c.width;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+            let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, t.radius);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.3, t.color);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.shadowColor = t.color;
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(0, 0, t.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawTimeStops() {
+        for (let t of timeStops) {
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            let pulse = Math.sin(t.phase + frameCount * 0.05) * 2;
+            let radius = t.radius + pulse;
+            ctx.shadowColor = t.color;
+            ctx.shadowBlur = 20;
+            ctx.strokeStyle = t.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 10;
+            ctx.strokeStyle = t.color;
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 12; i++) {
+                let angle = (i / 12) * Math.PI * 2;
+                let r1 = radius * 0.7;
+                let r2 = radius * 0.8;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
+                ctx.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2);
+                ctx.stroke();
+            }
+            let time = frameCount * 0.01;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(time) * radius * 0.5, Math.sin(time) * radius * 0.5);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(time * 0.5 + 1) * radius * 0.3, Math.sin(time * 0.5 + 1) * radius * 0.3);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+    }
+
+    // === ИГРОВОЙ ЦИКЛ ===
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Инициализация
+    updateHotbar();
+    gameLoop();
+</script>
+</body>
+</html>
