@@ -1,0 +1,2302 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Breath — 4 мира</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background: #050d14;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #1a3a4a;
+            border-radius: 12px;
+            box-shadow: 0 0 60px rgba(0, 100, 150, 0.25);
+            background: #0b1a22;
+            cursor: none;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #mainMenu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 12, 20, 0.92);
+            backdrop-filter: blur(12px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            flex-direction: column;
+        }
+        #mainMenu.hidden {
+            display: none;
+        }
+        #mainMenu .title {
+            font-size: 48px;
+            font-weight: bold;
+            color: #6effd0;
+            text-shadow: 0 0 60px #2dc9a066;
+            letter-spacing: 4px;
+            margin-bottom: 2px;
+        }
+        #mainMenu .subtitle {
+            font-size: 14px;
+            color: #4a8a9a;
+            letter-spacing: 6px;
+            margin-bottom: 10px;
+        }
+        #mainMenu .stats {
+            color: #f5c542;
+            font-size: 14px;
+            margin-bottom: 12px;
+            text-align: center;
+            line-height: 1.6;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px 24px;
+            border-radius: 12px;
+            border: 1px solid #2a5a6a;
+        }
+        #mainMenu .stats span {
+            color: #fff;
+        }
+        #mainMenu .menu-btn {
+            display: block;
+            width: 220px;
+            padding: 10px 0;
+            margin: 4px auto;
+            background: transparent;
+            border: 2px solid #2a5a6a;
+            border-radius: 50px;
+            color: #8fcbdd;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+        #mainMenu .menu-btn:hover {
+            background: #1a3a4a;
+            border-color: #5aaac0;
+            color: #ffffff;
+            transform: scale(1.02);
+        }
+        #mainMenu .menu-btn.primary {
+            border-color: #3a8aaa;
+            background: rgba(42, 90, 106, 0.2);
+        }
+        #mainMenu .menu-btn.primary:hover {
+            background: #2a6a7a;
+            border-color: #6effd0;
+        }
+        #mainMenu .menu-btn.acid-btn {
+            border-color: #4a7a2a;
+            color: #8aba6a;
+        }
+        #mainMenu .menu-btn.acid-btn:hover {
+            background: #1a2a1a;
+            border-color: #8aba6a;
+            color: #aadd88;
+        }
+        #mainMenu .menu-btn.fire-btn {
+            border-color: #8a3a1a;
+            color: #cc6a4a;
+        }
+        #mainMenu .menu-btn.fire-btn:hover {
+            background: #1a0a0a;
+            border-color: #cc6a4a;
+            color: #ff8866;
+        }
+        #mainMenu .menu-btn.ice-btn {
+            border-color: #3a6a8a;
+            color: #6aaacc;
+        }
+        #mainMenu .menu-btn.ice-btn:hover {
+            background: #0a1a2a;
+            border-color: #6aaacc;
+            color: #88ccff;
+        }
+        #mainMenu .menu-btn.shop-btn {
+            border-color: #c8962a;
+            color: #f5c542;
+        }
+        #mainMenu .menu-btn.shop-btn:hover {
+            background: #2a2a1a;
+            border-color: #f5c542;
+        }
+        #mainMenu .version {
+            position: absolute;
+            bottom: 20px;
+            color: #1a4a5a;
+            font-size: 11px;
+            letter-spacing: 2px;
+        }
+
+        .world-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin: 6px 0;
+        }
+        .world-grid .menu-btn {
+            width: 105px;
+            padding: 8px 0;
+            font-size: 11px;
+            margin: 0;
+        }
+
+        #shopOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 60;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        #shopOverlay.open {
+            display: flex;
+        }
+        #shop {
+            background: linear-gradient(145deg, #0d2630, #091a22);
+            border: 2px solid #c8962a;
+            border-radius: 24px;
+            padding: 16px 20px;
+            max-width: 520px;
+            width: 92%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 0 80px rgba(200, 150, 40, 0.15);
+            color: #c8e6f0;
+            font-family: 'Courier New', monospace;
+        }
+        #shop h2 {
+            text-align: center;
+            font-size: 22px;
+            margin-bottom: 2px;
+            color: #f5c542;
+            letter-spacing: 2px;
+        }
+        #shop .coins {
+            text-align: center;
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #f5c542;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid #3a6a3a;
+        }
+        #shop .coins span {
+            font-size: 22px;
+            font-weight: bold;
+        }
+        .shop-tabs {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #1a4a5a;
+            padding-bottom: 6px;
+        }
+        .shop-tabs button {
+            background: transparent;
+            border: 1px solid #1a4a5a;
+            color: #7aabb5;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .shop-tabs button:hover {
+            border-color: #3a8aaa;
+            color: #c8e6f0;
+        }
+        .shop-tabs button.active-tab {
+            border-color: #c8962a;
+            color: #f5c542;
+            background: rgba(200, 150, 40, 0.1);
+        }
+        .shop-section {
+            display: none;
+        }
+        .shop-section.active-section {
+            display: block;
+        }
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid #1a4a5a;
+            border-radius: 10px;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            transition: 0.2s;
+        }
+        .shop-item:hover {
+            border-color: #c8962a;
+            background: rgba(255, 255, 255, 0.07);
+        }
+        .shop-item .info {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            flex: 1;
+        }
+        .shop-item .info .name {
+            font-weight: bold;
+            font-size: 12px;
+            color: #d0ecf5;
+        }
+        .shop-item .info .desc {
+            font-size: 9px;
+            color: #7aabb5;
+        }
+        .shop-item .info .owned {
+            font-size: 9px;
+            color: #6effd0;
+        }
+        .shop-item .buy-btn {
+            background: #1a5a6a;
+            border: none;
+            color: white;
+            padding: 3px 12px;
+            border-radius: 30px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 11px;
+            cursor: pointer;
+            transition: 0.2s;
+            border: 1px solid #3a8aaa;
+            white-space: nowrap;
+            margin-left: 6px;
+            min-width: 45px;
+        }
+        .shop-item .buy-btn:hover:not(:disabled) {
+            background: #c8962a;
+            border-color: #f5c542;
+            transform: scale(1.05);
+        }
+        .shop-item .buy-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .shop-item .buy-btn.owned-btn {
+            background: #2a4a3a;
+            border-color: #4a8a6a;
+            opacity: 0.6;
+            cursor: default;
+        }
+        .shop-item .buy-btn.active-btn {
+            background: #f5c542;
+            border-color: #f5c542;
+            color: #0a1a22;
+        }
+        #shop .close-shop {
+            display: block;
+            margin: 10px auto 0;
+            background: transparent;
+            border: 1px solid #3a6a7a;
+            color: #7aabb5;
+            padding: 5px 20px;
+            border-radius: 40px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        #shop .close-shop:hover {
+            background: #1a3a4a;
+            color: #c8e6f0;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            gap: 8px;
+            background: rgba(0, 20, 30, 0.8);
+            padding: 3px 10px;
+            border-radius: 30px;
+            backdrop-filter: blur(6px);
+            border: 1px solid #2a5a6a;
+            pointer-events: none;
+            font-weight: bold;
+            color: #8fcbdd;
+            font-size: 10px;
+            z-index: 10;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-family: 'Courier New', monospace;
+        }
+        #ui span {
+            color: #fff;
+        }
+        .o2-bar {
+            display: inline-block;
+            width: 60px;
+            height: 9px;
+            background: #1a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #3a6a7a;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+        .o2-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #2dc9a0, #6effd0);
+            border-radius: 10px;
+            transition: width 0.1s linear;
+        }
+        .shield-bar {
+            display: inline-block;
+            width: 60px;
+            height: 9px;
+            background: #1a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #3a6a7a;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+        .shield-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #ff8844, #ffcc44);
+            border-radius: 10px;
+            transition: width 0.1s linear;
+        }
+        .depth-indicator {
+            color: #6effd0;
+            font-size: 10px;
+        }
+        .world-indicator {
+            color: #f5c542;
+            font-size: 10px;
+        }
+        #ui .pause-hint {
+            font-size: 9px;
+            opacity: 0.4;
+        }
+        #ui .menu-hint {
+            font-size: 9px;
+            opacity: 0.4;
+            cursor: pointer;
+            pointer-events: auto;
+            color: #6effd0;
+        }
+        #ui .menu-hint:hover {
+            opacity: 0.8;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff4a5a;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 40px #ff0022;
+            background: rgba(0, 0, 0, 0.88);
+            padding: 16px 28px;
+            border-radius: 20px;
+            border: 2px solid #ff4a5a;
+            text-align: center;
+            display: none;
+            z-index: 25;
+            min-width: 260px;
+        }
+        #gameOver small {
+            font-size: 14px;
+            color: #8fcbdd;
+            display: block;
+            margin-top: 3px;
+            font-weight: normal;
+        }
+        #gameOver .depth-info {
+            font-size: 16px;
+            color: #f5c542;
+            margin: 4px 0 8px;
+        }
+        .gameover-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .gameover-buttons button {
+            padding: 6px 16px;
+            font-size: 12px;
+            border: none;
+            color: white;
+            border-radius: 40px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            transition: 0.2s;
+            border: 1px solid #5aaac0;
+        }
+        #gameOverBtn {
+            background: #2a5a6a;
+        }
+        #gameOverBtn:hover {
+            background: #3a8aaa;
+            transform: scale(1.05);
+        }
+        #gameOverMenuBtn {
+            background: #3a3a4a;
+            border-color: #6a6a8a;
+        }
+        #gameOverMenuBtn:hover {
+            background: #5a5a7a;
+            transform: scale(1.05);
+        }
+
+        #pauseOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 15;
+            flex-direction: column;
+        }
+        #pauseOverlay.open {
+            display: flex;
+        }
+        #pauseOverlay .pause-text {
+            font-size: 42px;
+            color: #6effd0;
+            text-shadow: 0 0 60px #2dc9a066;
+            letter-spacing: 6px;
+        }
+        #pauseOverlay .pause-hint {
+            color: #4a8a9a;
+            font-size: 14px;
+            margin-top: 10px;
+            letter-spacing: 2px;
+        }
+        #pauseOverlay .pause-menu-btn {
+            margin-top: 20px;
+            padding: 8px 28px;
+            font-size: 14px;
+            background: #2a3a4a;
+            border: 1px solid #4a6a7a;
+            color: #8fcbdd;
+            border-radius: 40px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        #pauseOverlay .pause-menu-btn:hover {
+            background: #3a5a6a;
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+
+        .hint-bottom {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #3a7a8a;
+            font-size: 10px;
+            opacity: 0.4;
+            letter-spacing: 2px;
+            z-index: 5;
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+        }
+
+        .controls-info {
+            color: #3a7a8a;
+            font-size: 12px;
+            margin-top: 8px;
+            text-align: center;
+            line-height: 1.6;
+            opacity: 0.6;
+            font-family: 'Courier New', monospace;
+        }
+        .controls-info kbd {
+            background: #0a1a22;
+            padding: 2px 10px;
+            border-radius: 6px;
+            border: 1px solid #1a3a4a;
+            color: #7aabb5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="mainMenu">
+        <div class="title">⬇️ DEEP BREATH</div>
+        <div class="subtitle">〜 4 МИРА 〜</div>
+        <div class="stats">
+            🪙 Монет: <span id="menuCoins">0</span> &nbsp;|&nbsp; 🏆 Рекорд: <span id="menuRecord">0</span> м
+        </div>
+        <div class="world-grid">
+            <button class="menu-btn primary" id="worldOcean" style="border-color:#3a8aaa;color:#6effd0;">🌊 ОКЕАН</button>
+            <button class="menu-btn acid-btn" id="worldAcid">🟢 КИСЛОТА</button>
+            <button class="menu-btn fire-btn" id="worldFire">🔥 ОГОНЬ</button>
+            <button class="menu-btn ice-btn" id="worldIce">❄️ ЛЁД</button>
+        </div>
+        <button class="menu-btn shop-btn" id="shopMenuBtn">🏪 МАГАЗИН</button>
+        <button class="menu-btn" id="controlsBtn">⌨️ УПРАВЛЕНИЕ</button>
+        <div class="controls-info" id="controlsInfo" style="display:none;">
+            <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> — движение<br>
+            <kbd>ESC</kbd> — пауза
+        </div>
+        <div class="version">v16.0 • 10 скинов</div>
+    </div>
+
+    <div id="shopOverlay">
+        <div id="shop">
+            <h2>🏪 МАГАЗИН</h2>
+            <div class="coins">🪙 <span id="shopCoins">0</span> монет</div>
+            <div class="shop-tabs" id="shopTabs"></div>
+            <div id="shopSections"></div>
+            <button class="close-shop" id="closeShopBtn">✕ ЗАКРЫТЬ</button>
+        </div>
+    </div>
+
+    <div id="ui">
+        <div>🫧 O₂ <div class="o2-bar"><div class="o2-fill" id="o2Fill"></div></div></div>
+        <div>🛡️ <div class="shield-bar"><div class="shield-fill" id="shieldFill"></div></div></div>
+        <div class="depth-indicator">🌊 <span id="depthDisplay">0</span>м</div>
+        <div class="world-indicator" id="worldDisplay">🌍</div>
+        <div>🪙 <span id="scoreDisplay">0</span></div>
+        <div class="pause-hint">[ESC]</div>
+        <div class="menu-hint" id="uiMenuBtn">[МЕНЮ]</div>
+    </div>
+
+    <div id="pauseOverlay">
+        <div class="pause-text">⏸ ПАУЗА</div>
+        <div class="pause-hint">нажми ESC чтобы продолжить</div>
+        <button class="pause-menu-btn" id="pauseMenuBtn">🏠 В МЕНЮ</button>
+    </div>
+
+    <div id="gameOver">
+        💀 ПОТЕРЯН<br>
+        <small>мир забрал тебя...</small>
+        <div class="depth-info">🌊 <span id="finalDepth">0</span> м | 🪙 <span id="finalCoins">0</span></div>
+        <div class="gameover-buttons">
+            <button id="gameOverBtn">⬇️ НЫРНУТЬ СНОВА</button>
+            <button id="gameOverMenuBtn">🏠 В МЕНЮ</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="960" height="720"></canvas>
+    <div class="hint-bottom">WASD — движение &nbsp;|&nbsp; ESC — пауза</div>
+
+    <script>
+        (function() {
+            // ===================================================================
+            // 1. КОНСТАНТЫ
+            // ===================================================================
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            const W = 960,
+                H = 720;
+            const MAP_HEIGHT = 2400;
+
+            // ===================================================================
+            // 2. МИРЫ
+            // ===================================================================
+            const WORLDS = {
+                ocean: {
+                    id: 'ocean',
+                    name: '🌊 Океан',
+                    color: '#0f2a36',
+                    lightColor: 'rgba(180, 240, 255, 0.30)',
+                    threatType: 'none',
+                    threatLabel: 'Безопасно',
+                    threatDamage: 0,
+                },
+                acid: {
+                    id: 'acid',
+                    name: '🟢 Кислота',
+                    color: '#1a2a1a',
+                    lightColor: 'rgba(180, 255, 100, 0.25)',
+                    threatType: 'acid',
+                    threatLabel: '☣️ Кислота',
+                    threatDamage: 12.5,
+                    shieldId: 'acidShield',
+                },
+                fire: {
+                    id: 'fire',
+                    name: '🔥 Огонь',
+                    color: '#2a1a0a',
+                    lightColor: 'rgba(255, 150, 50, 0.25)',
+                    threatType: 'fire',
+                    threatLabel: '🌡️ Жара',
+                    threatDamage: 16.7,
+                    shieldId: 'fireShield',
+                },
+                ice: {
+                    id: 'ice',
+                    name: '❄️ Лёд',
+                    color: '#0a1a2a',
+                    lightColor: 'rgba(150, 200, 255, 0.25)',
+                    threatType: 'ice',
+                    threatLabel: '🧊 Холод',
+                    threatDamage: 10,
+                    shieldId: 'iceShield',
+                },
+            };
+
+            // ===================================================================
+            // 3. МАГАЗИН — 10 СКИНОВ!
+            // ===================================================================
+            const shopItems = {
+                // --- Универсальные ---
+                lightBoost: {
+                    id: 'lightBoost',
+                    name: '⚡ Усилитель света',
+                    desc: 'Фонарь светит дальше',
+                    cost: 120,
+                    category: 'universal',
+                    owned: false,
+                },
+                armor: {
+                    id: 'armor',
+                    name: '🛡️ Прочный корпус',
+                    desc: 'Пережить 1 удар мины',
+                    cost: 200,
+                    category: 'universal',
+                    owned: false,
+                },
+                regen: {
+                    id: 'regen',
+                    name: '🧬 Регенератор O₂',
+                    desc: 'Восстанавливает кислород',
+                    cost: 150,
+                    category: 'universal',
+                    owned: false,
+                },
+                // --- СКИНЫ (10 штук!) ---
+                default: {
+                    id: 'default',
+                    name: '🟦 Стандартная',
+                    desc: 'Базовая субмарина',
+                    cost: 0,
+                    category: 'skins',
+                    owned: true,
+                    skinId: 'default',
+                },
+                yellow: {
+                    id: 'yellow',
+                    name: '🟡 Жёлтая лодка',
+                    desc: 'Стиль The Beatles',
+                    cost: 50,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'yellow',
+                },
+                acidSkin: {
+                    id: 'acidSkin',
+                    name: '☣️ Болотный камуфляж',
+                    desc: 'Зелёный, для кислоты',
+                    cost: 80,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'acid',
+                },
+                fireSkin: {
+                    id: 'fireSkin',
+                    name: '🌋 Лавовый скин',
+                    desc: 'Оранжево-красный',
+                    cost: 80,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'fire',
+                },
+                iceSkin: {
+                    id: 'iceSkin',
+                    name: '❄️ Ледяной скин',
+                    desc: 'Прозрачно-белый',
+                    cost: 80,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'ice',
+                },
+                halloween: {
+                    id: 'halloween',
+                    name: '🎃 Хэллоуин',
+                    desc: 'Оранжево-чёрный, с тыквой',
+                    cost: 150,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'halloween',
+                },
+                ghost: {
+                    id: 'ghost',
+                    name: '👻 Призрачный',
+                    desc: 'Полупрозрачный, светящийся',
+                    cost: 250,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'ghost',
+                },
+                cyber: {
+                    id: 'cyber',
+                    name: '🟣 Кибер-лодка',
+                    desc: 'Неоново-фиолетовый',
+                    cost: 250,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'cyber',
+                },
+                wreck: {
+                    id: 'wreck',
+                    name: '⚓ Затонувший корабль',
+                    desc: 'Старый, ржавый, с водорослями',
+                    cost: 200,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'wreck',
+                },
+                pearl: {
+                    id: 'pearl',
+                    name: '🐚 Скин "Жемчуг"',
+                    desc: 'Серебристая лодка',
+                    cost: 250,
+                    category: 'skins',
+                    owned: false,
+                    skinId: 'pearl',
+                },
+                // --- Защита ---
+                acidShield: {
+                    id: 'acidShield',
+                    name: '🧪 Резиновый корпус',
+                    desc: 'Защита от кислоты',
+                    cost: 100,
+                    category: 'shields',
+                    owned: false,
+                    shieldType: 'acid',
+                },
+                fireShield: {
+                    id: 'fireShield',
+                    name: '🔥 Титановый корпус',
+                    desc: 'Защита от огня',
+                    cost: 100,
+                    category: 'shields',
+                    owned: false,
+                    shieldType: 'fire',
+                },
+                iceShield: {
+                    id: 'iceShield',
+                    name: '🧊 Изолированный корпус',
+                    desc: 'Защита от холода',
+                    cost: 100,
+                    category: 'shields',
+                    owned: false,
+                    shieldType: 'ice',
+                },
+            };
+
+            // ===================================================================
+            // 4. СОСТОЯНИЕ
+            // ===================================================================
+            let totalCoins = 0;
+            let recordDepth = 0;
+            let oxygen = 450;
+            let maxOxygen = 450;
+            let depth = 0;
+            let gameRunning = false;
+            let paused = false;
+            let cameraY = 0;
+            let gameTime = 0;
+            let currentWorld = 'ocean';
+
+            let activeShields = {
+                acid: false,
+                fire: false,
+                ice: false,
+            };
+
+            let explosion = {
+                active: false,
+                timer: 0,
+                x: 0,
+                y: 0,
+                radius: 0,
+                maxRadius: 80,
+                shake: 0,
+            };
+
+            const player = {
+                x: W / 2,
+                y: 200,
+                radius: 28,
+                speed: 0,
+                maxSpeed: 4.2,
+                friction: 0.92,
+                skin: 'default',
+                shield: 100,
+                maxShield: 100,
+                armorCharges: 0,
+                lightBoost: false,
+                regenActive: false,
+            };
+
+            let items = [];
+            let mines = [];
+            let bubbles = [];
+            let particles = [];
+            let sharks = [];
+            let jellyfish = [];
+            let decorations = [];
+            let spawnTimer = 0;
+            const SPAWN_INTERVAL = 12;
+            const MAX_ITEMS = 70;
+            let frameId = null;
+            let keys = {};
+
+            // ===================================================================
+            // 5. ЗАГРУЗКА / СОХРАНЕНИЕ
+            // ===================================================================
+            function loadProgress() {
+                const saved = localStorage.getItem('deepBreath4Worlds');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        totalCoins = data.totalCoins || 0;
+                        recordDepth = data.recordDepth || 0;
+                        if (data.skin) player.skin = data.skin;
+                        if (data.activeShields) {
+                            activeShields = data.activeShields;
+                        }
+                        for (const id in shopItems) {
+                            if (data[id] !== undefined) {
+                                shopItems[id].owned = data[id];
+                            }
+                        }
+                    } catch (e) {}
+                }
+                updateUI();
+                updateMenuStats();
+            }
+
+            function saveProgress() {
+                const data = {
+                    totalCoins: totalCoins,
+                    recordDepth: recordDepth,
+                    skin: player.skin,
+                    activeShields: activeShields,
+                };
+                for (const id in shopItems) {
+                    data[id] = shopItems[id].owned;
+                }
+                localStorage.setItem('deepBreath4Worlds', JSON.stringify(data));
+            }
+
+            function updateMenuStats() {
+                document.getElementById('menuCoins').textContent = totalCoins;
+                document.getElementById('menuRecord').textContent = recordDepth;
+            }
+
+            // ===================================================================
+            // 6. ГЕНЕРАЦИЯ ДЕКОРАЦИЙ
+            // ===================================================================
+            function generateDecorations() {
+                decorations = [];
+                const isAcid = currentWorld === 'acid';
+                const isFire = currentWorld === 'fire';
+                const isIce = currentWorld === 'ice';
+
+                const coralColors = isAcid ? ['#4a6a2a', '#3a5a1a', '#5a7a3a', '#6a8a4a'] :
+                    isFire ? ['#6a3a1a', '#8a4a2a', '#aa5a3a', '#cc6a4a'] :
+                    isIce ? ['#3a5a6a', '#4a6a7a', '#5a7a8a', '#2a4a5a'] :
+                    ['#cc3344', '#dd6644', '#ff8866', '#cc4488', '#ff66aa'];
+
+                for (let i = 0; i < 30; i++) {
+                    decorations.push({
+                        type: 'coral',
+                        x: 20 + Math.random() * (W - 40),
+                        y: 30 + Math.random() * (MAP_HEIGHT - 60),
+                        size: 20 + Math.random() * 30,
+                        color: coralColors[Math.floor(Math.random() * coralColors.length)],
+                        phase: Math.random() * Math.PI * 2,
+                        variant: Math.floor(Math.random() * 3),
+                    });
+                }
+
+                const kelpColors = isAcid ? ['#3a5a1a', '#4a6a2a'] :
+                    isFire ? ['#5a3a1a', '#6a4a2a'] :
+                    isIce ? ['#2a4a5a', '#3a5a6a'] :
+                    [`hsl(${120 + Math.random() * 40}, 60%, ${25 + Math.random() * 25}%)`];
+
+                for (let i = 0; i < 30; i++) {
+                    const yPos = (MAP_HEIGHT - 20) - Math.random() * 400;
+                    if (yPos > MAP_HEIGHT - 50) continue;
+                    decorations.push({
+                        type: 'kelp',
+                        x: 10 + Math.random() * (W - 20),
+                        y: yPos,
+                        height: 60 + Math.random() * 120,
+                        width: 4 + Math.random() * 4,
+                        phase: Math.random() * Math.PI * 2,
+                        speed: 0.02 + Math.random() * 0.02,
+                        color: kelpColors[Math.floor(Math.random() * kelpColors.length)] ||
+                            `hsl(${120 + Math.random() * 40}, 60%, ${25 + Math.random() * 25}%)`,
+                    });
+                }
+
+                for (let i = 0; i < 4; i++) {
+                    decorations.push({
+                        type: 'ship',
+                        x: 50 + Math.random() * (W - 100),
+                        y: 200 + Math.random() * (MAP_HEIGHT - 400),
+                        size: 60 + Math.random() * 100,
+                    });
+                }
+
+                sharks = [];
+                jellyfish = [];
+                if (!isFire) {
+                    for (let i = 0; i < 4; i++) {
+                        jellyfish.push({
+                            x: 50 + Math.random() * (W - 100),
+                            y: 100 + Math.random() * (MAP_HEIGHT - 300),
+                            radius: 15 + Math.random() * 20,
+                            phase: Math.random() * Math.PI * 2,
+                            speed: 0.01 + Math.random() * 0.015,
+                            color: isAcid ? `hsla(120, 70%, 50%, 0.4)` :
+                                isIce ? `hsla(200, 70%, 70%, 0.4)` :
+                                `hsla(${280 + Math.random() * 60}, 70%, ${60 + Math.random() * 30}%, 0.4)`,
+                            tentacles: 6 + Math.floor(Math.random() * 4),
+                        });
+                    }
+                }
+
+                for (let i = 0; i < 5; i++) {
+                    sharks.push({
+                        x: -100 - Math.random() * 300,
+                        y: 100 + Math.random() * (MAP_HEIGHT - 200),
+                        size: 40 + Math.random() * 30,
+                        speed: 0.5 + Math.random() * 0.8,
+                        direction: 1,
+                        phase: Math.random() * Math.PI * 2,
+                    });
+                }
+            }
+
+            // ===================================================================
+            // 7. ВСПОМОГАТЕЛЬНЫЕ
+            // ===================================================================
+            function getDepthMultiplier() {
+                const d = depth;
+                if (d < 100) return { o2: 1, coinBonus: 1 };
+                if (d < 200) return { o2: 1.5, coinBonus: 2 };
+                if (d < 350) return { o2: 2.5, coinBonus: 3 };
+                if (d < 500) return { o2: 3.5, coinBonus: 4 };
+                return { o2: 5.0, coinBonus: 6 };
+            }
+
+            function getWorld() {
+                return WORLDS[currentWorld];
+            }
+
+            // ===================================================================
+            // 8. СПАВН
+            // ===================================================================
+            function spawnItem() {
+                if (!gameRunning) return;
+                if (items.length >= MAX_ITEMS) return;
+
+                const type = Math.random() < 0.65 ? 'oxygen' : 'coin';
+
+                let x, y, safe;
+                let attempts = 0;
+                do {
+                    x = 40 + Math.random() * (W - 80);
+                    y = 40 + Math.random() * (MAP_HEIGHT - 80);
+                    const dx = x - player.x,
+                        dy = y - player.y;
+                    safe = Math.hypot(dx, dy) > 120;
+                    attempts++;
+                } while (!safe && attempts < 50);
+
+                let bonus = 1;
+                if (depth > 100) bonus = 2;
+                if (depth > 200) bonus = 3;
+                if (depth > 350) bonus = 4;
+                if (depth > 500) bonus = 6;
+
+                items.push({
+                    x,
+                    y,
+                    type,
+                    radius: type === 'oxygen' ? 28 : 22,
+                    collected: false,
+                    bonus: type === 'coin' ? bonus : 0,
+                    rotation: Math.random() * Math.PI * 2,
+                });
+            }
+
+            function spawnMine() {
+                if (!gameRunning) return;
+                if (mines.length >= 20) return;
+                if (depth < 30 && mines.length > 3) return;
+
+                let x, y, safe;
+                let attempts = 0;
+                do {
+                    x = 40 + Math.random() * (W - 80);
+                    y = 40 + Math.random() * (MAP_HEIGHT - 80);
+                    const dx = x - player.x,
+                        dy = y - player.y;
+                    safe = Math.hypot(dx, dy) > 150;
+                    attempts++;
+                } while (!safe && attempts < 50);
+
+                mines.push({
+                    x,
+                    y,
+                    radius: 28,
+                    pulse: Math.random() * Math.PI * 2,
+                });
+            }
+
+            function spawnBubble() {
+                bubbles.push({
+                    x: 10 + Math.random() * (W - 20),
+                    y: (cameraY + H + 10),
+                    radius: 2 + Math.random() * 5,
+                    speed: 0.3 + Math.random() * 0.6,
+                    wobble: Math.random() * Math.PI * 2,
+                    wobbleSpeed: 0.03 + Math.random() * 0.03,
+                    opacity: 0.3 + Math.random() * 0.4,
+                });
+            }
+
+            function spawnSand() {
+                if (Math.random() < 0.04) {
+                    particles.push({
+                        x: 20 + Math.random() * (W - 40),
+                        y: cameraY + H - 10,
+                        vx: (Math.random() - 0.5) * 0.5,
+                        vy: -0.5 - Math.random() * 1,
+                        size: 1 + Math.random() * 2,
+                        life: 60 + Math.random() * 60,
+                        maxLife: 120,
+                        isExplosion: false,
+                    });
+                }
+            }
+
+            // ===================================================================
+            // 9. UI
+            // ===================================================================
+            function updateUI() {
+                const o2Pct = Math.max(0, (oxygen / maxOxygen) * 100);
+                document.getElementById('o2Fill').style.width = o2Pct + '%';
+                if (o2Pct < 20) {
+                    document.getElementById('o2Fill').style.background = 'linear-gradient(90deg, #ff4a5a, #ff8a7a)';
+                } else if (o2Pct < 45) {
+                    document.getElementById('o2Fill').style.background = 'linear-gradient(90deg, #ffaa44, #ffcc66)';
+                } else {
+                    document.getElementById('o2Fill').style.background = 'linear-gradient(90deg, #2dc9a0, #6effd0)';
+                }
+
+                const shieldPct = Math.max(0, player.shield);
+                document.getElementById('shieldFill').style.width = shieldPct + '%';
+                if (shieldPct < 30) {
+                    document.getElementById('shieldFill').style.background = 'linear-gradient(90deg, #ff4a5a, #ff8a7a)';
+                } else if (shieldPct < 60) {
+                    document.getElementById('shieldFill').style.background = 'linear-gradient(90deg, #ffaa44, #ffcc66)';
+                } else {
+                    document.getElementById('shieldFill').style.background = 'linear-gradient(90deg, #2dc9a0, #6effd0)';
+                }
+
+                document.getElementById('depthDisplay').textContent = Math.floor(depth);
+                document.getElementById('scoreDisplay').textContent = totalCoins;
+                document.getElementById('worldDisplay').textContent = getWorld().name;
+            }
+
+            // ===================================================================
+            // 10. МАГАЗИН
+            // ===================================================================
+            function renderShop() {
+                document.getElementById('shopCoins').textContent = totalCoins;
+
+                const categories = [
+                    { id: 'universal', label: '🏆 Универсальное' },
+                    { id: 'skins', label: '🎨 Скины (' + Object.values(shopItems).filter(i => i.category === 'skins')
+                            .length + ')' },
+                    { id: 'shields', label: '🛡️ Защита' },
+                ];
+
+                let tabsHtml = '';
+                let sectionsHtml = '';
+                let firstActive = true;
+
+                for (const cat of categories) {
+                    const isActive = firstActive;
+                    firstActive = false;
+                    tabsHtml += `<button class="${isActive ? 'active-tab' : ''}" data-tab="${cat.id}">${cat.label}</button>`;
+
+                    const itemsInCat = Object.values(shopItems).filter(item => item.category === cat.id);
+                    let sectionHtml =
+                        `<div class="shop-section ${isActive ? 'active-section' : ''}" data-section="${cat.id}">`;
+
+                    for (const item of itemsInCat) {
+                        const owned = item.owned;
+                        let btnText, btnClass = 'buy-btn';
+                        let disabled = false;
+
+                        if (item.skinId) {
+                            const isActiveSkin = player.skin === item.skinId;
+                            if (isActiveSkin) {
+                                btnText = '✅ ВЫБРАН';
+                                btnClass += ' active-btn';
+                            } else if (owned) {
+                                btnText = '⬅ ВЫБРАТЬ';
+                            } else {
+                                btnText = '🪙 ' + item.cost;
+                                if (item.cost > totalCoins) disabled = true;
+                            }
+                        } else if (item.shieldType) {
+                            const isActive = activeShields[item.shieldType] === true;
+                            if (isActive) {
+                                btnText = '✅ АКТИВЕН';
+                                btnClass += ' active-btn';
+                            } else if (owned) {
+                                btnText = '⬅ АКТИВИРОВАТЬ';
+                            } else {
+                                btnText = '🪙 ' + item.cost;
+                                if (item.cost > totalCoins) disabled = true;
+                            }
+                        } else {
+                            if (owned) {
+                                btnText = '✅ КУПЛЕНО';
+                                btnClass += ' owned-btn';
+                                disabled = true;
+                            } else {
+                                btnText = '🪙 ' + item.cost;
+                                if (item.cost > totalCoins) disabled = true;
+                            }
+                        }
+
+                        sectionHtml += `
+                            <div class="shop-item">
+                                <div class="info">
+                                    <div class="name">${item.name}</div>
+                                    <div class="desc">${item.desc}</div>
+                                    <div class="owned">${owned ? '✅ Владелец' : '🔒 Заблокировано'}</div>
+                                </div>
+                                <button class="${btnClass}" data-item="${item.id}" ${disabled ? 'disabled' : ''}>
+                                    ${btnText}
+                                </button>
+                            </div>
+                        `;
+                    }
+
+                    sectionHtml += `</div>`;
+                    sectionsHtml += sectionHtml;
+                }
+
+                document.getElementById('shopTabs').innerHTML = tabsHtml;
+                document.getElementById('shopSections').innerHTML = sectionsHtml;
+
+                document.getElementById('shopTabs').querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        document.getElementById('shopTabs').querySelectorAll('button').forEach(b => b
+                            .classList.remove('active-tab'));
+                        this.classList.add('active-tab');
+                        const tabId = this.dataset.tab;
+                        document.getElementById('shopSections').querySelectorAll('.shop-section').forEach(
+                        sec => {
+                            sec.classList.toggle('active-section', sec.dataset.section === tabId);
+                        });
+                    });
+                });
+
+                document.getElementById('shopSections').querySelectorAll('.buy-btn:not(:disabled)').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const itemId = this.dataset.item;
+                        const item = shopItems[itemId];
+                        if (!item) return;
+
+                        if (item.skinId) {
+                            if (!item.owned) {
+                                if (item.cost > totalCoins) return;
+                                totalCoins -= item.cost;
+                                item.owned = true;
+                            }
+                            player.skin = item.skinId;
+                            saveProgress();
+                            renderShop();
+                            updateMenuStats();
+                            updateUI();
+                            return;
+                        }
+
+                        if (item.shieldType) {
+                            if (!item.owned) {
+                                if (item.cost > totalCoins) return;
+                                totalCoins -= item.cost;
+                                item.owned = true;
+                            }
+                            activeShields[item.shieldType] = !activeShields[item.shieldType];
+                            if (activeShields[item.shieldType]) {
+                                player.shield = player.maxShield;
+                            }
+                            saveProgress();
+                            renderShop();
+                            updateMenuStats();
+                            updateUI();
+                            return;
+                        }
+
+                        if (item.owned) return;
+                        if (item.cost > totalCoins) return;
+                        totalCoins -= item.cost;
+                        item.owned = true;
+
+                        if (item.id === 'lightBoost') player.lightBoost = true;
+                        if (item.id === 'armor') player.armorCharges = 1;
+                        if (item.id === 'regen') player.regenActive = true;
+
+                        saveProgress();
+                        renderShop();
+                        updateMenuStats();
+                        updateUI();
+                    });
+                });
+            }
+
+            function toggleShop() {
+                const overlay = document.getElementById('shopOverlay');
+                if (overlay.classList.contains('open')) {
+                    overlay.classList.remove('open');
+                } else {
+                    overlay.classList.add('open');
+                    renderShop();
+                }
+            }
+
+            // ===================================================================
+            // 11. НАВИГАЦИЯ
+            // ===================================================================
+            function goToMenu() {
+                gameRunning = false;
+                paused = false;
+                document.getElementById('pauseOverlay').classList.remove('open');
+                document.getElementById('gameOver').style.display = 'none';
+                document.getElementById('shopOverlay').classList.remove('open');
+                document.getElementById('ui').style.display = 'none';
+                document.getElementById('mainMenu').classList.remove('hidden');
+                updateMenuStats();
+                if (frameId) {
+                    cancelAnimationFrame(frameId);
+                    frameId = null;
+                }
+                saveProgress();
+            }
+
+            function resetGame() {
+                player.x = W / 2;
+                player.y = 200;
+                player.speed = 0;
+                player.shield = player.maxShield;
+
+                oxygen = maxOxygen;
+                depth = 0;
+                gameTime = 0;
+                cameraY = 0;
+                gameRunning = true;
+                paused = false;
+                explosion.active = false;
+
+                items = [];
+                mines = [];
+                particles = [];
+                sharks = [];
+                jellyfish = [];
+                spawnTimer = 0;
+
+                document.getElementById('pauseOverlay').classList.remove('open');
+                document.getElementById('gameOver').style.display = 'none';
+                document.getElementById('ui').style.display = 'flex';
+                document.getElementById('mainMenu').classList.add('hidden');
+
+                generateDecorations();
+                for (let i = 0; i < 50; i++) spawnItem();
+                for (let i = 0; i < 10; i++) spawnMine();
+                updateUI();
+
+                player.lightBoost = shopItems.lightBoost.owned;
+                player.armorCharges = shopItems.armor.owned ? 1 : 0;
+                player.regenActive = shopItems.regen.owned;
+            }
+
+            function triggerExplosion(x, y) {
+                explosion.active = true;
+                explosion.timer = 30;
+                explosion.x = x;
+                explosion.y = y;
+                explosion.radius = 5;
+                explosion.maxRadius = 100;
+                explosion.shake = 12;
+
+                for (let i = 0; i < 30; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 5;
+                    particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - 1,
+                        size: 2 + Math.random() * 4,
+                        life: 40 + Math.random() * 30,
+                        maxLife: 70,
+                        color: `hsl(${20 + Math.random() * 30}, 100%, ${50 + Math.random() * 30}%)`,
+                        isExplosion: true,
+                    });
+                }
+            }
+
+            function gameOver(reason) {
+                if (!gameRunning) return;
+                gameRunning = false;
+                if (depth > recordDepth) {
+                    recordDepth = Math.floor(depth);
+                }
+                document.getElementById('finalDepth').textContent = Math.floor(depth);
+                document.getElementById('finalCoins').textContent = totalCoins;
+                document.getElementById('gameOver').style.display = 'block';
+                document.querySelector('#gameOver small').textContent = reason;
+                saveProgress();
+                updateMenuStats();
+            }
+
+            // ===================================================================
+            // 12. ЗАПУСК МИРА
+            // ===================================================================
+            function startWorld(worldId) {
+                currentWorld = worldId;
+                resetGame();
+                if (frameId) cancelAnimationFrame(frameId);
+                loop();
+            }
+
+            // ===================================================================
+            // 13. ИГРОВОЙ ЦИКЛ
+            // ===================================================================
+            function update() {
+                if (!gameRunning || paused) return;
+                gameTime++;
+
+                if (explosion.active) {
+                    explosion.timer--;
+                    explosion.radius += (explosion.maxRadius - explosion.radius) * 0.15;
+                    explosion.shake *= 0.92;
+                    if (explosion.timer <= 0) {
+                        explosion.active = false;
+                    }
+                }
+
+                if (Math.random() < 0.25) spawnBubble();
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    const b = bubbles[i];
+                    b.y -= b.speed;
+                    b.x += Math.sin(b.wobble) * 0.5;
+                    b.wobble += b.wobbleSpeed;
+                    if (b.y < cameraY - 10) bubbles.splice(i, 1);
+                }
+
+                spawnSand();
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    if (p.isExplosion) {
+                        p.vy += 0.05;
+                        p.life--;
+                        if (p.life <= 0) {
+                            particles.splice(i, 1);
+                            continue;
+                        }
+                    } else {
+                        p.vy += 0.01;
+                        p.life--;
+                        if (p.life <= 0 || p.y < cameraY) {
+                            particles.splice(i, 1);
+                            continue;
+                        }
+                    }
+                }
+
+                for (const shark of sharks) {
+                    shark.x += shark.speed * shark.direction;
+                    shark.y += Math.sin(shark.phase) * 0.3;
+                    shark.phase += 0.02;
+                    if (shark.x > W + 200) { shark.x = -200;
+                        shark.y = 100 + Math.random() * (MAP_HEIGHT - 200); }
+                    if (shark.x < -200) { shark.x = W + 200;
+                        shark.y = 100 + Math.random() * (MAP_HEIGHT - 200); }
+                }
+
+                for (const j of jellyfish) {
+                    j.y += Math.sin(j.phase) * 0.2;
+                    j.x += Math.cos(j.phase * 0.7) * 0.15;
+                    j.phase += j.speed;
+                    if (j.x < -50) j.x = W + 50;
+                    if (j.x > W + 50) j.x = -50;
+                    if (j.y < 0) j.y = MAP_HEIGHT;
+                    if (j.y > MAP_HEIGHT) j.y = 0;
+                }
+
+                let dx = 0,
+                    dy = 0;
+                if (keys['w'] || keys['W'] || keys['ArrowUp']) dy = -1;
+                if (keys['s'] || keys['S'] || keys['ArrowDown']) dy = 1;
+                if (keys['a'] || keys['A'] || keys['ArrowLeft']) dx = -1;
+                if (keys['d'] || keys['D'] || keys['ArrowRight']) dx = 1;
+                if (dx !== 0 && dy !== 0) { dx *= 0.707;
+                    dy *= 0.707; }
+
+                const accel = 0.32;
+                if (dx !== 0 || dy !== 0) {
+                    player.speed = Math.min(player.maxSpeed, player.speed + accel);
+                } else {
+                    player.speed *= player.friction;
+                    if (player.speed < 0.02) player.speed = 0;
+                }
+
+                const moveX = dx * player.speed;
+                const moveY = dy * player.speed;
+                player.x += moveX;
+                player.y += moveY;
+
+                const bound = 30;
+                player.x = Math.max(bound, Math.min(W - bound, player.x));
+                player.y = Math.max(bound, Math.min(MAP_HEIGHT - bound, player.y));
+
+                depth = player.y / 2.4;
+                const depthMul = getDepthMultiplier();
+
+                const currentSpeed = Math.hypot(moveX, moveY);
+                const baseDrain = 0.025 + currentSpeed * 0.12;
+                const drain = baseDrain * depthMul.o2;
+                oxygen = Math.max(0, oxygen - drain);
+
+                if (player.regenActive && oxygen < maxOxygen) {
+                    oxygen = Math.min(maxOxygen, oxygen + 0.06);
+                }
+
+                // УГРОЗЫ МИРА
+                const world = getWorld();
+                if (world.threatDamage > 0) {
+                    const hasShield = activeShields[world.threatType] === true;
+                    if (!hasShield) {
+                        const damagePerFrame = world.threatDamage / 60;
+                        player.shield = Math.max(0, player.shield - damagePerFrame);
+                        if (player.shield <= 0) {
+                            let deathTime = '5-10';
+                            if (world.threatDamage === 16.7) deathTime = '6';
+                            else if (world.threatDamage === 12.5) deathTime = '8';
+                            else if (world.threatDamage === 10) deathTime = '10';
+                            gameOver('☠️ ' + world.threatLabel + ' уничтожила лодку! (' + deathTime + ' сек)');
+                            return;
+                        }
+                    } else {
+                        if (player.shield < player.maxShield) {
+                            player.shield = Math.min(player.maxShield, player.shield + 0.05);
+                        }
+                    }
+                } else {
+                    if (player.shield < player.maxShield) {
+                        player.shield = Math.min(player.maxShield, player.shield + 0.03);
+                    }
+                }
+
+                cameraY = player.y - H / 2;
+                cameraY = Math.max(0, Math.min(cameraY, MAP_HEIGHT - H));
+
+                spawnTimer++;
+                if (spawnTimer >= SPAWN_INTERVAL) {
+                    spawnTimer = 0;
+                    if (items.length < MAX_ITEMS) {
+                        spawnItem();
+                        if (Math.random() < 0.5) spawnItem();
+                    }
+                    if (mines.length < 20 && Math.random() < 0.2) spawnMine();
+                }
+
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const it = items[i];
+                    if (it.collected) continue;
+                    const dist = Math.hypot(player.x - it.x, player.y - it.y);
+                    if (dist < player.radius + it.radius) {
+                        it.collected = true;
+                        if (it.type === 'oxygen') {
+                            const fill = 60 + Math.random() * 40;
+                            oxygen = Math.min(maxOxygen, oxygen + fill);
+                        } else {
+                            const bonus = it.bonus || 1;
+                            totalCoins += bonus;
+                        }
+                        items.splice(i, 1);
+                        if (gameRunning) spawnItem();
+                        updateUI();
+                    }
+                }
+
+                for (let i = mines.length - 1; i >= 0; i--) {
+                    const m = mines[i];
+                    const dist = Math.hypot(player.x - m.x, player.y - m.y);
+                    if (dist < player.radius + m.radius) {
+                        if (player.armorCharges > 0) {
+                            player.armorCharges--;
+                            triggerExplosion(m.x, m.y);
+                            mines.splice(i, 1);
+                            player.speed = -0.8;
+                            updateUI();
+                            continue;
+                        }
+                        triggerExplosion(m.x, m.y);
+                        mines.splice(i, 1);
+                        gameOver('💥 ВЗРЫВ МИНЫ!');
+                        return;
+                    }
+                    m.pulse += 0.045;
+                }
+
+                if (oxygen <= 0) {
+                    oxygen = 0;
+                    updateUI();
+                    gameOver('🫧 КИСЛОРОД ИСТОЩЁН');
+                    return;
+                }
+
+                if (items.length > MAX_ITEMS) {
+                    items.splice(0, items.length - MAX_ITEMS);
+                }
+
+                if (depth > recordDepth) {
+                    recordDepth = Math.floor(depth);
+                }
+                updateUI();
+            }
+
+            // ===================================================================
+            // 14. ОТРИСОВКА
+            // ===================================================================
+            function draw() {
+                ctx.save();
+
+                if (explosion.active && explosion.shake > 0.5) {
+                    const shakeX = (Math.random() - 0.5) * explosion.shake * 0.5;
+                    const shakeY = (Math.random() - 0.5) * explosion.shake * 0.5;
+                    ctx.translate(shakeX, shakeY);
+                }
+
+                ctx.clearRect(0, 0, W, H);
+
+                const world = getWorld();
+                const isAcid = currentWorld === 'acid';
+                const isFire = currentWorld === 'fire';
+                const isIce = currentWorld === 'ice';
+
+                const bgColor = world.color;
+                const grad = ctx.createRadialGradient(
+                    player.x, H / 2, 30,
+                    player.x, H / 2, 600
+                );
+                grad.addColorStop(0, bgColor);
+                grad.addColorStop(1, '#050d14');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+
+                let lightBase = 180;
+                if (player.lightBoost) lightBase = 230;
+                let lightRadius = lightBase + 20 * Math.sin(Date.now() / 2200);
+                if (depth > 100) lightRadius *= (1 - (depth - 100) / 600 * 0.5);
+                lightRadius = Math.max(70, lightRadius);
+
+                function isVisible(x, y, margin) {
+                    const dist = Math.hypot(player.x - x, (player.y - cameraY) - (y - cameraY));
+                    return dist < lightRadius + (margin || 0);
+                }
+
+                for (const dec of decorations) {
+                    if (dec.type === 'kelp' && isVisible(dec.x, dec.y, 30)) {
+                        ctx.globalAlpha = 0.35;
+                        drawPixelKelp(dec.x, dec.y, dec.height, dec.width, dec.phase + Date.now() * dec.speed, dec.color);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+                for (const dec of decorations) {
+                    if (dec.type === 'coral' && isVisible(dec.x, dec.y, 20)) {
+                        ctx.globalAlpha = 0.4;
+                        drawPixelCoral(dec.x, dec.y, dec.size, dec.color, dec.variant);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+                for (const dec of decorations) {
+                    if (dec.type === 'ship' && isVisible(dec.x, dec.y, 50)) {
+                        ctx.globalAlpha = 0.3;
+                        drawPixelShip(dec.x, dec.y, dec.size);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+
+                for (const j of jellyfish) {
+                    if (isVisible(j.x, j.y, 20)) {
+                        ctx.globalAlpha = 0.4;
+                        drawPixelJellyfish(j.x, j.y, j.radius, j.color, j.tentacles, j.phase);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+                for (const shark of sharks) {
+                    if (isVisible(shark.x, shark.y, 30)) {
+                        ctx.globalAlpha = 0.45;
+                        drawPixelShark(shark.x, shark.y, shark.size, shark.direction);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+
+                const lightColor = world.lightColor;
+                const grd2 = ctx.createRadialGradient(
+                    player.x, player.y - cameraY, 15,
+                    player.x, player.y - cameraY, lightRadius
+                );
+                grd2.addColorStop(0, lightColor);
+                grd2.addColorStop(0.4, lightColor.replace('0.25', '0.10').replace('0.30', '0.12'));
+                grd2.addColorStop(0.8, lightColor.replace('0.25', '0.04').replace('0.30', '0.05'));
+                grd2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = grd2;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y - cameraY, lightRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (explosion.active) {
+                    const progress = 1 - explosion.timer / 30;
+                    const alpha = 1 - progress;
+                    const r = explosion.radius;
+
+                    const grd3 = ctx.createRadialGradient(
+                        explosion.x, explosion.y - cameraY, 0,
+                        explosion.x, explosion.y - cameraY, r
+                    );
+                    grd3.addColorStop(0, `rgba(255, 255, 200, ${alpha * 0.8})`);
+                    grd3.addColorStop(0.3, `rgba(255, 200, 100, ${alpha * 0.6})`);
+                    grd3.addColorStop(0.7, `rgba(255, 100, 50, ${alpha * 0.3})`);
+                    grd3.addColorStop(1, `rgba(255, 50, 0, 0)`);
+                    ctx.fillStyle = grd3;
+                    ctx.beginPath();
+                    ctx.arc(explosion.x, explosion.y - cameraY, r, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    for (const p of particles) {
+                        if (p.isExplosion) {
+                            const lifeRatio = p.life / p.maxLife;
+                            ctx.globalAlpha = lifeRatio * 0.9;
+                            ctx.fillStyle = p.color;
+                            const size = p.size * (0.5 + lifeRatio * 0.5);
+                            ctx.fillRect(p.x - size / 2, p.y - cameraY - size / 2, size, size);
+                        }
+                    }
+                    ctx.globalAlpha = 1.0;
+                }
+
+                const sandY = MAP_HEIGHT - 20;
+                const sandVisible = (sandY - cameraY) < H + 10 && (sandY - cameraY) > -10;
+                if (sandVisible) {
+                    const sandColor = isAcid ? 'rgba(40, 60, 30, 0.3)' :
+                        isFire ? 'rgba(60, 40, 30, 0.3)' :
+                        isIce ? 'rgba(40, 60, 70, 0.3)' :
+                        'rgba(60, 55, 45, 0.3)';
+                    ctx.fillStyle = sandColor;
+                    const sy = sandY - cameraY;
+                    for (let i = 0; i < W; i += 2) {
+                        const h = 2 + Math.sin(i * 0.1 + depth * 0.01) * 1.5;
+                        ctx.fillRect(i, sy + 2, 1, h);
+                        ctx.fillRect(i + 0.5, sy + 4 + Math.sin(i * 0.15 + depth * 0.005) * 1, 1, 1);
+                    }
+                    ctx.fillStyle = isAcid ? 'rgba(50, 70, 40, 0.2)' :
+                        isFire ? 'rgba(70, 50, 40, 0.2)' :
+                        isIce ? 'rgba(50, 70, 80, 0.2)' :
+                        'rgba(80, 75, 65, 0.2)';
+                    ctx.fillRect(0, sy + 1, W, 1);
+                }
+
+                for (const p of particles) {
+                    if (p.isExplosion) continue;
+                    const dist = Math.hypot(player.x - p.x, (player.y - cameraY) - (p.y - cameraY));
+                    if (dist > lightRadius) continue;
+                    ctx.fillStyle = `rgba(180, 170, 140, ${0.3 * (p.life / p.maxLife)})`;
+                    ctx.fillRect(p.x, p.y - cameraY, p.size, p.size);
+                }
+
+                for (const b of bubbles) {
+                    const dist = Math.hypot(player.x - b.x, (player.y - cameraY) - (b.y - cameraY));
+                    const vis = Math.max(0, 1 - dist / lightRadius);
+                    if (vis < 0.1) continue;
+                    const color = isAcid ? '#aadd88' :
+                        isFire ? '#ffaa66' :
+                        isIce ? '#88ccff' :
+                        '#aaddff';
+                    ctx.globalAlpha = vis * b.opacity * 0.6;
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y - cameraY, b.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffffff55';
+                    ctx.beginPath();
+                    ctx.arc(b.x - b.radius * 0.3, b.y - cameraY - b.radius * 0.3, b.radius * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
+
+                for (const it of items) {
+                    const dist = Math.hypot(player.x - it.x, (player.y - cameraY) - (it.y - cameraY));
+                    const vis = Math.max(0, 1 - dist / lightRadius);
+                    if (vis < 0.05) continue;
+                    ctx.globalAlpha = vis * 0.9;
+                    if (it.type === 'oxygen') {
+                        drawPixelO2(it.x, it.y, it.radius);
+                    } else {
+                        it.rotation += 0.02;
+                        drawPixelCoin(it.x, it.y, it.radius, it.rotation, it.bonus || 1);
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+
+                for (const m of mines) {
+                    const dist = Math.hypot(player.x - m.x, (player.y - cameraY) - (m.y - cameraY));
+                    const vis = Math.max(0, 1 - dist / lightRadius);
+                    if (vis < 0.05) continue;
+                    ctx.globalAlpha = vis * 0.85;
+                    drawPixelMine(m.x, m.y, m.radius, m.pulse);
+                }
+                ctx.globalAlpha = 1.0;
+
+                // РИСУЕМ ИГРОКА С ВЫБРАННЫМ СКИНОМ
+                drawPixelPlayer(player.x, player.y, player.radius, player.skin);
+
+                if (oxygen < 50 && gameRunning) {
+                    ctx.fillStyle = `rgba(255, 0, 0, ${0.05 + 0.05 * Math.sin(Date.now() / 250)})`;
+                    ctx.fillRect(0, 0, W, H);
+                }
+
+                const threat = world.threatDamage;
+                if (threat > 0 && !activeShields[world.threatType] && gameRunning) {
+                    ctx.fillStyle = `rgba(255, 0, 0, ${0.03 + 0.03 * Math.sin(Date.now() / 200)})`;
+                    ctx.fillRect(0, 0, W, H);
+                }
+
+                ctx.fillStyle = 'rgba(200, 230, 255, 0.15)';
+                ctx.font = '12px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('🌊 ' + Math.floor(depth) + ' м', 20, H - 20);
+
+                const mul = getDepthMultiplier();
+                if (mul.coinBonus > 1) {
+                    ctx.fillStyle = 'rgba(255, 200, 50, 0.3)';
+                    ctx.font = '12px monospace';
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText('⭐ x' + mul.coinBonus, W - 20, H - 20);
+                }
+
+                ctx.fillStyle = 'rgba(200, 230, 255, 0.1)';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(world.name + (world.threatDamage > 0 ? ' ⚠️' : ''), W - 20, H - 5);
+
+                ctx.restore();
+            }
+
+            // ===================================================================
+            // 15. ПИКСЕЛЬ-АРТ СКИНОВ
+            // ===================================================================
+            function drawPixelPlayer(x, y, radius, skinId) {
+                const s = radius / 28;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.scale(s, s);
+
+                let colors;
+                let extraEffect = null;
+
+                switch (skinId) {
+                    case 'yellow':
+                        colors = ['#c8962a', '#e8b84a', '#f5c542'];
+                        break;
+                    case 'acid':
+                        colors = ['#4a7a2a', '#6a9a4a', '#8aba6a'];
+                        break;
+                    case 'fire':
+                        colors = ['#8a3a1a', '#aa5a3a', '#cc7a5a'];
+                        break;
+                    case 'ice':
+                        colors = ['#5a8aaa', '#7aaaca', '#9acaea'];
+                        break;
+                    case 'halloween':
+                        colors = ['#cc4400', '#ff6600', '#ff8833'];
+                        break;
+                    case 'ghost':
+                        colors = ['#6a9aaa', '#8abaca', '#aadcea'];
+                        ctx.shadowColor = '#6affee';
+                        ctx.shadowBlur = 50;
+                        extraEffect = 'ghost';
+                        break;
+                    case 'cyber':
+                        colors = ['#6a2a8a', '#aa4acc', '#cc6aff'];
+                        break;
+                    case 'wreck':
+                        colors = ['#3a3a2a', '#5a4a3a', '#4a5a3a'];
+                        extraEffect = 'wreck';
+                        break;
+                    case 'pearl':
+                        colors = ['#8a9aaa', '#aabaca', '#cadcea'];
+                        break;
+                    default:
+                        colors = ['#2a7a8a', '#3a9aaa', '#4abaca'];
+                }
+
+                for (let i = -22; i <= 22; i++) {
+                    const h = 12 - Math.abs(i) * 0.3;
+                    const idx = Math.floor((i + 22) / 15) % colors.length;
+                    ctx.fillStyle = colors[idx];
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+
+                // Эффект призрака
+                if (extraEffect === 'ghost') {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#6affee33';
+                    for (let i = -24; i <= 24; i++) {
+                        const h = 14 - Math.abs(i) * 0.3;
+                        ctx.fillRect(i, -h, 1, h * 2);
+                    }
+                }
+
+                // Эффект старого корабля (водоросли)
+                if (extraEffect === 'wreck') {
+                    ctx.fillStyle = '#3a5a3a';
+                    for (let i = -20; i <= 20; i += 3) {
+                        ctx.fillRect(i, 8 + Math.sin(i * 0.5) * 2, 1, 3 + Math.sin(i) * 1);
+                        ctx.fillRect(i + 1, 9 + Math.sin(i * 0.7 + 1) * 2, 1, 2);
+                    }
+                }
+
+                // Иллюминатор
+                ctx.fillStyle = '#6affee';
+                ctx.shadowBlur = 0;
+                for (let i = -6; i <= 6; i++) {
+                    const h = Math.sqrt(Math.max(0, 36 - i * i));
+                    ctx.fillRect(i - 6, -h, 1, h * 2);
+                }
+                ctx.fillStyle = '#1a3a4a';
+                for (let i = -3; i <= 3; i++) {
+                    const h = Math.sqrt(Math.max(0, 9 - i * i));
+                    ctx.fillRect(i - 5, -h, 1, h * 2);
+                }
+
+                // Огоньки
+                ctx.fillStyle = '#ffcc44';
+                ctx.fillRect(18, -3, 3, 2);
+                ctx.fillRect(18, 1, 3, 2);
+
+                // Винт
+                ctx.fillStyle = '#3a4a5a';
+                for (let i = 0; i < 3; i++) {
+                    const angle = (i / 3) * Math.PI * 2 + Date.now() * 0.008;
+                    const len = 10 + 2 * Math.sin(Date.now() * 0.01 + i);
+                    for (let j = 0; j < len; j++) {
+                        const px = -22 + Math.cos(angle + j * 0.1) * j * 0.4;
+                        const py = Math.sin(angle + j * 0.1) * j * 0.4;
+                        ctx.fillRect(px, py, 1, 1);
+                    }
+                }
+
+                // Тыква для Хэллоуина
+                if (skinId === 'halloween') {
+                    ctx.fillStyle = '#ff6600';
+                    ctx.fillRect(10, -8, 6, 6);
+                    ctx.fillRect(12, -10, 2, 2);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(11, -7, 1, 1);
+                    ctx.fillRect(14, -7, 1, 1);
+                    ctx.fillRect(12, -4, 3, 1);
+                }
+
+                ctx.restore();
+            }
+
+            // ===================================================================
+            // 16. ОСТАЛЬНЫЕ ФУНКЦИИ РИСОВАНИЯ
+            // ===================================================================
+            function drawPixelO2(x, y, radius) {
+                const s = radius / 28;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.scale(s, s);
+                ctx.shadowColor = '#2dc9a0';
+                ctx.shadowBlur = 20;
+                const colors = ['#1a8a6a', '#2aaa7a', '#3aca8a'];
+                for (let i = -16; i <= 16; i++) {
+                    const h = Math.sqrt(Math.max(0, 256 - i * i));
+                    const idx = Math.floor((i + 16) / 11) % colors.length;
+                    ctx.fillStyle = colors[idx];
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffffff44';
+                for (let i = -8; i <= 4; i++) {
+                    const h = Math.sqrt(Math.max(0, 64 - i * i));
+                    ctx.fillRect(i, -h * 0.7, 1, h * 1.4);
+                }
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('O₂', 0, 1);
+                ctx.fillStyle = '#4a6a5a';
+                ctx.fillRect(-4, -18, 8, 3);
+                ctx.fillRect(-2, -20, 4, 2);
+                ctx.restore();
+            }
+
+            function drawPixelCoin(x, y, radius, rotation, bonus) {
+                const s = radius / 22;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.rotate(rotation);
+                ctx.scale(s, s);
+                if (bonus > 1) {
+                    ctx.shadowColor = '#f5c542';
+                    ctx.shadowBlur = 25 * (bonus / 5);
+                }
+                const colors = ['#c8962a', '#e8b84a', '#f5c542'];
+                for (let i = -14; i <= 14; i++) {
+                    const h = Math.sqrt(Math.max(0, 196 - i * i));
+                    const idx = Math.floor((i + 14) / 10) % colors.length;
+                    ctx.fillStyle = colors[idx];
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffdd66';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('★', 0, 1);
+                ctx.fillStyle = '#ffffff33';
+                ctx.fillRect(-6, -6, 3, 3);
+                if (bonus > 1) {
+                    ctx.fillStyle = '#ffdd66';
+                    ctx.font = '6px monospace';
+                    ctx.fillText('x' + bonus, 0, -18);
+                }
+                ctx.restore();
+            }
+
+            function drawPixelMine(x, y, radius, pulse) {
+                const s = radius / 28;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.scale(s, s);
+                const glow = 0.6 + 0.4 * Math.sin(pulse);
+                const colors = ['#8a1a1a', '#cc2a2a', '#ff3a3a'];
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + pulse * 0.1;
+                    const len = 18 + 4 * Math.sin(pulse + i);
+                    ctx.fillStyle = '#aa2a2a';
+                    for (let j = 0; j < len; j++) {
+                        const px = Math.cos(angle) * (14 + j);
+                        const py = Math.sin(angle) * (14 + j);
+                        ctx.fillRect(px - 1, py - 1, 2, 2);
+                    }
+                }
+                for (let i = -14; i <= 14; i++) {
+                    const h = Math.sqrt(Math.max(0, 196 - i * i));
+                    const idx = Math.floor((i + 14) / 10) % colors.length;
+                    ctx.fillStyle = colors[idx];
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+                ctx.fillStyle = '#ffffff66';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('☠', 0, 1);
+                ctx.shadowColor = '#ff2244';
+                ctx.shadowBlur = 10 * glow;
+                ctx.restore();
+            }
+
+            function drawPixelShip(x, y, size) {
+                const s = size / 64;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.scale(s, s);
+                const colors = ['#3a2a1a', '#4a3a2a', '#5a4a3a', '#2a1a0a'];
+                for (let row = 0; row < 20; row++) {
+                    for (let col = 0; col < 50; col++) {
+                        const idx = (row + col) % 3;
+                        ctx.fillStyle = colors[idx % colors.length];
+                        const px = col - 25;
+                        const py = row - 8;
+                        if (Math.abs(px) < 20 + row * 0.6) {
+                            ctx.fillRect(px, py, 1, 1);
+                        }
+                    }
+                }
+                ctx.fillStyle = '#ffcc44';
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(-15 + i * 8, -2, 3, 3);
+                    ctx.fillStyle = '#ff8833';
+                    ctx.fillRect(-14 + i * 8, -1, 1, 1);
+                    ctx.fillStyle = '#ffcc44';
+                }
+                ctx.fillStyle = '#3a2a1a';
+                ctx.fillRect(-1, -25, 2, 20);
+                ctx.fillStyle = '#4a4a3a';
+                for (let i = 0; i < 8; i++) {
+                    ctx.fillRect(-8 + i, -22 + i * 2, 15 - i * 1.5, 1);
+                }
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(10, -12, 4, 8);
+                ctx.fillStyle = '#4a3a2a';
+                ctx.fillRect(9, -14, 6, 2);
+                ctx.restore();
+            }
+
+            function drawPixelKelp(x, y, height, width, phase, color) {
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                const segments = Math.floor(height / 4);
+                for (let i = 0; i < segments; i++) {
+                    const wy = -i * 4;
+                    const wx = Math.sin(i * 0.3 + phase) * 3 + Math.sin(i * 0.7 + phase * 1.3) * 2;
+                    const w = width + Math.sin(i * 0.5) * 1;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(wx - w / 2, wy, w, 3);
+                    if (i % 3 === 0) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(wx - w / 2 - 3, wy + 1, 3, 4);
+                        ctx.fillRect(wx + w / 2, wy + 1, 3, 4);
+                    }
+                }
+                ctx.restore();
+            }
+
+            function drawPixelCoral(x, y, size, color, variant) {
+                const s = size / 32;
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                ctx.scale(s, s);
+                if (variant === 0) {
+                    for (let i = 0; i < 5; i++) {
+                        const angle = -Math.PI / 2 + (i - 2) * 0.3;
+                        const len = 15 + Math.random() * 10;
+                        ctx.fillStyle = color;
+                        for (let j = 0; j < len; j++) {
+                            const px = Math.cos(angle) * j * 0.8;
+                            const py = -j * 0.9;
+                            ctx.fillRect(px, py, 2, 2);
+                            if (j % 4 === 0) {
+                                ctx.fillRect(px - 2, py - 1, 2, 2);
+                                ctx.fillRect(px + 1, py - 1, 2, 2);
+                            }
+                        }
+                    }
+                } else if (variant === 1) {
+                    for (let r = 0; r < 12; r++) {
+                        const angle = (r / 12) * Math.PI * 2;
+                        const radius = 10 + Math.sin(r * 2) * 3;
+                        ctx.fillStyle = r % 2 === 0 ? color : '#ffffff44';
+                        ctx.fillRect(Math.cos(angle) * radius, Math.sin(angle) * radius - 6, 3, 3);
+                    }
+                    ctx.fillStyle = color;
+                    ctx.fillRect(-3, -8, 6, 4);
+                } else {
+                    for (let i = 0; i < 20; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = 5 + Math.random() * 10;
+                        ctx.fillStyle = Math.random() > 0.5 ? color : '#ffffff33';
+                        ctx.fillRect(Math.cos(angle) * dist, Math.sin(angle) * dist - 4, 3, 3);
+                    }
+                }
+                ctx.restore();
+            }
+
+            function drawPixelShark(x, y, size, direction) {
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                const s = size / 40;
+                ctx.scale(s * direction, s);
+                const bodyColors = ['#4a5a6a', '#5a6a7a', '#3a4a5a'];
+                for (let i = -18; i <= 18; i++) {
+                    const h = 6 - Math.abs(i) * 0.2;
+                    const idx = Math.floor((i + 18) / 12) % bodyColors.length;
+                    ctx.fillStyle = bodyColors[idx];
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+                ctx.fillStyle = '#5a6a7a';
+                ctx.fillRect(16, -4, 6, 8);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(20, -2, 2, 2);
+                ctx.fillStyle = '#1a1a2a';
+                ctx.fillRect(20, 0, 1, 2);
+                ctx.fillStyle = '#3a4a5a';
+                for (let i = 0; i < 6; i++) {
+                    ctx.fillRect(-18 - i, -4 - i * 0.5, 2, 1);
+                    ctx.fillRect(-18 - i, 4 + i * 0.5, 2, 1);
+                }
+                ctx.fillStyle = '#4a5a6a';
+                ctx.fillRect(8, -8, 2, 4);
+                ctx.fillRect(8, 4, 2, 4);
+                ctx.fillRect(-4, -8, 8, 2);
+                ctx.fillStyle = '#3a4a5a';
+                ctx.fillRect(12, -3, 1, 6);
+                ctx.fillRect(14, -2, 1, 4);
+                ctx.restore();
+            }
+
+            function drawPixelJellyfish(x, y, radius, color, tentacles, phase) {
+                ctx.save();
+                ctx.translate(x, y - cameraY);
+                const s = radius / 20;
+                ctx.scale(s, s);
+                ctx.fillStyle = color;
+                for (let i = -12; i <= 12; i++) {
+                    const h = Math.sqrt(Math.max(0, 144 - i * i));
+                    ctx.fillRect(i, -h, 1, h * 2);
+                }
+                ctx.fillStyle = '#ffffff44';
+                for (let i = -6; i <= 6; i++) {
+                    const h = Math.sqrt(Math.max(0, 36 - i * i));
+                    ctx.fillRect(i, -h * 0.6, 1, h * 1.2);
+                }
+                ctx.fillStyle = color;
+                for (let t = 0; t < tentacles; t++) {
+                    const angle = (t / tentacles) * Math.PI * 2;
+                    const len = 15 + Math.sin(phase + t) * 5;
+                    for (let j = 0; j < len; j++) {
+                        const px = Math.cos(angle + j * 0.1) * j * 0.5;
+                        const py = 6 + j * 0.7 + Math.sin(phase + t + j * 0.2) * 2;
+                        ctx.fillRect(px, py, 1, 1);
+                        if (j % 3 === 0) {
+                            ctx.fillRect(px - 1, py, 1, 2);
+                            ctx.fillRect(px + 1, py, 1, 2);
+                        }
+                    }
+                }
+                ctx.restore();
+            }
+
+            // ===================================================================
+            // 17. ЦИКЛ
+            // ===================================================================
+            function loop() {
+                update();
+                draw();
+                frameId = requestAnimationFrame(loop);
+            }
+
+            // ===================================================================
+            // 18. СОБЫТИЯ
+            // ===================================================================
+            document.addEventListener('keydown', (e) => {
+                keys[e.key] = true;
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                    e.preventDefault();
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (gameRunning) {
+                        paused = !paused;
+                        document.getElementById('pauseOverlay').classList.toggle('open', paused);
+                    }
+                }
+            });
+            document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+            document.getElementById('worldOcean').addEventListener('click', () => startWorld('ocean'));
+            document.getElementById('worldAcid').addEventListener('click', () => startWorld('acid'));
+            document.getElementById('worldFire').addEventListener('click', () => startWorld('fire'));
+            document.getElementById('worldIce').addEventListener('click', () => startWorld('ice'));
+
+            document.getElementById('shopMenuBtn').addEventListener('click', toggleShop);
+            document.getElementById('closeShopBtn').addEventListener('click', toggleShop);
+            document.getElementById('shopOverlay').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) toggleShop();
+            });
+
+            document.getElementById('controlsBtn').addEventListener('click', function() {
+                const info = document.getElementById('controlsInfo');
+                info.style.display = info.style.display === 'none' ? 'block' : 'none';
+            });
+
+            document.getElementById('uiMenuBtn').addEventListener('click', goToMenu);
+            document.getElementById('pauseMenuBtn').addEventListener('click', goToMenu);
+            document.getElementById('gameOverMenuBtn').addEventListener('click', goToMenu);
+
+            document.getElementById('gameOverBtn').addEventListener('click', function() {
+                resetGame();
+                if (frameId) cancelAnimationFrame(frameId);
+                loop();
+            });
+
+            // ===================================================================
+            // 19. СТАРТ
+            // ===================================================================
+            loadProgress();
+            document.getElementById('ui').style.display = 'none';
+            document.getElementById('mainMenu').classList.remove('hidden');
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('pauseOverlay').classList.remove('open');
+            generateDecorations();
+
+            console.log('🌊 DEEP BREATH v16.0 — 10 СКИНОВ!');
+            console.log('🎨 Скины: Стандартная, Жёлтая, Болотный, Лавовый, Ледяной, Хэллоуин, Призрачный, Кибер, Затонувший, Жемчуг');
+            console.log('🌊 4 мира');
+            console.log('🛡️ Защита от стихий');
+            console.log('💰 Всего монет: ' + totalCoins);
+        })();
+    </script>
+
+</body>
+</html>
