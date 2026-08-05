@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#83d7d0">
+  <title>Клавишный сад — поймай букву</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-scene="0">
+  <div class="sky-dots" aria-hidden="true"></div>
+
+  <main class="game-shell">
+    <header class="topbar">
+      <a class="back-link" href="../index.html" aria-label="Вернуться ко всем играм">← Все игры</a>
+      <div class="brand" aria-label="Клавишный сад">
+        <span class="brand-star">✦</span>
+        <span>Клавишный сад</span>
+      </div>
+      <button class="help-button" id="helpButton" type="button">Как играть?</button>
+    </header>
+
+    <section class="game-card" aria-label="Игра Клавишный сад">
+      <div class="intro-row">
+        <div class="title-wrap">
+          <p class="eyebrow">ТРЕНАЖЁР ПЕЧАТИ · 6–8 ЛЕТ</p>
+          <h1>Поймай букву!</h1>
+          <p class="subtitle">Нажимай нужную клавишу, пока буква путешествует по небу.</p>
+          <div class="mode-selector" role="group" aria-label="Режим игры">
+            <span class="mode-label">Режим</span>
+            <button class="mode-button is-selected" id="lettersMode" type="button">Просто буквы</button>
+            <button class="mode-button" id="cardsMode" type="button">Карточки слов</button>
+          </div>
+          <p class="mode-hint" id="modeHint">Сначала поймай саму букву.</p>
+        </div>
+
+        <div class="progress-panel" aria-live="polite">
+          <div class="progress-heading">
+            <span id="levelLabel">Уровень 1</span>
+            <strong id="progressCount">0 / 5</strong>
+          </div>
+          <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+          <span class="progress-note" id="sceneLabel">Звёздный сад</span>
+        </div>
+      </div>
+
+      <section class="play-area" id="playArea" aria-label="Поле падающих букв">
+        <div class="scene-art" id="sceneArt" aria-hidden="true">
+          <div class="sun-or-moon"></div>
+          <div class="cloud cloud-one"></div>
+          <div class="cloud cloud-two"></div>
+          <div class="hill hill-back"></div>
+          <div class="hill hill-front"></div>
+          <div class="scene-sprinkles"></div>
+        </div>
+        <div class="falling-field" id="fallingField"></div>
+        <div class="ground-line" aria-hidden="true"></div>
+        <div class="feedback" id="feedback" aria-live="polite"></div>
+      </section>
+
+      <section class="control-strip" aria-label="Настройки игры">
+        <div class="levels-block">
+          <div class="control-heading">
+            <span>Выбери уровень</span>
+            <span class="tiny-note">букв в задании</span>
+          </div>
+          <div class="level-buttons" id="levelButtons">
+            <button type="button" data-level="0" class="level-button is-selected"><span>1</span><small>5</small></button>
+            <button type="button" data-level="1" class="level-button"><span>2</span><small>10</small></button>
+            <button type="button" data-level="2" class="level-button"><span>3</span><small>15</small></button>
+            <button type="button" data-level="3" class="level-button"><span>4</span><small>20</small></button>
+            <button type="button" data-level="4" class="level-button"><span>5</span><small>25</small></button>
+            <button type="button" data-level="5" class="level-button"><span>6</span><small>30</small></button>
+            <button type="button" data-level="6" class="level-button"><span>7</span><small>33</small></button>
+          </div>
+        </div>
+
+        <label class="speed-block" for="speedRange">
+          <span class="control-heading"><span>Скорость букв</span><span class="speed-value" id="speedValue">спокойно</span></span>
+          <input id="speedRange" type="range" min="20" max="52" value="31" step="1">
+          <span class="range-labels"><span>медленно</span><span>быстрее</span></span>
+        </label>
+
+        <label class="hint-block" for="keyboardToggle">
+          <span class="control-heading"><span>Подсказка</span><span class="hint-value" id="hintValue">включена</span></span>
+          <span class="toggle-line">
+            <input id="keyboardToggle" type="checkbox" checked>
+            <span class="toggle-switch" aria-hidden="true"></span>
+            <span>Клавиатура</span>
+          </span>
+        </label>
+      </section>
+
+      <section class="keyboard-panel" aria-label="Русская клавиатура">
+        <div class="keyboard-heading">
+          <div>
+            <span class="section-kicker">ТВОЯ КЛАВИАТУРА</span>
+            <p>Подсветка показывает, какую настоящую клавишу нажать</p>
+          </div>
+          <span class="layout-badge">АБВГДЕ…</span>
+        </div>
+        <div class="keyboard" id="keyboard"></div>
+      </section>
+
+      <div class="bottom-row">
+        <button class="restart-button" id="restartButton" type="button">↻ Начать уровень заново</button>
+        <span class="next-stage-note"><span>✧</span> Режим карточек слов уже доступен</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="modalClose" type="button" aria-label="Закрыть">×</button>
+      <div class="modal-icon" id="modalIcon">✦</div>
+      <p class="eyebrow" id="modalEyebrow">МАЛЕНЬКАЯ ПОДСКАЗКА</p>
+      <h2 id="modalTitle">Как играть</h2>
+      <p id="modalText">Лови падающую букву нажатием на настоящую клавишу или на клавишу на экране. Если буква упадёт вниз, она начнёт свой полёт заново.</p>
+      <div class="modal-actions" id="modalActions">
+        <button class="primary-button" id="modalOk" type="button">Понятно!</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

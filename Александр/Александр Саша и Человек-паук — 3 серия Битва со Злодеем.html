@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Саша и Человек-паук — 3 серия: Битва со Злодеем</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#2b2340; overflow:hidden;
+    font-family:"Segoe Print","Comic Sans MS","Comic Sans",cursive; }
+
+  #frame { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  #stage-wrap { position:relative; width:min(96vw, calc(96vh * 16 / 9)); aspect-ratio:16/9;
+    border-radius:18px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.55);
+    background:#f7f1e3; }
+
+  #paper { position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.5;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(214,196,166,.35), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(214,196,166,.3), transparent 45%),
+      radial-gradient(circle at 60% 20%, rgba(255,255,255,.5), transparent 50%);
+  }
+  #grain { position:absolute; inset:0; z-index:40; pointer-events:none; opacity:.10; mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  }
+
+  .scene { position:absolute; inset:0; opacity:0; visibility:hidden; transition:opacity .8s ease; z-index:1; }
+  .scene.active { opacity:1; visibility:visible; z-index:2; }
+  .scene svg { width:100%; height:100%; display:block; }
+
+  #caption { position:absolute; left:50%; bottom:4.5%; transform:translateX(-50%);
+    z-index:50; max-width:88%; padding:.55em 1.1em; border-radius:16px;
+    background:rgba(43,35,64,.82); color:#fff8ea; text-align:center;
+    font-size:clamp(14px, 2.6vmin, 26px); line-height:1.35;
+    opacity:0; transition:opacity .35s ease; pointer-events:none;
+    box-shadow:0 4px 18px rgba(0,0,0,.35); }
+  #caption.show { opacity:1; }
+  #caption b { color:#ffd76e; }
+
+  #progress { position:absolute; left:0; top:0; height:5px; width:0%;
+    background:linear-gradient(90deg,#ff9f1c,#4263eb); z-index:60; transition:width .3s linear; }
+
+  #start-overlay { position:absolute; inset:0; z-index:100; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2.2vmin;
+    background:radial-gradient(ellipse at center, #fdf6e4 0%, #efe2c4 100%); transition:opacity .6s; }
+  #start-overlay.hidden { opacity:0; pointer-events:none; }
+  #start-overlay h1 { color:#5f3d8f; font-size:clamp(22px,5vmin,52px); text-align:center;
+    text-shadow:2px 2px 0 rgba(255,255,255,.7); padding:0 5%; }
+  #start-overlay .sub { color:#8a6d3b; font-size:clamp(13px,2.4vmin,22px); }
+  #btn-play { cursor:pointer; border:none; border-radius:50px; padding:.6em 2em;
+    font-family:inherit; font-size:clamp(18px,3.4vmin,34px); color:#fff;
+    background:linear-gradient(135deg,#ff9f1c,#4263eb);
+    box-shadow:0 8px 24px rgba(80,40,150,.4); transition:transform .15s; }
+  #btn-play:hover { transform:scale(1.07); }
+
+  #btn-replay { position:absolute; z-index:90; left:50%; bottom:14%; transform:translateX(-50%);
+    display:none; cursor:pointer; border:none; border-radius:50px; padding:.5em 1.6em;
+    font-family:inherit; font-size:clamp(15px,2.8vmin,26px); color:#fff;
+    background:linear-gradient(135deg,#ff9f1c,#4263eb); box-shadow:0 8px 24px rgba(0,0,0,.4); }
+
+  /* ===================== ОБЩИЕ АНИМАЦИИ ===================== */
+  @keyframes bob     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  @keyframes bobBig  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+  @keyframes sway    { 0%,100%{transform:rotate(-2deg)} 50%{transform:rotate(2deg)} }
+  @keyframes wave    { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(22deg)} }
+  @keyframes nod     { 0%,100%{transform:rotate(0)} 50%{transform:rotate(8deg)} }
+  @keyframes pop     { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:1} }
+  @keyframes floatUp { 0%{transform:translateY(0);opacity:0} 15%{opacity:1} 100%{transform:translateY(-90px);opacity:0} }
+  @keyframes shake   { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+  @keyframes cloudDrift { 0%{transform:translateX(0)} 100%{transform:translateX(60px)} }
+  @keyframes spin360 { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+
+  .anim { animation-play-state:paused !important; }
+  .scene.active .anim { animation-play-state:running !important; }
+
+  /* ---------- СЦЕНА 1: полёт вдвоём над городом ---------- */
+  .s1-spidey { animation:s1flyA 3.4s ease-in-out infinite alternate; transform-origin:330px -60px; }
+  @keyframes s1flyA { 0%{transform:rotate(-28deg)} 100%{transform:rotate(26deg)} }
+  .s1-hero { animation:s1flyB 3.4s ease-in-out infinite alternate; transform-origin:590px -60px; }
+  @keyframes s1flyB { 0%{transform:rotate(26deg)} 100%{transform:rotate(-28deg)} }
+  .s1-cloud { animation:cloudDrift 9s linear infinite alternate; }
+  .s1-text { opacity:0; animation:pop .8s ease .6s forwards; transform-origin:450px 90px; }
+  .s1-bird { animation:bob 1.6s ease-in-out infinite; }
+
+  /* ---------- СЦЕНА 2: злодей и бандиты появляются ---------- */
+  .s2-villain { opacity:0; animation:pop .7s ease .3s forwards, s2chuckle 1.4s ease-in-out 1.1s infinite; transform-origin:450px 420px; }
+  @keyframes s2chuckle { 0%,100%{transform:scale(1) rotate(-1.5deg)} 50%{transform:scale(1) rotate(1.5deg)} }
+  .s2-b1 { opacity:0; animation:pop .5s ease 1.1s forwards, shake .5s linear 1.7s infinite; }
+  .s2-b2 { opacity:0; animation:pop .5s ease 1.5s forwards, bobBig 1s ease-in-out 2s infinite; }
+  .s2-b3 { opacity:0; animation:pop .5s ease 1.9s forwards, shake .6s linear 2.4s infinite; }
+  .s2-bubble { opacity:0; animation:pop .5s ease 2.6s forwards; transform-origin:660px 150px; }
+  .s2-lightning { opacity:0; animation:pop .3s ease infinite alternate; }
+  .s2-lightning.d1{animation-delay:.2s} .s2-lightning.d2{animation-delay:.8s}
+
+  /* ---------- СЦЕНА 3: бандиты стреляют, герои уворачиваются ---------- */
+  .s3-spidey { animation:s3dodgeA 1.6s ease-in-out infinite; }
+  @keyframes s3dodgeA { 0%,100%{transform:translate(0,0) rotate(-6deg)} 50%{transform:translate(-24px,-18px) rotate(8deg)} }
+  .s3-hero { animation:s3dodgeB 1.7s ease-in-out infinite; }
+  @keyframes s3dodgeB { 0%,100%{transform:translate(0,0) rotate(6deg)} 50%{transform:translate(24px,-16px) rotate(-8deg)} }
+  .s3-b1 { animation:shake .4s linear infinite; }
+  .s3-b2 { animation:bobBig .9s ease-in-out infinite; }
+  .s3-b3 { animation:shake .45s linear infinite; }
+  .s3-laser { opacity:0; }
+  .s3-laser.n1 { animation:s3fire .5s ease-out .6s forwards; }
+  .s3-laser.n2 { animation:s3fire .5s ease-out 1.3s forwards; }
+  .s3-laser.n3 { animation:s3fire .5s ease-out 2.0s forwards; }
+  .s3-laser.n4 { animation:s3fire .5s ease-out 2.7s forwards; }
+  @keyframes s3fire { 0%{opacity:0; transform:scaleX(0)} 30%{opacity:1} 100%{opacity:1; transform:scaleX(1)} }
+  .s3-pew { opacity:0; animation:pop .35s ease infinite alternate; }
+  .s3-pew.d1{animation-delay:.7s} .s3-pew.d2{animation-delay:1.6s} .s3-pew.d3{animation-delay:2.3s}
+
+  /* ---------- СЦЕНА 4: Человек-паук ранен ---------- */
+  .s4-laserhit { opacity:0; animation:s4fire .4s ease-out .3s forwards; }
+  @keyframes s4fire { 0%{opacity:0; transform:scaleX(0)} 30%{opacity:1} 100%{opacity:1; transform:scaleX(1)} }
+  .s4-burst { opacity:0; animation:pop .5s ease .65s forwards; transform-origin:520px 210px; }
+  .s4-spidey-fall { animation:s4fall 2.2s ease-in forwards; }
+  @keyframes s4fall { 0%{transform:translate(0,0) rotate(0)} 30%{transform:translate(20px,40px) rotate(140deg)} 70%{transform:translate(10px,150px) rotate(300deg)} 100%{transform:translate(0,230px) rotate(360deg)} }
+  .s4-ay { opacity:0; animation:pop .4s ease 1s forwards; transform-origin:560px 260px; }
+  .s4-dizzy { opacity:0; animation:pop .4s ease 2.2s forwards, spin360 2s linear 2.2s infinite; transform-origin:540px 420px; }
+  .s4-bandaid { opacity:0; animation:pop .4s ease 2.4s forwards; }
+  .s4-hero-shock { animation:shake .5s linear 1.4s infinite; }
+  .s4-shockbubble { opacity:0; animation:pop .5s ease 1.6s forwards; transform-origin:240px 150px; }
+
+  /* ---------- СЦЕНА 5: Саша побеждает бандитов ---------- */
+  .s5-hero-jump { animation:s5jump 4.6s ease forwards; }
+  @keyframes s5jump { 0%{transform:translate(0,0)} 10%{transform:translate(26px,-70px)} 20%,100%{transform:translate(52px,0)} }
+  .s5-hero { animation:bobBig 1.2s ease-in-out infinite; }
+  .s5-shot { opacity:0; }
+  .s5-shot.n1 { animation:s5web .4s ease-out 1.1s forwards; }
+  .s5-shot.n2 { animation:s5web .4s ease-out 2.0s forwards; }
+  .s5-shot.n3 { animation:s5web .4s ease-out 2.9s forwards; }
+  @keyframes s5web { 0%{opacity:0; transform:scaleX(0)} 30%{opacity:1} 100%{opacity:1; transform:scaleX(1)} }
+  .s5-bandit.n1 { transform-origin:bottom center; animation:s5bfall .7s ease-in 1.4s forwards; }
+  .s5-bandit.n2 { transform-origin:bottom center; animation:s5bfall .7s ease-in 2.3s forwards; }
+  .s5-bandit.n3 { transform-origin:bottom center; animation:s5bfall .7s ease-in 3.2s forwards; }
+  @keyframes s5bfall { 0%{transform:rotate(0)} 100%{transform:rotate(82deg) translateY(6px)} }
+  .s5-cocoon { opacity:0; }
+  .s5-cocoon.n1 { animation:pop .4s ease 2.05s forwards; }
+  .s5-cocoon.n2 { animation:pop .4s ease 2.95s forwards; }
+  .s5-cocoon.n3 { animation:pop .4s ease 3.85s forwards; }
+  .s5-star { opacity:0; animation:pop .5s ease infinite alternate; }
+  .s5-star.d1{animation-delay:1.6s} .s5-star.d2{animation-delay:2.5s} .s5-star.d3{animation-delay:3.4s}
+
+  /* ---------- СЦЕНА 6: Саша против Злодея — проигрыш ---------- */
+  .s6-hero-charge { animation:s6charge 1.4s ease-in forwards; }
+  @keyframes s6charge { 0%{transform:translateX(0)} 100%{transform:translateX(190px)} }
+  .s6-hero-punch { animation:jabby .5s ease-in-out 1.4s; }
+  @keyframes jabby { 0%,100%{transform:translateX(0)} 50%{transform:translateX(30px)} }
+  .s6-villain { animation:s6chuckle 1s ease-in-out infinite; transform-origin:700px 400px; }
+  @keyframes s6chuckle { 0%,100%{transform:rotate(-1.5deg)} 50%{transform:rotate(1.5deg)} }
+  .s6-blast { opacity:0; animation:pop .4s ease 1.85s forwards, s6glow .6s ease-in-out 1.85s infinite alternate; transform-origin:560px 380px; }
+  @keyframes s6glow { 0%{opacity:.6} 100%{opacity:1} }
+  .s6-hero-knock { animation:s6knock 1.6s ease-in 2.1s forwards; opacity:1; }
+  @keyframes s6knock { 0%{transform:translate(190px,0) rotate(0)} 100%{transform:translate(30px,120px) rotate(-160deg)} }
+  .s6-dizzy { opacity:0; animation:pop .4s ease 3.9s forwards, spin360 2s linear 3.9s infinite; transform-origin:150px 470px; }
+  .s6-taunt { opacity:0; animation:pop .5s ease 4.3s forwards; transform-origin:700px 200px; }
+
+  /* ---------- СЦЕНА 7: Человек-паук встаёт и бьёт злодея ---------- */
+  .s7-spidey-standup { animation:s7standup 1.6s ease forwards; }
+  @keyframes s7standup { 0%{transform:translateY(30px) rotate(8deg)} 100%{transform:translateY(0) rotate(0)} }
+  .s7-spidey-jump { animation:s7jump 1.4s ease-in 1.7s forwards; }
+  @keyframes s7jump { 0%{transform:translate(0,0)} 55%{transform:translate(180px,-60px)} 100%{transform:translate(340px,-6px)} }
+  .s7-villain { animation:sway 1.6s ease-in-out infinite; transform-origin:700px 420px; }
+  .s7-hitburst { opacity:0; animation:pop .45s ease 3.1s forwards; transform-origin:700px 330px; }
+  .s7-villain-recoil { animation:s7recoil .6s ease-out 3.1s forwards; }
+  @keyframes s7recoil { 0%{transform:rotate(0)} 40%{transform:rotate(14deg) translateX(20px)} 100%{transform:rotate(6deg) translateX(10px)} }
+  .s7-bam { opacity:0; animation:pop .4s ease 3.1s forwards; }
+  .s7-bandage { opacity:.9; }
+
+  /* ---------- СЦЕНА 8: Злодей исчезает в дыму ---------- */
+  .s8-villain { animation:shake .4s linear infinite; }
+  .s8-bomb { opacity:0; animation:s8bombthrow 1s ease-in .3s forwards; }
+  @keyframes s8bombthrow { 0%{opacity:0; transform:translate(0,0) scale(.6)} 20%{opacity:1} 100%{opacity:1; transform:translate(-60px,120px) scale(1)} }
+  .s8-smoke { opacity:0; transform-origin:640px 430px; }
+  .s8-smoke.n1 { animation:s8puff 2.4s ease-out 1.2s forwards; }
+  .s8-smoke.n2 { animation:s8puff 2.6s ease-out 1.4s forwards; }
+  .s8-smoke.n3 { animation:s8puff 2.8s ease-out 1.6s forwards; }
+  @keyframes s8puff { 0%{opacity:0; transform:scale(.3)} 25%{opacity:.9; transform:scale(1)} 80%{opacity:.85; transform:scale(1.5)} 100%{opacity:0; transform:scale(1.8)} }
+  .s8-villain-fade { animation:s8vanish 1s ease 1.5s forwards; }
+  @keyframes s8vanish { 0%{opacity:1} 100%{opacity:0} }
+  .s8-huh { opacity:0; animation:pop .5s ease 3.5s forwards; transform-origin:450px 150px; }
+  .s8-endtext { opacity:0; animation:pop .8s ease 4.6s forwards; }
+</style>
+</head>
+<body>
+<div id="frame">
+ <div id="stage-wrap">
+  <div id="paper"></div>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <filter id="wc" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.04" numOctaves="3" seed="7" result="t"/>
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="9"/>
+      </filter>
+      <filter id="wc2" x="-30%" y="-30%" width="160%" height="160%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.05 0.08" numOctaves="2" seed="3" result="t"/>
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="6"/>
+      </filter>
+      <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="4"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- ============ СЦЕНА 1. ПОЛЁТ ВДВОЁМ НАД ГОРОДОМ ============ -->
+  <div class="scene" id="s1">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#7fc4ea"/>
+    <ellipse cx="450" cy="70" rx="600" ry="180" fill="#bfe6f7" opacity=".7" filter="url(#soft)"/>
+    <circle cx="150" cy="90" r="40" fill="#ffe9b0" filter="url(#wc2)"/>
+    <g class="anim s1-cloud" opacity=".85">
+      <ellipse cx="650" cy="110" rx="80" ry="24" fill="#fff" filter="url(#soft)"/>
+      <ellipse cx="710" cy="100" rx="55" ry="18" fill="#fff" filter="url(#soft)"/>
+    </g>
+    <g class="anim s1-cloud" opacity=".7" style="animation-delay:-3s">
+      <ellipse cx="260" cy="160" rx="60" ry="18" fill="#fff" filter="url(#soft)"/>
+    </g>
+    <g filter="url(#wc)">
+      <rect x="0" y="330" width="140" height="176" fill="#cdb8a0"/>
+      <rect x="150" y="290" width="120" height="216" fill="#e0cdb0"/>
+      <rect x="280" y="350" width="110" height="156" fill="#cdb8a0"/>
+      <rect x="400" y="300" width="130" height="206" fill="#e0cdb0"/>
+      <rect x="540" y="340" width="120" height="166" fill="#cdb8a0"/>
+      <rect x="670" y="290" width="130" height="216" fill="#e0cdb0"/>
+      <rect x="810" y="350" width="90" height="156" fill="#cdb8a0"/>
+    </g>
+    <g fill="#bfe3f2" opacity=".9">
+      <rect x="30" y="360" width="14" height="18"/><rect x="70" y="400" width="14" height="18"/>
+      <rect x="180" y="320" width="14" height="18"/><rect x="220" y="380" width="14" height="18"/>
+      <rect x="430" y="330" width="14" height="18"/><rect x="480" y="390" width="14" height="18"/>
+      <rect x="570" y="370" width="14" height="18"/><rect x="700" y="320" width="14" height="18"/>
+      <rect x="740" y="390" width="14" height="18"/><rect x="840" y="380" width="14" height="18"/>
+    </g>
+    <!-- ЧЕЛОВЕК-ПАУК на паутине -->
+    <g class="anim s1-spidey">
+      <line x1="330" y1="-60" x2="330" y2="210" stroke="#dfe6ff" stroke-width="3.5" opacity=".9"/>
+      <g filter="url(#wc2)">
+        <path d="M312 228 q18 -16 36 0 l5 52 q-23 8 -46 0 z" fill="#d32f2f"/>
+        <path d="M316 256 l4 22 q10 4 20 0 l4 -22 q-14 5 -28 0" fill="#1e4bb8"/>
+        <circle cx="330" cy="210" r="19" fill="#d32f2f"/>
+        <path d="M317 207 q6 -8 11 -2 q2 6 -5 7 q-7 0 -6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M343 207 q-6 -8 -11 -2 q-2 6 5 7 q7 0 6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M316 224 q-4 -18 8 -26" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M346 232 q18 -8 26 4" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M316 276 q-14 18 -24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M344 276 q14 18 24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+      </g>
+    </g>
+    <!-- САША-ГЕРОЙ на паутине -->
+    <g class="anim s1-hero">
+      <line x1="590" y1="-60" x2="590" y2="230" stroke="#dfe6ff" stroke-width="3.5" opacity=".9"/>
+      <g filter="url(#wc2)">
+        <path d="M573 246 q17 -15 34 0 l5 48 q-22 7 -44 0 z" fill="#ff8c1a"/>
+        <path d="M577 272 l4 20 q9 4 18 0 l4 -20 q-13 5 -26 0" fill="#2a4fc0"/>
+        <circle cx="590" cy="230" r="18" fill="#ffdfc4"/>
+        <path d="M574 226 q2 -17 23 -16 q15 1 14 14 q-5 -7 -18 -7 q-13 0 -19 9" fill="#8a5a2b"/>
+        <path d="M576 227 q14 -6 28 0 l-1 10 q-13 5 -26 0 z" fill="#ff8c1a"/>
+        <path d="M580 230 q4 -5 8 -1 q1 4 -4 5 q-4 0 -4 -4" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <path d="M600 230 q-4 -5 -8 -1 q-1 4 4 5 q4 0 4 -4" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <circle cx="590" cy="262" r="5" fill="#2a1a0a"/>
+        <path d="M584 259 l-6 -5 M584 265 l-6 5 M596 259 l6 -5 M596 265 l6 5" stroke="#2a1a0a" stroke-width="2"/>
+        <path d="M576 242 q-4 -16 7 -24" stroke="#ff8c1a" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <path d="M604 250 q16 -7 24 4" stroke="#ff8c1a" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <path d="M576 292 q-13 16 -22 18" stroke="#2a4fc0" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M602 292 q13 16 22 18" stroke="#2a4fc0" stroke-width="9" fill="none" stroke-linecap="round"/>
+      </g>
+    </g>
+    <g class="s1-bird" style="transform-origin:100px 220px"><path d="M90 220 q10 -10 20 0 q10 -10 20 0" stroke="#333" stroke-width="2.5" fill="none"/></g>
+    <g class="s1-bird" style="transform-origin:170px 240px; animation-delay:-.6s"><path d="M160 240 q8 -8 16 0 q8 -8 16 0" stroke="#333" stroke-width="2.5" fill="none"/></g>
+    <g class="s1-text">
+      <text x="450" y="80" text-anchor="middle" font-size="30" fill="#fff" style="text-shadow:2px 2px 0 rgba(90,90,150,.5)">Два друга-героя патрулируют город</text>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 2. ЗЛОДЕЙ И БАНДИТЫ ПОЯВЛЯЮТСЯ ============ -->
+  <div class="scene" id="s2">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#4a3d6e"/>
+    <ellipse cx="450" cy="330" rx="420" ry="260" fill="#5a4680" opacity=".85" filter="url(#soft)"/>
+    <g class="s2-lightning d1"><path d="M120 40 l-24 70 l20 -6 l-18 62 l40 -78 l-20 6 z" fill="#c9b8ff" opacity=".8"/></g>
+    <g class="s2-lightning d2"><path d="M780 60 l-20 58 l16 -5 l-14 52 l34 -66 l-17 5 z" fill="#c9b8ff" opacity=".7"/></g>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- ЗЛОДЕЙ -->
+    <g class="anim s2-villain" filter="url(#wc2)">
+      <path d="M340 420 q110 -70 220 0 l30 120 h-280 z" fill="#5a2d8a"/>
+      <path d="M352 400 q-40 -30 -44 -76 l40 24 z" fill="#5a2d8a"/>
+      <path d="M548 400 q40 -30 44 -76 l-40 24 z" fill="#5a2d8a"/>
+      <circle cx="450" cy="330" r="88" fill="#9fd66b"/>
+      <path d="M368 310 q10 -70 82 -74 q72 4 82 74 q-20 -34 -82 -36 q-62 2 -82 36" fill="#2f1b4d"/>
+      <path d="M400 318 l36 14 M500 318 l-36 14" stroke="#1c142e" stroke-width="7" stroke-linecap="round"/>
+      <ellipse cx="422" cy="342" rx="11" ry="13" fill="#fff"/>
+      <ellipse cx="478" cy="342" rx="11" ry="13" fill="#fff"/>
+      <circle cx="424" cy="346" r="5.5" fill="#1c142e"/>
+      <circle cx="476" cy="346" r="5.5" fill="#1c142e"/>
+      <path d="M404 386 q46 34 92 0 q-10 26 -46 26 q-36 0 -46 -26" fill="#fff" stroke="#2f1b4d" stroke-width="3"/>
+      <path d="M418 390 v14 M436 394 v18 M454 396 v18 M472 394 v18 M488 390 v14" stroke="#cbd" stroke-width="2.5"/>
+    </g>
+    <!-- БАНДИТ 1 с бластером -->
+    <g class="s2-b1" filter="url(#wc2)">
+      <path d="M170 360 q26 -20 52 0 l8 96 q-34 12 -68 0 z" fill="#4a4a55"/>
+      <path d="M174 454 l-4 52 M218 454 l6 52" stroke="#2e2e38" stroke-width="16" stroke-linecap="round"/>
+      <circle cx="196" cy="322" r="30" fill="#e8c39e"/>
+      <path d="M168 314 q0 -26 28 -26 q28 0 28 26 l-4 8 q-24 -10 -48 0 z" fill="#3a3a3a"/>
+      <path d="M178 326 l14 6 M214 326 l-14 6" stroke="#222" stroke-width="4" stroke-linecap="round"/>
+      <path d="M172 364 q-20 -14 -18 -34" stroke="#4a4a55" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <path d="M216 364 q22 -8 30 -28" stroke="#4a4a55" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <rect x="238" y="316" width="34" height="14" rx="4" fill="#333"/>
+      <rect x="264" y="308" width="10" height="14" rx="2" fill="#222"/>
+    </g>
+    <!-- БАНДИТ 2 с бластером -->
+    <g class="s2-b2" filter="url(#wc2)">
+      <path d="M414 372 q28 -22 56 0 l8 102 q-36 12 -72 0 z" fill="#5d4037"/>
+      <path d="M420 472 l-4 54 M466 472 l6 54" stroke="#3e2723" stroke-width="16" stroke-linecap="round"/>
+      <circle cx="442" cy="334" r="31" fill="#e8c39e"/>
+      <path d="M412 326 q2 -28 30 -28 q30 0 30 28 l-6 6 q-24 -10 -48 0 z" fill="#6d4c41"/>
+      <path d="M426 338 l12 8 M458 338 l-12 8" stroke="#222" stroke-width="4" stroke-linecap="round"/>
+      <path d="M414 376 q-24 -16 -24 -40" stroke="#5d4037" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <path d="M468 376 q26 -10 34 -30" stroke="#5d4037" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <rect x="492" y="368" width="36" height="15" rx="4" fill="#333"/>
+      <rect x="520" y="360" width="10" height="14" rx="2" fill="#222"/>
+    </g>
+    <!-- БАНДИТ 3 с бластером -->
+    <g class="s2-b3" filter="url(#wc2)">
+      <path d="M654 368 q28 -22 56 0 l10 104 q-38 12 -76 0 z" fill="#37474f"/>
+      <path d="M662 470 l-6 54 M708 470 l10 50" stroke="#263238" stroke-width="17" stroke-linecap="round"/>
+      <circle cx="682" cy="330" r="31" fill="#e8c39e"/>
+      <path d="M652 322 q2 -28 30 -28 q30 0 30 28 l-6 6 q-24 -10 -48 0 z" fill="#222"/>
+      <path d="M666 334 l12 8 M698 334 l-12 8" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+      <path d="M656 372 q-22 -16 -20 -38" stroke="#37474f" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <path d="M708 372 q24 -10 30 -30" stroke="#37474f" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <rect x="730" y="364" width="36" height="15" rx="4" fill="#333"/>
+      <rect x="758" y="356" width="10" height="14" rx="2" fill="#222"/>
+    </g>
+    <g class="s2-bubble" filter="url(#wc2)">
+      <ellipse cx="660" cy="140" rx="180" ry="80" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <path d="M560 210 l-40 44 l72 -30 z" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <text x="660" y="118" text-anchor="middle" font-size="24" fill="#5a2d8a">Хи-хи! А вот и я —</text>
+      <text x="660" y="150" text-anchor="middle" font-size="24" fill="#c0392b">со своими бандитами!</text>
+      <text x="660" y="180" text-anchor="middle" font-size="20" fill="#3a2454">Взять их!</text>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 3. БАНДИТЫ СТРЕЛЯЮТ ============ -->
+  <div class="scene" id="s3">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#5a4680"/>
+    <ellipse cx="450" cy="300" rx="460" ry="260" fill="#6a5490" opacity=".8" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- бандиты внизу стреляют -->
+    <g class="anim s3-b1" filter="url(#wc2)">
+      <path d="M120 366 q24 -18 48 0 l7 86 q-31 11 -62 0 z" fill="#4a4a55"/>
+      <path d="M126 448 l-5 46 M162 448 l7 44" stroke="#2e2e38" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="144" cy="332" r="27" fill="#e8c39e"/>
+      <path d="M119 325 q0 -24 25 -24 q25 0 25 24 l-4 7 q-21 -9 -42 0 z" fill="#3a3a3a"/>
+      <circle cx="135" cy="331" r="4.5" fill="#111"/><circle cx="153" cy="331" r="4.5" fill="#111"/>
+      <path d="M122 370 q22 -4 32 -22" stroke="#4a4a55" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <rect x="150" y="356" width="32" height="14" rx="4" fill="#333"/>
+    </g>
+    <g class="anim s3-b2" filter="url(#wc2)">
+      <path d="M400 380 q26 -20 52 0 l8 94 q-34 12 -68 0 z" fill="#5d4037"/>
+      <path d="M406 468 l-5 50 M448 468 l7 48" stroke="#3e2723" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="426" cy="344" r="29" fill="#e8c39e"/>
+      <path d="M398 336 q1 -26 28 -26 q28 0 28 26 l-5 7 q-22 -9 -44 0 z" fill="#6d4c41"/>
+      <circle cx="416" cy="342" r="4.5" fill="#111"/><circle cx="436" cy="342" r="4.5" fill="#111"/>
+      <path d="M402 384 q24 -6 34 -26" stroke="#5d4037" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <rect x="432" y="368" width="34" height="14" rx="4" fill="#333"/>
+    </g>
+    <g class="anim s3-b3" filter="url(#wc2)">
+      <path d="M700 366 q24 -18 48 0 l7 86 q-31 11 -62 0 z" fill="#37474f"/>
+      <path d="M706 448 l-5 46 M742 448 l7 44" stroke="#263238" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="724" cy="332" r="27" fill="#e8c39e"/>
+      <path d="M699 325 q0 -24 25 -24 q25 0 25 24 l-4 7 q-21 -9 -42 0 z" fill="#222"/>
+      <circle cx="715" cy="331" r="4.5" fill="#111"/><circle cx="733" cy="331" r="4.5" fill="#111"/>
+      <path d="M702 370 q-22 -4 -32 -22" stroke="#37474f" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <rect x="670" y="356" width="32" height="14" rx="4" fill="#333"/>
+    </g>
+    <!-- лазерные выстрелы -->
+    <g class="s3-laser n1" style="transform-origin:150px 360px">
+      <line x1="150" y1="360" x2="330" y2="200" stroke="#ff4d4d" stroke-width="5"/>
+    </g>
+    <g class="s3-laser n2" style="transform-origin:432px 366px">
+      <line x1="432" y1="366" x2="560" y2="180" stroke="#4dff8f" stroke-width="5"/>
+    </g>
+    <g class="s3-laser n3" style="transform-origin:686px 356px">
+      <line x1="686" y1="356" x2="540" y2="200" stroke="#ff4d4d" stroke-width="5"/>
+    </g>
+    <g class="s3-laser n4" style="transform-origin:170px 356px">
+      <line x1="170" y1="356" x2="320" y2="230" stroke="#4dff8f" stroke-width="5"/>
+    </g>
+    <g class="s3-pew d1"><text x="240" y="270" font-size="26" fill="#ffd76e">ПИУ!</text></g>
+    <g class="s3-pew d2"><text x="500" y="240" font-size="26" fill="#ffd76e">ПИУ-ПИУ!</text></g>
+    <g class="s3-pew d3"><text x="330" y="320" font-size="24" fill="#ffd76e">ПИУ!</text></g>
+    <!-- ЧЕЛОВЕК-ПАУК уворачивается -->
+    <g class="anim s3-spidey">
+      <g filter="url(#wc2)">
+        <path d="M292 190 q18 -16 36 0 l5 52 q-23 8 -46 0 z" fill="#d32f2f"/>
+        <path d="M296 218 l4 22 q10 4 20 0 l4 -22 q-14 5 -28 0" fill="#1e4bb8"/>
+        <circle cx="310" cy="172" r="19" fill="#d32f2f"/>
+        <path d="M297 169 q6 -8 11 -2 q2 6 -5 7 q-7 0 -6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M323 169 q-6 -8 -11 -2 q-2 6 5 7 q7 0 6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M296 186 q-4 -18 8 -26" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M326 194 q18 -8 26 4" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M296 238 q-14 18 -24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M324 238 q14 18 24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+      </g>
+    </g>
+    <!-- САША-ГЕРОЙ уворачивается -->
+    <g class="anim s3-hero">
+      <g filter="url(#wc2)">
+        <path d="M553 200 q17 -15 34 0 l5 48 q-22 7 -44 0 z" fill="#ff8c1a"/>
+        <path d="M557 226 l4 20 q9 4 18 0 l4 -20 q-13 5 -26 0" fill="#2a4fc0"/>
+        <circle cx="570" cy="184" r="18" fill="#ffdfc4"/>
+        <path d="M554 180 q2 -17 23 -16 q15 1 14 14 q-5 -7 -18 -7 q-13 0 -19 9" fill="#8a5a2b"/>
+        <path d="M556 181 q14 -6 28 0 l-1 10 q-13 5 -26 0 z" fill="#ff8c1a"/>
+        <path d="M560 184 q4 -5 8 -1 q1 4 -4 5 q-4 0 -4 -4" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <path d="M580 184 q-4 -5 -8 -1 q-1 4 4 5 q4 0 4 -4" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <circle cx="570" cy="216" r="5" fill="#2a1a0a"/>
+        <path d="M556 246 q-13 16 -22 18" stroke="#2a4fc0" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M582 246 q13 16 22 18" stroke="#2a4fc0" stroke-width="9" fill="none" stroke-linecap="round"/>
+      </g>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 4. ЧЕЛОВЕК-ПАУК РАНЕН ============ -->
+  <div class="scene" id="s4">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#5a4680"/>
+    <ellipse cx="450" cy="260" rx="460" ry="240" fill="#6a5490" opacity=".8" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- выстрел-попадание -->
+    <g class="s4-laserhit" style="transform-origin:260px 300px">
+      <line x1="260" y1="300" x2="520" y2="210" stroke="#ff4d4d" stroke-width="6"/>
+    </g>
+    <g class="s4-burst">
+      <path d="M500 190 l12 24 26 -14 -8 26 26 8 -26 12 14 24 -28 -10 -6 28 -12 -26 -24 14 10 -28 -28 -8 28 -10 -10 -26 26 12 z" fill="#ffd23e" stroke="#e08a00" stroke-width="3" filter="url(#wc2)"/>
+      <text x="530" y="212" text-anchor="middle" font-size="22" fill="#a33">БАХ!</text>
+    </g>
+    <!-- ЧЕЛОВЕК-ПАУК падает -->
+    <g class="s4-spidey-fall" style="transform-origin:520px 260px">
+      <g filter="url(#wc2)">
+        <path d="M502 210 q18 -16 36 0 l5 52 q-23 8 -46 0 z" fill="#d32f2f"/>
+        <path d="M506 238 l4 22 q10 4 20 0 l4 -22 q-14 5 -28 0" fill="#1e4bb8"/>
+        <circle cx="520" cy="192" r="19" fill="#d32f2f"/>
+        <path d="M507 189 q6 -8 11 -2 q2 6 -5 7 q-7 0 -6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M533 189 q-6 -8 -11 -2 q-2 6 5 7 q7 0 6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+        <path d="M506 244 q-14 18 -24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M534 244 q14 18 24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M506 206 q-4 -18 8 -26" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+        <path d="M536 214 q18 -8 26 4" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+      </g>
+      <g class="s4-bandaid">
+        <rect x="500" y="228" width="26" height="12" rx="5" fill="#f4dcc0" stroke="#c9a" stroke-width="1.5" transform="rotate(28 513 234)"/>
+      </g>
+    </g>
+    <g class="s4-ay" filter="url(#wc2)">
+      <ellipse cx="600" cy="150" rx="80" ry="46" fill="#fff" stroke="#d38a8a" stroke-width="5"/>
+      <path d="M570 190 l-14 26 l36 -18 z" fill="#fff" stroke="#d38a8a" stroke-width="5"/>
+      <text x="600" y="164" text-anchor="middle" font-size="30" fill="#c0392b">АЙ!</text>
+    </g>
+    <g class="s4-dizzy"><text x="540" y="410" font-size="24">💫</text></g>
+    <g class="s4-dizzy" style="animation-delay:.3s"><text x="560" y="440" font-size="20">⭐</text></g>
+    <!-- САША в шоке -->
+    <g class="anim s4-hero-shock" filter="url(#wc2)">
+      <path d="M200 330 q26 -20 52 0 l7 82 q-33 11 -66 0 z" fill="#ff8c1a"/>
+      <path d="M206 370 l5 34 q15 5 28 0 l5 -34 q-19 8 -38 0" fill="#2a4fc0"/>
+      <path d="M206 406 l-6 48 M242 406 l6 48" stroke="#2a4fc0" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="226" cy="292" r="29" fill="#ffdfc4"/>
+      <path d="M199 285 q3 -27 36 -25 q24 2 22 23 q-8 -12 -29 -12 q-20 0 -29 14" fill="#8a5a2b"/>
+      <path d="M202 286 q24 -9 48 0 l-2 15 q-22 8 -44 0 z" fill="#ff8c1a"/>
+      <circle cx="212" cy="292" r="4.5" fill="#111"/><circle cx="238" cy="292" r="4.5" fill="#111"/>
+      <ellipse cx="226" cy="316" rx="7" ry="9" fill="#2a1a0a"/>
+      <path d="M202 336 q-20 -14 -26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <path d="M248 336 q20 -14 26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="s4-shockbubble" filter="url(#wc2)">
+      <ellipse cx="240" cy="150" rx="120" ry="56" fill="#fff" stroke="#d38a8a" stroke-width="5"/>
+      <path d="M206 200 l-20 32 l46 -22 z" fill="#fff" stroke="#d38a8a" stroke-width="5"/>
+      <text x="240" y="140" text-anchor="middle" font-size="26" fill="#c0392b">НЕТ!!</text>
+      <text x="240" y="172" text-anchor="middle" font-size="18" fill="#7a4a4a">Держись, друг!</text>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 5. САША ПОБЕЖДАЕТ БАНДИТОВ ============ -->
+  <div class="scene" id="s5">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#5a4680"/>
+    <ellipse cx="450" cy="260" rx="460" ry="240" fill="#6a5490" opacity=".8" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- САША-ГЕРОЙ прыгает и стреляет паутиной -->
+    <g class="anim s5-hero-jump">
+      <g class="anim s5-hero" filter="url(#wc2)">
+        <path d="M156 296 q26 -20 52 0 l7 82 q-33 11 -66 0 z" fill="#ff8c1a"/>
+        <path d="M162 336 l5 34 q15 5 28 0 l5 -34 q-19 8 -38 0" fill="#2a4fc0"/>
+        <path d="M162 372 l-6 48 M198 372 l6 48" stroke="#2a4fc0" stroke-width="15" stroke-linecap="round"/>
+        <ellipse cx="154" cy="424" rx="13" ry="7" fill="#ffd23e"/>
+        <ellipse cx="206" cy="424" rx="13" ry="7" fill="#ffd23e"/>
+        <circle cx="182" cy="258" r="29" fill="#ffdfc4"/>
+        <path d="M155 251 q3 -27 36 -25 q24 2 22 23 q-8 -12 -29 -12 q-20 0 -29 14" fill="#8a5a2b"/>
+        <path d="M158 252 q24 -9 48 0 l-2 15 q-22 8 -44 0 z" fill="#ff8c1a"/>
+        <path d="M165 257 q6 -8 12 -1 q2 5 -5 7 q-7 0 -7 -6" fill="#fff" stroke="#111" stroke-width="2.2"/>
+        <path d="M199 257 q-6 -8 -12 -1 q-2 5 5 7 q7 0 7 -6" fill="#fff" stroke="#111" stroke-width="2.2"/>
+        <circle cx="182" cy="318" r="8" fill="#2a1a0a"/>
+        <path d="M173 313 l-9 -7 M173 323 l-9 7 M191 313 l9 -7 M191 323 l9 7" stroke="#2a1a0a" stroke-width="2.6"/>
+        <path d="M158 302 q-20 -14 -26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <path d="M204 300 q28 -6 44 4" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <circle cx="254" cy="306" r="10" fill="#2a4fc0"/>
+      </g>
+    </g>
+    <g class="s5-shot n1" style="transform-origin:316px 306px">
+      <line x1="316" y1="306" x2="490" y2="330" stroke="#fff" stroke-width="5"/>
+      <line x1="316" y1="306" x2="490" y2="330" stroke="#9ab" stroke-width="1.5"/>
+    </g>
+    <g class="s5-shot n2" style="transform-origin:316px 306px">
+      <line x1="316" y1="306" x2="600" y2="320" stroke="#fff" stroke-width="5"/>
+      <line x1="316" y1="306" x2="600" y2="320" stroke="#9ab" stroke-width="1.5"/>
+    </g>
+    <g class="s5-shot n3" style="transform-origin:316px 306px">
+      <line x1="316" y1="306" x2="710" y2="330" stroke="#fff" stroke-width="5"/>
+      <line x1="316" y1="306" x2="710" y2="330" stroke="#9ab" stroke-width="1.5"/>
+    </g>
+    <!-- Бандиты -->
+    <g class="s5-bandit n1" filter="url(#wc2)">
+      <path d="M470 350 q24 -18 48 0 l7 86 q-31 11 -62 0 z" fill="#4a4a55"/>
+      <path d="M476 432 l-5 46 M512 432 l7 44" stroke="#2e2e38" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="494" cy="316" r="27" fill="#e8c39e"/>
+      <path d="M469 309 q0 -24 25 -24 q25 0 25 24 l-4 7 q-21 -9 -42 0 z" fill="#3a3a3a"/>
+      <circle cx="485" cy="315" r="4.5" fill="#111"/><circle cx="503" cy="315" r="4.5" fill="#111"/>
+    </g>
+    <g class="s5-cocoon n1" filter="url(#wc2)">
+      <ellipse cx="498" cy="440" rx="42" ry="28" fill="#f4f8ff" stroke="#aab" stroke-width="3"/>
+      <path d="M462 432 q36 -18 72 0 M462 448 q36 18 72 0 M476 418 q22 44 0 44 M520 418 q-22 44 0 44" stroke="#99a" stroke-width="2" fill="none"/>
+      <circle cx="498" cy="430" r="12" fill="#e8c39e"/>
+      <path d="M492 428 a3 3 0 1 0 .1 0 M502 428 a3 3 0 1 0 .1 0" fill="#111"/>
+    </g>
+    <g class="s5-bandit n2" filter="url(#wc2)">
+      <path d="M580 344 q25 -19 50 0 l7 90 q-32 11 -64 0 z" fill="#5d4037"/>
+      <path d="M586 430 l-5 46 M624 430 l7 44" stroke="#3e2723" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="605" cy="310" r="28" fill="#e8c39e"/>
+      <path d="M579 303 q1 -25 26 -25 q26 0 26 25 l-5 6 q-21 -9 -42 0 z" fill="#6d4c41"/>
+      <circle cx="596" cy="309" r="4.5" fill="#111"/><circle cx="614" cy="309" r="4.5" fill="#111"/>
+    </g>
+    <g class="s5-cocoon n2" filter="url(#wc2)">
+      <ellipse cx="610" cy="438" rx="42" ry="28" fill="#f4f8ff" stroke="#aab" stroke-width="3"/>
+      <path d="M574 430 q36 -18 72 0 M574 446 q36 18 72 0 M588 416 q22 44 0 44 M632 416 q-22 44 0 44" stroke="#99a" stroke-width="2" fill="none"/>
+      <circle cx="610" cy="428" r="12" fill="#e8c39e"/>
+      <path d="M604 426 a3 3 0 1 0 .1 0 M614 426 a3 3 0 1 0 .1 0" fill="#111"/>
+    </g>
+    <g class="s5-bandit n3" filter="url(#wc2)">
+      <path d="M692 352 q24 -18 48 0 l6 84 q-30 10 -60 0 z" fill="#37474f"/>
+      <path d="M698 432 l-5 44 M732 432 l7 42" stroke="#263238" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="716" cy="320" r="26" fill="#e8c39e"/>
+      <path d="M692 313 q1 -23 24 -23 q24 0 24 23 l-5 6 q-19 -8 -38 0 z" fill="#222"/>
+      <circle cx="708" cy="319" r="4.5" fill="#111"/><circle cx="725" cy="319" r="4.5" fill="#111"/>
+    </g>
+    <g class="s5-cocoon n3" filter="url(#wc2)">
+      <ellipse cx="718" cy="442" rx="38" ry="26" fill="#f4f8ff" stroke="#aab" stroke-width="3"/>
+      <path d="M686 434 q32 -16 64 0 M686 450 q32 16 64 0 M698 422 q20 40 0 40 M738 422 q-20 40 0 40" stroke="#99a" stroke-width="2" fill="none"/>
+      <circle cx="718" cy="432" r="11" fill="#e8c39e"/>
+      <path d="M713 430 a3 3 0 1 0 .1 0 M722 430 a3 3 0 1 0 .1 0" fill="#111"/>
+    </g>
+    <g class="s5-star d1"><text x="460" y="270" font-size="30">⭐</text></g>
+    <g class="s5-star d2"><text x="580" y="250" font-size="26">💫</text></g>
+    <g class="s5-star d3"><text x="700" y="272" font-size="28">⭐</text></g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 6. САША ПРОТИВ ЗЛОДЕЯ — ПРОИГРЫШ ============ -->
+  <div class="scene" id="s6">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#4a3d6e"/>
+    <ellipse cx="450" cy="300" rx="450" ry="260" fill="#5a4680" opacity=".85" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- ЗЛОДЕЙ -->
+    <g class="anim s6-villain" filter="url(#wc2)">
+      <path d="M580 400 q110 -70 220 0 l30 120 h-280 z" fill="#5a2d8a"/>
+      <path d="M592 380 q-40 -30 -44 -76 l40 24 z" fill="#5a2d8a"/>
+      <path d="M788 380 q40 -30 44 -76 l-40 24 z" fill="#5a2d8a"/>
+      <circle cx="690" cy="310" r="80" fill="#9fd66b"/>
+      <path d="M615 292 q10 -64 75 -68 q66 4 75 68 q-18 -31 -75 -33 q-57 2 -75 33" fill="#2f1b4d"/>
+      <ellipse cx="660" cy="322" rx="10" ry="12" fill="#fff"/>
+      <ellipse cx="712" cy="322" rx="10" ry="12" fill="#fff"/>
+      <circle cx="662" cy="326" r="5" fill="#1c142e"/>
+      <circle cx="710" cy="326" r="5" fill="#1c142e"/>
+      <path d="M644 362 q42 30 84 0 q-10 24 -42 24 q-32 0 -42 -24" fill="#fff" stroke="#2f1b4d" stroke-width="3"/>
+      <g class="anim s6-blast">
+        <circle cx="560" cy="380" r="34" fill="#9fd66b" opacity=".85"/>
+        <circle cx="560" cy="380" r="20" fill="#e8fce0"/>
+        <path d="M540 360 l-14 -10 M580 360 l14 -10 M540 400 l-14 10 M580 400 l14 10" stroke="#9fd66b" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <path d="M578 404 q-30 -14 -40 -40" stroke="#5a2d8a" stroke-width="18" fill="none" stroke-linecap="round"/>
+    </g>
+    <!-- САША бежит в атаку и получает удар -->
+    <g class="s6-hero-charge">
+      <g class="anim s6-hero-punch" filter="url(#wc2)">
+        <path d="M156 340 q26 -20 52 0 l7 82 q-33 11 -66 0 z" fill="#ff8c1a"/>
+        <path d="M162 380 l5 34 q15 5 28 0 l5 -34 q-19 8 -38 0" fill="#2a4fc0"/>
+        <path d="M162 416 l-6 48 M198 416 l6 48" stroke="#2a4fc0" stroke-width="15" stroke-linecap="round"/>
+        <circle cx="182" cy="302" r="29" fill="#ffdfc4"/>
+        <path d="M155 295 q3 -27 36 -25 q24 2 22 23 q-8 -12 -29 -12 q-20 0 -29 14" fill="#8a5a2b"/>
+        <path d="M158 296 q24 -9 48 0 l-2 15 q-22 8 -44 0 z" fill="#ff8c1a"/>
+        <circle cx="192" cy="302" r="4.5" fill="#111"/><circle cx="210" cy="302" r="4.5" fill="#111"/>
+        <path d="M158 346 q-20 -14 -26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <path d="M204 344 q30 -4 46 6" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <circle cx="256" cy="350" r="10" fill="#ffdfc4"/>
+      </g>
+    </g>
+    <!-- САША отлетает и падает -->
+    <g class="s6-hero-knock" style="opacity:0" filter="url(#wc2)">
+      <path d="M-24 -30 q26 -20 52 0 l7 82 q-33 11 -66 0 z" fill="#ff8c1a" transform="translate(150,290)"/>
+    </g>
+    <g class="s6-hero-knock" filter="url(#wc2)">
+      <path d="M156 340 q26 -20 52 0 l7 82 q-33 11 -66 0 z" fill="#ff8c1a"/>
+      <path d="M162 380 l5 34 q15 5 28 0 l5 -34 q-19 8 -38 0" fill="#2a4fc0"/>
+      <path d="M162 416 l-6 48 M198 416 l6 48" stroke="#2a4fc0" stroke-width="15" stroke-linecap="round"/>
+      <circle cx="182" cy="302" r="29" fill="#ffdfc4"/>
+      <path d="M155 295 q3 -27 36 -25 q24 2 22 23 q-8 -12 -29 -12 q-20 0 -29 14" fill="#8a5a2b"/>
+      <path d="M158 296 q24 -9 48 0 l-2 15 q-22 8 -44 0 z" fill="#ff8c1a"/>
+      <path d="M168 300 q9 6 18 0" stroke="#c96" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="192" cy="302" r="4.5" fill="#111"/><circle cx="210" cy="302" r="4.5" fill="#111"/>
+      <path d="M158 346 q-20 -14 -26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <path d="M204 344 q20 -14 26 -34" stroke="#ff8c1a" stroke-width="13" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="s6-dizzy"><text x="110" y="440" font-size="24">💫</text></g>
+    <g class="s6-dizzy" style="animation-delay:.3s"><text x="150" y="460" font-size="20">⭐</text></g>
+    <g class="s6-dizzy" style="animation-delay:.6s"><text x="90" y="470" font-size="22">✨</text></g>
+    <g class="s6-taunt" filter="url(#wc2)">
+      <ellipse cx="700" cy="180" rx="160" ry="76" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <path d="M600 246 l-36 40 l66 -26 z" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <text x="700" y="164" text-anchor="middle" font-size="27" fill="#5a2d8a">Ха-ха-ха!</text>
+      <text x="700" y="198" text-anchor="middle" font-size="22" fill="#c0392b">Ты слишком слаб для меня!</text>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 7. ЧЕЛОВЕК-ПАУК ВСТАЁТ И БЬЁТ ЗЛОДЕЯ ============ -->
+  <div class="scene" id="s7">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#4a3d6e"/>
+    <ellipse cx="450" cy="300" rx="450" ry="260" fill="#5a4680" opacity=".85" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- Саша лежит без сил на земле -->
+    <g filter="url(#wc2)" opacity=".9">
+      <path d="M100 470 q26 -14 52 0 l6 20 q-32 8 -64 0 z" fill="#ff8c1a"/>
+      <circle cx="126" cy="460" r="22" fill="#ffdfc4"/>
+    </g>
+    <!-- ЗЛОДЕЙ -->
+    <g class="anim s7-villain" filter="url(#wc2)">
+      <path d="M580 400 q110 -70 220 0 l30 120 h-280 z" fill="#5a2d8a"/>
+      <path d="M592 380 q-40 -30 -44 -76 l40 24 z" fill="#5a2d8a"/>
+      <path d="M788 380 q40 -30 44 -76 l-40 24 z" fill="#5a2d8a"/>
+      <g class="s7-villain-recoil" style="transform-origin:690px 310px">
+        <circle cx="690" cy="310" r="80" fill="#9fd66b"/>
+        <path d="M615 292 q10 -64 75 -68 q66 4 75 68 q-18 -31 -75 -33 q-57 2 -75 33" fill="#2f1b4d"/>
+        <ellipse cx="660" cy="322" rx="10" ry="12" fill="#fff"/>
+        <ellipse cx="712" cy="322" rx="10" ry="12" fill="#fff"/>
+        <circle cx="662" cy="326" r="5" fill="#1c142e"/>
+        <circle cx="710" cy="326" r="5" fill="#1c142e"/>
+        <path d="M654 356 q36 -14 72 0" stroke="#2f1b4d" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </g>
+    </g>
+    <g class="s7-hitburst">
+      <path d="M660 260 l12 24 26 -14 -8 26 26 8 -26 12 14 24 -28 -10 -6 28 -12 -26 -24 14 10 -28 -28 -8 28 -10 -10 -26 26 12 z" fill="#ffd23e" stroke="#e08a00" stroke-width="3" filter="url(#wc2)"/>
+    </g>
+    <g class="s7-bam">
+      <text x="690" y="280" text-anchor="middle" font-size="34" fill="#a33" style="text-shadow:2px 2px 0 #fff">БАМ!</text>
+    </g>
+    <!-- ЧЕЛОВЕК-ПАУК встаёт и прыгает в атаку -->
+    <g class="s7-spidey-standup">
+      <g class="s7-spidey-jump">
+        <g filter="url(#wc2)">
+          <path d="M90 400 q18 -16 36 0 l5 52 q-23 8 -46 0 z" fill="#d32f2f"/>
+          <path d="M94 428 l4 22 q10 4 20 0 l4 -22 q-14 5 -28 0" fill="#1e4bb8"/>
+          <circle cx="108" cy="382" r="19" fill="#d32f2f"/>
+          <path d="M95 379 q6 -8 11 -2 q2 6 -5 7 q-7 0 -6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+          <path d="M121 379 q-6 -8 -11 -2 q-2 6 5 7 q7 0 6 -5" fill="#fff" stroke="#111" stroke-width="1.8"/>
+          <path d="M94 396 q-4 -18 8 -26" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+          <path d="M124 404 q30 -10 40 6" stroke="#d32f2f" stroke-width="9" fill="none" stroke-linecap="round"/>
+          <circle cx="172" cy="404" r="9" fill="#1e4bb8"/>
+          <path d="M94 448 q-14 18 -24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <path d="M122 448 q14 18 24 20" stroke="#1e4bb8" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <rect class="s7-bandage" x="84" y="398" width="22" height="10" rx="4" fill="#f4dcc0" stroke="#c9a" stroke-width="1.2" transform="rotate(24 95 403)"/>
+        </g>
+      </g>
+    </g>
+   </svg>
+  </div>
+
+  <!-- ============ СЦЕНА 8. ЗЛОДЕЙ ИСЧЕЗАЕТ В ДЫМУ ============ -->
+  <div class="scene" id="s8">
+   <svg viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice">
+    <rect width="900" height="506" fill="#4a3d6e"/>
+    <ellipse cx="450" cy="300" rx="450" ry="260" fill="#5a4680" opacity=".85" filter="url(#soft)"/>
+    <rect x="0" y="430" width="900" height="76" fill="#2f2650" filter="url(#wc)"/>
+    <!-- герои стоят вместе -->
+    <g filter="url(#wc2)">
+      <path d="M140 380 q24 -18 48 0 l7 86 q-31 11 -62 0 z" fill="#ff8c1a"/>
+      <circle cx="164" cy="342" r="27" fill="#ffdfc4"/>
+      <rect x="146" y="378" width="20" height="9" rx="3.5" fill="#f4dcc0" stroke="#c9a" stroke-width="1" transform="rotate(22 156 382)"/>
+    </g>
+    <g filter="url(#wc2)">
+      <path d="M240 366 q22 -17 44 0 l6 80 q-28 10 -56 0 z" fill="#d32f2f"/>
+      <circle cx="262" cy="330" r="24" fill="#d32f2f"/>
+      <path d="M250 327 q5 -7 10 -1 q2 5 -4 6 q-6 0 -6 -5" fill="#fff" stroke="#111" stroke-width="1.6"/>
+      <path d="M276 327 q-5 -7 -10 -1 q-2 5 4 6 q6 0 6 -5" fill="#fff" stroke="#111" stroke-width="1.6"/>
+    </g>
+    <!-- ЗЛОДЕЙ держится за голову, кидает дымовую бомбу -->
+    <g class="anim s8-villain s8-villain-fade" filter="url(#wc2)">
+      <path d="M580 400 q110 -70 220 0 l30 120 h-280 z" fill="#5a2d8a"/>
+      <circle cx="690" cy="310" r="80" fill="#9fd66b"/>
+      <path d="M615 292 q10 -64 75 -68 q66 4 75 68 q-18 -31 -75 -33 q-57 2 -75 33" fill="#2f1b4d"/>
+      <ellipse cx="660" cy="322" rx="10" ry="12" fill="#fff"/>
+      <ellipse cx="712" cy="322" rx="10" ry="12" fill="#fff"/>
+      <circle cx="662" cy="326" r="5" fill="#1c142e"/>
+      <circle cx="710" cy="326" r="5" fill="#1c142e"/>
+      <path d="M672 356 q18 10 36 0" stroke="#2f1b4d" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M648 268 q-14 -10 -18 -24 M732 268 q14 -10 18 -24" stroke="#5a2d8a" stroke-width="12" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="s8-bomb">
+      <circle cx="640" cy="330" r="16" fill="#2f2650" stroke="#111" stroke-width="2"/>
+      <path d="M640 314 l4 -10" stroke="#c33" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g class="s8-smoke n1"><ellipse cx="640" cy="430" rx="100" ry="70" fill="#bcb8c8" filter="url(#soft)"/></g>
+    <g class="s8-smoke n2"><ellipse cx="700" cy="400" rx="120" ry="90" fill="#d8d4e4" filter="url(#soft)"/></g>
+    <g class="s8-smoke n3"><ellipse cx="600" cy="420" rx="90" ry="80" fill="#9c98ac" filter="url(#soft)"/></g>
+    <g class="s8-huh" filter="url(#wc2)">
+      <ellipse cx="300" cy="150" rx="130" ry="58" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <path d="M340 200 l20 30 l-42 -16 z" fill="#fff" stroke="#8a5fc4" stroke-width="5"/>
+      <text x="300" y="142" text-anchor="middle" font-size="24" fill="#5a2d8a">Куда он делся?!</text>
+      <text x="300" y="172" text-anchor="middle" font-size="19" fill="#3a2454">Убежал в дыму…</text>
+    </g>
+    <g class="s8-endtext">
+      <text x="450" y="480" text-anchor="middle" font-size="38" fill="#ffd76e" style="letter-spacing:.2em">ПРОДОЛЖЕНИЕ СЛЕДУЕТ…</text>
+    </g>
+   </svg>
+  </div>
+
+  <div id="grain"></div>
+  <div id="progress"></div>
+  <div id="caption"></div>
+  <button id="btn-replay">▶ Смотреть ещё раз</button>
+
+  <div id="start-overlay">
+    <div style="font-size:clamp(40px,9vmin,90px)">🕷️🦹‍♂️</div>
+    <h1>Саша и Человек-паук<br>3 серия: Битва со Злодеем</h1>
+    <div class="sub">акварельный мультфильм · 42 секунды</div>
+    <button id="btn-play">▶ Смотреть</button>
+  </div>
+ </div>
+</div>
+
+<script>
+(function(){
+  var TOTAL = 42000;
+  var scenes = [
+    {id:'s1', t:0},
+    {id:'s2', t:5000},
+    {id:'s3', t:9500},
+    {id:'s4', t:14000},
+    {id:'s5', t:18000},
+    {id:'s6', t:23000},
+    {id:'s7', t:31000},
+    {id:'s8', t:35500}
+  ];
+  var caps = [
+    {t:400,   end:4600,  html:'Саша и Человек-паук вместе летают над городом — охраняют улицы!'},
+    {t:5500,  end:9200,  html:'Но вдруг в небе появился <b>Злодей</b> — и с ним трое бандитов!'},
+    {t:9900,  end:13600, html:'Бандиты сразу начали стрелять в героев! Пиу-пиу!'},
+    {t:14400, end:17600, html:'Один выстрел попал в Человека-паука! «Ай!» — он ранен и падает…'},
+    {t:18300, end:22700, html:'Саша бросился на бандитов — и быстро всех одолел паутиной!'},
+    {t:23300, end:27000, html:'Саша один пошёл на Злодея… но проиграл и упал на землю.'},
+    {t:27300, end:30600, html:'<b>Злодей:</b> «Ха-ха-ха! Ты слишком слаб для меня!»'},
+    {t:31400, end:34800, html:'Но тут поднялся раненый Человек-паук… и как даст Злодею по голове! БАМ!'},
+    {t:35800, end:41500, html:'Злодей бросил дымовую бомбу — пшшш! — и исчез в дыму… Продолжение следует!'}
+  ];
+
+  var startOverlay = document.getElementById('start-overlay');
+  var btnPlay = document.getElementById('btn-play');
+  var btnReplay = document.getElementById('btn-replay');
+  var caption = document.getElementById('caption');
+  var progress = document.getElementById('progress');
+  var timers = [];
+
+  function clearAll(){
+    timers.forEach(clearTimeout); timers = [];
+    document.querySelectorAll('.scene').forEach(function(s){
+      s.classList.remove('active');
+      var svg = s.querySelector('svg');
+      if(svg){ var p = svg.parentNode; var c = svg.cloneNode(true); p.replaceChild(c, svg); }
+    });
+    caption.classList.remove('show');
+    btnReplay.style.display = 'none';
+    progress.style.width = '0%';
+  }
+
+  function play(){
+    clearAll();
+    scenes.forEach(function(sc){
+      timers.push(setTimeout(function(){
+        document.querySelectorAll('.scene').forEach(function(s){ s.classList.remove('active'); });
+        document.getElementById(sc.id).classList.add('active');
+      }, sc.t));
+    });
+    caps.forEach(function(c){
+      timers.push(setTimeout(function(){ caption.innerHTML = c.html; caption.classList.add('show'); }, c.t));
+      timers.push(setTimeout(function(){ caption.classList.remove('show'); }, c.end));
+    });
+    var t0 = Date.now();
+    var iv = setInterval(function(){
+      var p = Math.min(100, (Date.now()-t0)/TOTAL*100);
+      progress.style.width = p+'%';
+      if(p>=100) clearInterval(iv);
+    }, 200);
+    timers.push(setTimeout(function(){ btnReplay.style.display = 'block'; }, TOTAL));
+  }
+
+  btnPlay.addEventListener('click', function(){
+    startOverlay.classList.add('hidden');
+    setTimeout(play, 400);
+  });
+  btnReplay.addEventListener('click', play);
+})();
+</script>
+</body>
+</html>
