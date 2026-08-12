@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ДИКИЙ СКРИЧЕР · ЭПИЧНАЯ БИТВА · РЕАЛИЗМ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #000000;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      overflow: hidden;
+    }
+    .cartoon-box {
+      background: #000000ee;
+      border: 4px solid #6a7a94;
+      border-radius: 2rem;
+      padding: 0.8rem;
+      box-shadow: 0 0 80px #2e4a6b, 0 0 150px #000000;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 960px;
+      height: auto;
+      border-radius: 1.5rem;
+      background: #080c14;
+      box-shadow: inset 0 0 60px #000000, 0 35px 60px #000000f5;
+    }
+    .panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.8rem;
+      color: #e8edff;
+      font-weight: bold;
+      padding: 0 0.6rem;
+      gap: 1rem;
+    }
+    .hero-tags {
+      display: flex;
+      gap: 1.8rem;
+      font-size: 0.95rem;
+      text-shadow: 0 0 16px currentColor;
+    }
+    .dragon-tag {
+      color: #7effb2;
+      animation: glowDragon 1.5s infinite alternate;
+    }
+    .panther-tag {
+      color: #b8d0ff;
+      animation: glowPanther 1.5s infinite alternate;
+    }
+    @keyframes glowDragon {
+      from { text-shadow: 0 0 10px #00ff88; }
+      to { text-shadow: 0 0 25px #00ff88, 0 0 40px #00aa55; }
+    }
+    @keyframes glowPanther {
+      from { text-shadow: 0 0 10px #88aaff; }
+      to { text-shadow: 0 0 25px #88aaff, 0 0 40px #4466cc; }
+    }
+    button {
+      background: linear-gradient(180deg, #2a3f5a 0%, #162030 100%);
+      border: 2px solid #7b96b8;
+      color: #ffffff;
+      font-weight: bold;
+      padding: 0.6rem 1.8rem;
+      border-radius: 3rem;
+      font-size: 1rem;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #0a1018, 0 0 25px #3a5a7a;
+      transition: all 0.15s ease;
+      text-transform: uppercase;
+    }
+    button:hover {
+      background: linear-gradient(180deg, #3a5575 0%, #1e3045 100%);
+      box-shadow: 0 6px 0 #0a1018, 0 0 35px #5a8aba;
+    }
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #0a1018, 0 0 40px #7aaada;
+    }
+    .status-badge {
+      background: #00000080;
+      padding: 0.5rem 1.5rem;
+      border-radius: 2rem;
+      color: #ffd599;
+      font-weight: bold;
+      font-size: 0.9rem;
+      border: 1px solid #5a6a80;
+      backdrop-filter: blur(5px);
+    }
+    .intensity-meter {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: #ff9966;
+      font-size: 0.8rem;
+    }
+    .meter-bar {
+      width: 80px;
+      height: 8px;
+      background: #1a1a2e;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #4a5568;
+    }
+    .meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff4400, #ffaa00);
+      transition: width 0.3s;
+      box-shadow: 0 0 15px #ff6600;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="960" height="540" aria-label="Эпичная реалистичная битва"></canvas>
+    <div class="panel">
+      <div class="hero-tags">
+        <span class="dragon-tag">🐉🦁 ДРАКОН С ГРИВОЙ</span>
+        <span class="panther-tag">🐆❄️ ПАНТЕРА-БАРС</span>
+      </div>
+      <div class="intensity-meter">
+        <span>🔥 БОЙ</span>
+        <div class="meter-bar">
+          <div class="meter-fill" id="intensityFill" style="width: 0%;"></div>
+        </div>
+      </div>
+      <div class="status-badge" id="liveStatus">⚡ НАЧАЛО</div>
+      <button id="restartButton">🔄 ПЕРЕЗАПУСК</button>
+    </div>
+  </div>
+  <p style="color:#8899bb; margin-top:0.3rem; font-style:italic; letter-spacing:1px;">🦖 ВЕЛОЦИРАПТОРЫ · ПУЛЕМЁТЫ · ТРАНСФОРМАЦИЯ · ЭПИК</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+    const intensityFill = document.getElementById('intensityFill');
+
+    const W = 960, H = 540;
+
+    let frame = 0;
+    let animationId = null;
+
+    // Камера для динамики
+    let cameraShake = { x: 0, y: 0, intensity: 0 };
+
+    // ---------- ПЕРСОНАЖИ ----------
+    const dragon = {
+      x: 250, y: 340,
+      baseX: 250, baseY: 340,
+      mode: 'beast',
+      transformProgress: 0,
+      health: 100,
+      attackCooldown: 0,
+      animPhase: 0,
+    };
+
+    const panther = {
+      x: 650, y: 355,
+      baseX: 650, baseY: 355,
+      mode: 'beast',
+      transformProgress: 0,
+      health: 100,
+      attackCooldown: 0,
+      animPhase: 0,
+    };
+
+    const raptors = [
+      { x: 850, y: 350, targetX: 480, speed: 1.2, mode: 'beast', gunTimer: 0, health: 60, transformProgress: 0, attackPattern: 0 },
+      { x: 880, y: 280, targetX: 430, speed: 1.1, mode: 'beast', gunTimer: 0, health: 55, transformProgress: 0, attackPattern: 1 },
+      { x: 830, y: 430, targetX: 510, speed: 1.05, mode: 'beast', gunTimer: 0, health: 65, transformProgress: 0, attackPattern: 2 }
+    ];
+
+    const grill = { x: 450, y: 370, w: 90, h: 75, destroyed: 0 };
+
+    let storyPhase = 'intro';
+    let phaseTimer = 0;
+    let particles = [];
+    let bulletTrails = [];
+    let debris = [];
+    let explosions = [];
+    let screenShakeAmount = 0;
+
+    // ---------- РИСОВАНИЕ СУЩЕСТВ (РЕАЛИСТИЧНЫЙ СТИЛЬ) ----------
+    function drawDragonWithMane(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        let breathe = Math.sin(frameCount * 0.2) * 1.2;
+        let attackAnim = dragon.attackCooldown > 0 ? Math.sin(frameCount * 1.5) * 3 : 0;
+        ctx.translate(0, breathe + attackAnim * 0.5);
+
+        // Тень
+        ctx.fillStyle = '#00000066';
+        ctx.beginPath(); ctx.ellipse(0, 28, 38, 12, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Тело с мышечной структурой
+        const bodyGrad = ctx.createLinearGradient(-30, -20, 30, 30);
+        bodyGrad.addColorStop(0, '#1a4634');
+        bodyGrad.addColorStop(0.5, '#2a6b4c');
+        bodyGrad.addColorStop(1, '#0f2f22');
+        ctx.fillStyle = bodyGrad;
+        ctx.shadowColor = '#00ff8888';
+        ctx.shadowBlur = 25;
+        ctx.beginPath();
+        ctx.ellipse(0, 6, 38, 30, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Мускулатура и чешуя
+        ctx.fillStyle = '#1e5a3f';
+        ctx.beginPath(); ctx.ellipse(-14, -4, 17, 16, 0.15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#35855c';
+        ctx.beginPath(); ctx.ellipse(16, 8, 18, 16, -0.1, 0, Math.PI * 2); ctx.fill();
+
+        // Голова
+        const headGrad = ctx.createLinearGradient(-35, -30, -15, -5);
+        headGrad.addColorStop(0, '#1f5e3f');
+        headGrad.addColorStop(1, '#0d3622');
+        ctx.fillStyle = headGrad;
+        ctx.beginPath(); ctx.ellipse(-28, -20, 20, 21, 0.15, 0, Math.PI * 2); ctx.fill();
+
+        // Глаза с вертикальным зрачком
+        ctx.fillStyle = '#f5ffe0';
+        ctx.beginPath(); ctx.arc(-34, -26, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath(); ctx.ellipse(-36, -27, 2, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(-37, -29, 1.5, 0, Math.PI * 2); ctx.fill();
+
+        // Рога
+        ctx.strokeStyle = '#c9a24d';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-40, -42); ctx.lineTo(-50, -65); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-22, -40); ctx.lineTo(-14, -63); ctx.stroke();
+
+        // ГРИВА ЛЬВА (детальная)
+        const maneColors = ['#b8860b', '#daa520', '#cd853f', '#8b6508'];
+        for (let i = 0; i < 24; i++) {
+          let angle = (i / 24) * Math.PI * 2 + 0.3;
+          let dist = 20 + Math.sin(frameCount * 0.4 + i) * 2;
+          let gx = -28 + Math.cos(angle) * dist;
+          let gy = -20 + Math.sin(angle) * dist;
+          ctx.fillStyle = maneColors[i % 4];
+          ctx.shadowColor = '#ffd70088';
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 5 + Math.sin(frameCount * 0.6 + i) * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Крылья с перепонками
+        ctx.fillStyle = '#1a5a3a';
+        ctx.beginPath(); ctx.moveTo(-5, -30); ctx.quadraticCurveTo(-30, -55, -15, -45);
+        ctx.quadraticCurveTo(0, -40, 5, -30); ctx.fill();
+        ctx.fillStyle = '#2a7a52';
+        ctx.beginPath(); ctx.moveTo(10, -28); ctx.quadraticCurveTo(35, -50, 20, -40);
+        ctx.quadraticCurveTo(5, -35, -5, -28); ctx.fill();
+
+        // Дыхание огнём
+        if (dragon.attackCooldown > 15) {
+          ctx.fillStyle = '#ff6600';
+          ctx.shadowColor = '#ff4400';
+          ctx.shadowBlur = 30;
+          ctx.beginPath(); ctx.arc(-48, -22, 12 + Math.random() * 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffcc00';
+          ctx.beginPath(); ctx.arc(-52, -22, 6, 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        let mp = Math.min(progress, 1);
+        ctx.globalAlpha = mp;
+        ctx.fillStyle = '#1a3a2a';
+        ctx.shadowColor = '#00ff8888';
+        ctx.shadowBlur = 22;
+        ctx.fillRect(-38, -22, 76, 42);
+        ctx.fillStyle = '#2a5a3f';
+        ctx.fillRect(-30, -16, 58, 28);
+        ctx.fillStyle = '#000000';
+        ctx.beginPath(); ctx.arc(-24, 24, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(24, 24, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.arc(-24, 24, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(24, 24, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawPantherSnowLeopard(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        let tailWag = Math.sin(frameCount * 0.45) * 1.8;
+        let attackAnim = panther.attackCooldown > 0 ? Math.sin(frameCount * 2) * 4 : 0;
+        ctx.translate(attackAnim * 0.3, 0);
+
+        // Тень
+        ctx.fillStyle = '#00000066';
+        ctx.beginPath(); ctx.ellipse(0, 30, 36, 13, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Тело
+        const bodyGrad = ctx.createLinearGradient(-30, -25, 30, 25);
+        bodyGrad.addColorStop(0, '#1a1a2e');
+        bodyGrad.addColorStop(0.5, '#252540');
+        bodyGrad.addColorStop(1, '#0f0f1a');
+        ctx.fillStyle = bodyGrad;
+        ctx.shadowColor = '#8899cc88';
+        ctx.shadowBlur = 22;
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 35, 32, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Пятна снежного барса
+        ctx.fillStyle = '#c4d3e8';
+        ctx.beginPath(); ctx.arc(-11, -10, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(16, 8, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#8b9db5';
+        ctx.beginPath(); ctx.arc(8, -22, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#b7c7dd';
+        ctx.beginPath(); ctx.arc(-22, 14, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#d0daea';
+        ctx.beginPath(); ctx.arc(0, -2, 7, 0, Math.PI * 2); ctx.fill();
+
+        // Голова
+        ctx.fillStyle = '#10101c';
+        ctx.beginPath(); ctx.ellipse(-34, -12, 18, 20, 0.1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#eaf2ff';
+        ctx.beginPath(); ctx.arc(-40, -17, 6.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000022';
+        ctx.beginPath(); ctx.ellipse(-42, -18, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(-43, -20, 1.5, 0, Math.PI * 2); ctx.fill();
+
+        // Уши
+        ctx.fillStyle = '#1c1c2a';
+        ctx.beginPath(); ctx.ellipse(-45, -32, 8, 12, -0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-26, -34, 7, 11, 0.2, 0, Math.PI * 2); ctx.fill();
+
+        // Хвост
+        ctx.strokeStyle = '#1e1e30';
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(32, 14); ctx.lineTo(50 + tailWag, 26); ctx.stroke();
+
+        // Когти (атака)
+        if (panther.attackCooldown > 10) {
+          ctx.strokeStyle = '#ddeeff';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(-44, -5); ctx.lineTo(-54, -15); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-44, -2); ctx.lineTo(-56, -8); ctx.stroke();
+        }
+      } else {
+        let mp = Math.min(progress, 1);
+        ctx.globalAlpha = mp;
+        ctx.fillStyle = '#13131f';
+        ctx.shadowColor = '#8899cc88';
+        ctx.shadowBlur = 18;
+        ctx.fillRect(-38, -24, 76, 44);
+        ctx.fillStyle = '#1e1e32';
+        ctx.fillRect(-30, -18, 58, 30);
+        ctx.fillStyle = '#000000';
+        ctx.beginPath(); ctx.arc(-26, 26, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(26, 26, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawVelociraptor(r, idx, frameCount) {
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      if (r.mode === 'beast') {
+        let runningAnim = Math.sin(frameCount * 0.8 + idx) * 2;
+        ctx.translate(0, runningAnim);
+
+        // Тень
+        ctx.fillStyle = '#00000066';
+        ctx.beginPath(); ctx.ellipse(0, 28, 28, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Тело велоцираптора
+        const bodyGrad = ctx.createLinearGradient(-25, -15, 25, 20);
+        bodyGrad.addColorStop(0, '#6b5e4a');
+        bodyGrad.addColorStop(0.5, '#8b7b64');
+        bodyGrad.addColorStop(1, '#4d4232');
+        ctx.fillStyle = bodyGrad;
+        ctx.shadowColor = '#3d362a88';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 28, 22, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Полосы на спине
+        ctx.fillStyle = '#3a3124';
+        for (let s = -20; s <= 15; s += 8) {
+          ctx.fillRect(s, -18, 5, 8);
+        }
+
+        // Хвост
+        ctx.strokeStyle = '#5a4d38';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(24, 12);
+        ctx.quadraticCurveTo(40, 18, 52, 28);
+        ctx.stroke();
+
+        // Голова
+        ctx.fillStyle = '#4d4232';
+        ctx.beginPath();
+        ctx.ellipse(-24, -10, 14, 12, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Челюсть с зубами
+        ctx.fillStyle = '#c4b59b';
+        ctx.beginPath();
+        ctx.ellipse(-30, -3, 9, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff8e0';
+        for (let t = 0; t < 5; t++) {
+          ctx.beginPath();
+          ctx.moveTo(-36 + t * 2.5, -5);
+          ctx.lineTo(-38 + t * 2.5, 2);
+          ctx.strokeStyle = '#e0d7c0';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Глаз
+        ctx.fillStyle = '#f0b300';
+        ctx.beginPath();
+        ctx.arc(-28, -16, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.ellipse(-30, -17, 1.8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Когти на ногах
+        ctx.fillStyle = '#3a3124';
+        ctx.beginPath();
+        ctx.moveTo(-10, 26);
+        ctx.lineTo(-16, 38);
+        ctx.lineTo(-4, 30);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(10, 26);
+        ctx.lineTo(6, 39);
+        ctx.lineTo(16, 30);
+        ctx.fill();
+
+        // Атака когтями
+        if (r.attackPattern === 0 && frameCount % 30 < 5) {
+          ctx.strokeStyle = '#ffdd88';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(-16, 38);
+          ctx.lineTo(-22, 45);
+          ctx.stroke();
+        }
+      } else {
+        // Машина-велоцираптор (пулемётная)
+        ctx.fillStyle = '#4e4b44';
+        ctx.shadowColor = '#b8733388';
+        ctx.shadowBlur = 16;
+        ctx.fillRect(-30, -20, 60, 38);
+        ctx.fillStyle = '#2f2c27';
+        ctx.fillRect(-24, -15, 46, 28);
+        ctx.fillStyle = '#1a1814';
+        ctx.beginPath();
+        ctx.arc(-23, 22, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(23, 22, 11, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Пулемёт
+        ctx.fillStyle = '#5f5542';
+        ctx.fillRect(30, -8, 28, 9);
+        ctx.fillStyle = '#3d3832';
+        ctx.fillRect(42, -6, 18, 6);
+
+        // Вспышка выстрела
+        if (r.gunTimer > 0) {
+          ctx.fillStyle = '#ff8800';
+          ctx.shadowColor = '#ff4400';
+          ctx.shadowBlur = 28;
+          ctx.beginPath();
+          ctx.arc(60, -3, 12 + Math.random() * 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffff00';
+          ctx.beginPath();
+          ctx.arc(64, -3, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // ---------- ЭФФЕКТЫ ----------
+    function spawnParticles(x, y, color, count = 12, spread = 6) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * spread * 2,
+          vy: (Math.random() - 0.5) * spread * 2 - 3,
+          life: 25 + Math.random() * 30,
+          color,
+          size: 1.5 + Math.random() * 5,
+          gravity: 0.1 + Math.random() * 0.2,
+        });
+      }
+    }
+
+    function spawnExplosion(x, y, size = 30) {
+      explosions.push({
+        x,
+        y,
+        radius: 0,
+        maxRadius: size + Math.random() * 20,
+        life: 20,
+        color: '#ff6600',
+      });
+      spawnParticles(x, y, '#ff8800', 20, 8);
+      spawnParticles(x, y, '#ffcc00', 15, 5);
+      screenShakeAmount = Math.max(screenShakeAmount, 8);
+    }
+
+    function spawnBulletTrail(x, y, targetX, targetY) {
+      bulletTrails.push({
+        x,
+        y,
+        targetX,
+        targetY,
+        life: 8,
+        color: '#ffcc44',
+      });
+    }
+
+    // ---------- СЮЖЕТ И БИТВА ----------
+    function updateStory() {
+      // Движение рапторов
+      raptors.forEach(r => {
+        if (r.x > r.targetX && storyPhase !== 'escape') {
+          r.x -= r.speed;
+        }
+        if (r.gunTimer > 0) r.gunTimer -= 0.8;
+      });
+
+      // Кулдауны атак
+      if (dragon.attackCooldown > 0) dragon.attackCooldown--;
+      if (panther.attackCooldown > 0) panther.attackCooldown--;
+
+      // Фазы сюжета
+      if (storyPhase === 'intro') {
+        phaseTimer++;
+        if (phaseTimer > 60) { storyPhase = 'meeting'; phaseTimer = 0; }
+      } else if (storyPhase === 'meeting') {
+        phaseTimer++;
+        if (phaseTimer > 80) { storyPhase = 'raptor_approach'; phaseTimer = 0; }
+      } else if (storyPhase === 'raptor_approach') {
+        phaseTimer++;
+        if (phaseTimer > 50) { storyPhase = 'battle_start'; phaseTimer = 0; }
+      } else if (storyPhase === 'battle_start') {
+        phaseTimer++;
+        raptors.forEach(r => { if (r.mode === 'beast') r.mode = 'machine'; });
+        if (phaseTimer > 30) { storyPhase = 'fierce_battle'; phaseTimer = 0; }
+      } else if (storyPhase === 'fierce_battle') {
+        phaseTimer++;
+        // Эпичная битва
+        const intensity = Math.min(100, phaseTimer / 1.5);
+        intensityFill.style.width = intensity + '%';
+
+        // Атаки дракона
+        if (frame % 25 === 0 && dragon.attackCooldown <= 0) {
+          dragon.attackCooldown = 20;
+          let targetRaptor = raptors[Math.floor(Math.random() * 3)];
+          spawnExplosion(targetRaptor.x - 20, targetRaptor.y - 10, 25);
+          targetRaptor.health -= 8;
+          spawnParticles(targetRaptor.x, targetRaptor.y, '#ff4400', 15, 7);
+        }
+
+        // Атаки пантеры
+        if (frame % 30 === 0 && panther.attackCooldown <= 0) {
+          panther.attackCooldown = 25;
+          let targetRaptor = raptors[Math.floor(Math.random() * 3)];
+          spawnExplosion(targetRaptor.x - 15, targetRaptor.y - 5, 20);
+          targetRaptor.health -= 10;
+          spawnParticles(targetRaptor.x, targetRaptor.y, '#88aaff', 12, 6);
+        }
+
+        // Атаки рапторов
+        raptors.forEach((r, i) => {
+          if (Math.random() < 0.4) {
+            r.gunTimer = 5 + Math.random() * 8;
+            spawnBulletTrail(r.x + 35, r.y - 5, dragon.x - 20, dragon.y - 15);
+            if (Math.random() < 0.5) {
+              spawnBulletTrail(r.x + 35, r.y - 5, panther.x - 15, panther.y - 10);
+            }
+          }
+          if (r.gunTimer > 2 && Math.random() < 0.5) {
+            spawnParticles(r.x + 40, r.y - 8, '#ff8844', 4, 3);
+            if (Math.random() < 0.3) {
+              dragon.health -= 0.5;
+              panther.health -= 0.3;
+            }
+          }
+        });
+
+        // Разрушение гриля
+        if (phaseTimer > 40 && grill.destroyed < 100) {
+          grill.destroyed += 0.8;
+          if (Math.random() < 0.3) {
+            debris.push({
+              x: grill.x + Math.random() * grill.w - 30,
+              y: grill.y + Math.random() * grill.h - 20,
+              vx: (Math.random() - 0.5) * 4,
+              vy: -Math.random() * 3,
+              life: 30 + Math.random() * 20,
+              size: 3 + Math.random() * 8,
+            });
+          }
+        }
+
+        // Тряска камеры
+        cameraShake.intensity = Math.max(0, cameraShake.intensity - 0.3);
+        if (frame % 8 === 0) cameraShake.intensity = Math.min(6, cameraShake.intensity + 2);
+
+        // Переход к трансформации
+        if (phaseTimer > 130) {
+          storyPhase = 'transform_all';
+          phaseTimer = 0;
+          spawnExplosion(dragon.x, dragon.y, 40);
+          spawnExplosion(panther.x, panther.y, 40);
+        }
+      } else if (storyPhase === 'transform_all') {
+        phaseTimer++;
+        intensityFill.style.width = '100%';
+        dragon.transformProgress = Math.min(1, phaseTimer / 60);
+        panther.transformProgress = Math.min(1, phaseTimer / 60);
+        raptors.forEach(r => { r.mode = 'machine'; });
+
+        if (phaseTimer > 70) {
+          storyPhase = 'escape';
+          phaseTimer = 0;
+        }
+      } else if (storyPhase === 'escape') {
+        dragon.x += 5;
+        panther.x += 5.5;
+        raptors.forEach(r => r.x += 4.5 + Math.random() * 2);
+        intensityFill.style.width = '0%';
+
+        if (dragon.x > W + 150) {
+          resetAll();
+          storyPhase = 'intro';
+          phaseTimer = 0;
+          intensityFill.style.width = '0%';
+        }
+      }
+
+      // Обновление статуса
+      let msg = '';
+      switch (storyPhase) {
+        case 'intro':
+          msg = '🌿 ДРАКОН С ГРИВОЙ ПРОБУЖДАЕТСЯ';
+          break;
+        case 'meeting':
+          msg = '🤝 ПАНТЕРА-БАРС У РАЗРУШЕННОГО ГРИЛЯ';
+          break;
+        case 'raptor_approach':
+          msg = '🦖 ВЕЛОЦИРАПТОРЫ НАПАДАЮТ!';
+          break;
+        case 'battle_start':
+          msg = '🔫 РАПТОРЫ ПРЕВРАЩАЮТСЯ В ПУЛЕМЁТЫ!';
+          break;
+        case 'fierce_battle':
+          msg = '💥 ЭПИЧНАЯ БИТВА! ОГОНЬ И КОГТИ!';
+          break;
+        case 'transform_all':
+          msg = '🚗 ВСЕ ТРАНСФОРМИРУЮТСЯ В МАШИНЫ!';
+          break;
+        case 'escape':
+          msg = '🏁 ГЕРОИ УЕЗЖАЮТ В ЗАКАТ!';
+          break;
+      }
+      statusEl.textContent = '🎬 ' + msg;
+
+      // Обновление частиц
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      // Обновление трассеров пуль
+      for (let i = bulletTrails.length - 1; i >= 0; i--) {
+        bulletTrails[i].life--;
+        if (bulletTrails[i].life <= 0) bulletTrails.splice(i, 1);
+      }
+
+      // Обновление обломков
+      for (let i = debris.length - 1; i >= 0; i--) {
+        let d = debris[i];
+        d.x += d.vx;
+        d.y += d.vy;
+        d.vy += 0.2;
+        d.life--;
+        if (d.life <= 0) debris.splice(i, 1);
+      }
+
+      // Обновление взрывов
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        explosions[i].radius += 2;
+        explosions[i].life--;
+        if (explosions[i].life <= 0) explosions.splice(i, 1);
+      }
+
+      // Тряска камеры
+      if (screenShakeAmount > 0) {
+        cameraShake.x = (Math.random() - 0.5) * screenShakeAmount;
+        cameraShake.y = (Math.random() - 0.5) * screenShakeAmount;
+        screenShakeAmount *= 0.85;
+        if (screenShakeAmount < 0.1) screenShakeAmount = 0;
+      } else {
+        cameraShake.x = 0;
+        cameraShake.y = 0;
+      }
+    }
+
+    function resetAll() {
+      dragon.x = dragon.baseX;
+      dragon.y = dragon.baseY;
+      dragon.mode = 'beast';
+      dragon.transformProgress = 0;
+      dragon.health = 100;
+      dragon.attackCooldown = 0;
+      panther.x = panther.baseX;
+      panther.y = panther.baseY;
+      panther.mode = 'beast';
+      panther.transformProgress = 0;
+      panther.health = 100;
+      panther.attackCooldown = 0;
+      raptors[0].x = 850;
+      raptors[0].y = 350;
+      raptors[0].mode = 'beast';
+      raptors[0].gunTimer = 0;
+      raptors[0].health = 60;
+      raptors[1].x = 880;
+      raptors[1].y = 280;
+      raptors[1].mode = 'beast';
+      raptors[1].gunTimer = 0;
+      raptors[1].health = 55;
+      raptors[2].x = 830;
+      raptors[2].y = 430;
+      raptors[2].mode = 'beast';
+      raptors[2].gunTimer = 0;
+      raptors[2].health = 65;
+      grill.destroyed = 0;
+      particles = [];
+      bulletTrails = [];
+      debris = [];
+      explosions = [];
+      screenShakeAmount = 0;
+      cameraShake = { x: 0, y: 0, intensity: 0 };
+    }
+
+    function drawBackground() {
+      // Небо
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+      skyGrad.addColorStop(0, '#050a14');
+      skyGrad.addColorStop(0.5, '#0f1a2e');
+      skyGrad.addColorStop(1, '#1a2a40');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Луна
+      ctx.fillStyle = '#fefae0';
+      ctx.shadowColor = '#ffdd99';
+      ctx.shadowBlur = 35;
+      ctx.beginPath();
+      ctx.arc(140, 110, 48, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Звёзды
+      for (let i = 0; i < 50; i++) {
+        let sx = (i * 137 + 50) % W;
+        let sy = (i * 97 + 30) % (H * 0.6);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(sx, sy, 1.5, 1.5);
+      }
+
+      // Город
+      ctx.fillStyle = '#0f1520';
+      ctx.fillRect(0, 420, W, 130);
+      for (let i = 0; i < 15; i++) {
+        ctx.fillStyle = '#182233';
+        ctx.fillRect(i * 70, 390, 48, 70);
+        ctx.fillStyle = '#1a2538';
+        ctx.fillRect(i * 70 + 5, 385, 38, 8);
+      }
+
+      // Разрушенный гриль
+      ctx.fillStyle = '#1a1c22';
+      ctx.strokeStyle = '#4d5562';
+      ctx.lineWidth = 4;
+      ctx.fillRect(grill.x - 28, grill.y - 22, grill.w, grill.h);
+      ctx.strokeRect(grill.x - 28, grill.y - 22, grill.w, grill.h);
+
+      // Разрушение гриля
+      if (grill.destroyed > 0) {
+        ctx.fillStyle = '#ff6600';
+        ctx.globalAlpha = grill.destroyed / 100 * 0.6;
+        ctx.fillRect(grill.x - 28, grill.y - 22, grill.w, grill.h);
+        ctx.globalAlpha = 1;
+      }
+
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(grill.x - 18 + i * 18, grill.y - 22);
+        ctx.lineTo(grill.x - 12 + i * 18 + (i % 2 * 4), grill.y + 48);
+        ctx.strokeStyle = '#0f0f14';
+        ctx.stroke();
+      }
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(cameraShake.x, cameraShake.y);
+
+      drawBackground();
+
+      // Обломки
+      debris.forEach(d => {
+        ctx.fillStyle = '#4a4a5a';
+        ctx.fillRect(d.x, d.y, d.size, d.size);
+      });
+
+      // Трассеры пуль
+      bulletTrails.forEach(t => {
+        ctx.strokeStyle = t.color;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = t.life / 8;
+        ctx.beginPath();
+        ctx.moveTo(t.x, t.y);
+        ctx.lineTo(t.targetX, t.targetY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+
+      // Взрывы
+      explosions.forEach(e => {
+        const alpha = e.life / 20;
+        ctx.fillStyle = `rgba(255, ${100 + e.radius}, 0, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255, 255, 100, ${alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Герои
+      let dMachine = storyPhase === 'transform_all' || storyPhase === 'escape';
+      let pMachine = storyPhase === 'transform_all' || storyPhase === 'escape';
+      drawDragonWithMane(dragon.x, dragon.y, frame, dMachine, dragon.transformProgress);
+      drawPantherSnowLeopard(panther.x, panther.y, frame, pMachine, panther.transformProgress);
+
+      // Рапторы
+      raptors.forEach((r, i) => drawVelociraptor(r, i, frame));
+
+      // Частицы
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+
+      ctx.restore();
+
+      // Эпичные надписи поверх всего
+      if (storyPhase === 'fierce_battle') {
+        ctx.font = 'bold 30px "Impact", "Arial Black"';
+        ctx.fillStyle = '#ff8833';
+        ctx.shadowColor = '#ff4400';
+        ctx.shadowBlur = 20;
+        ctx.fillText('⚡ ДИКИЙ СКРИЧЕР ⚡', W / 2 - 180, 70);
+        ctx.fillStyle = '#88aaff';
+        ctx.fillText('ICE STRIKE', panther.x - 70, panther.y - 60);
+        ctx.shadowBlur = 0;
+      } else if (storyPhase === 'transform_all') {
+        ctx.font = 'italic 28px "Impact"';
+        ctx.fillStyle = '#ffdd88';
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur = 15;
+        ctx.fillText('ТРАНСФОРМАЦИЯ!', W / 2 - 140, 80);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function loop() {
+      frame++;
+      updateStory();
+      drawScene();
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function restart() {
+      if (animationId) cancelAnimationFrame(animationId);
+      resetAll();
+      storyPhase = 'intro';
+      phaseTimer = 0;
+      frame = 0;
+      loop();
+    }
+
+    document.getElementById('restartButton').addEventListener('click', restart);
+    restart();
+
+    window.addEventListener('beforeunload', () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    });
+  })();
+</script>
+</body>
+</html>

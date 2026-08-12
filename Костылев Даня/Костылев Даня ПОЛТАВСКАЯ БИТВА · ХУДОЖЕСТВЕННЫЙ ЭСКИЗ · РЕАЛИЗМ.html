@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ПОЛТАВСКАЯ БИТВА · ХУДОЖЕСТВЕННЫЙ ЭСКИЗ · РЕАЛИЗМ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0505; min-height: 100vh; display: flex; justify-content: center; align-items: center;
+      font-family: 'Georgia', 'Times New Roman', serif; overflow: hidden;
+    }
+    .cartoon-box {
+      background: #000000ee; border: 5px solid #8a7020; border-radius: 2rem; padding: 0.8rem;
+      box-shadow: 0 0 100px #6b4f10, 0 0 200px #000000;
+    }
+    canvas {
+      display: block; width: 100%; max-width: 1000px; height: auto; border-radius: 1.5rem;
+      background: #f5f0e0; box-shadow: inset 0 0 80px #00000044, 0 40px 70px #000000f5;
+    }
+    .panel {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 0.8rem;
+      color: #f0e0c0; font-weight: bold; padding: 0 0.6rem; gap: 1rem; flex-wrap: wrap;
+    }
+    .hero-tags { display: flex; gap: 2rem; font-size: 1rem; text-shadow: 0 0 18px currentColor; letter-spacing: 1px; }
+    .russian-tag { color: #ffcc44; animation: glowRussian 1.5s infinite alternate; }
+    .swedish-tag { color: #5599ff; animation: glowSwedish 1.5s infinite alternate; }
+    @keyframes glowRussian { from { text-shadow: 0 0 10px #ffaa00; } to { text-shadow: 0 0 30px #ffaa00, 0 0 50px #ff6600; } }
+    @keyframes glowSwedish { from { text-shadow: 0 0 10px #4488ff; } to { text-shadow: 0 0 30px #4488ff, 0 0 50px #0044cc; } }
+    button {
+      background: linear-gradient(180deg, #6b4f10 0%, #3a2005 100%); border: 2px solid #aa8833;
+      color: #ffeebb; font-weight: bold; padding: 0.7rem 2rem; border-radius: 3rem;
+      font-size: 1rem; letter-spacing: 1px; cursor: pointer;
+      box-shadow: 0 6px 0 #1a0a00, 0 0 30px #8a6a20; transition: all 0.15s ease; text-transform: uppercase;
+      font-family: 'Georgia', serif;
+    }
+    button:hover { background: linear-gradient(180deg, #8a6a20 0%, #5a3a10 100%); box-shadow: 0 6px 0 #1a0a00, 0 0 45px #aa8833; }
+    button:active { transform: translateY(4px); box-shadow: 0 2px 0 #1a0a00, 0 0 50px #ccaa55; }
+    .status-badge {
+      background: #00000080; padding: 0.5rem 1.5rem; border-radius: 2rem; color: #ffd599;
+      font-weight: bold; font-size: 0.9rem; border: 1px solid #8a7020; backdrop-filter: blur(5px); letter-spacing: 0.5px;
+    }
+    .phase-indicator {
+      display: flex; align-items: center; gap: 0.3rem; color: #ffcc88; font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="1000" height="560" aria-label="Полтавская битва — художественная графика"></canvas>
+    <div class="panel">
+      <div class="hero-tags">
+        <span class="russian-tag">🇷🇺 ПЁТР I · РУССКАЯ АРМИЯ</span>
+        <span class="swedish-tag">🇸🇪 КАРЛ XII · ШВЕДСКАЯ АРМИЯ</span>
+      </div>
+      <div class="phase-indicator" id="phaseDisplay">🎨 ЭСКИЗ</div>
+      <div class="status-badge" id="liveStatus">🏰 ПОЛТАВА · 1709</div>
+      <button id="restartButton">⚜️ НАЧАТЬ ЗАНОВО</button>
+    </div>
+  </div>
+  <p style="color:#aa9966; margin-top:0.3rem; font-style:italic; letter-spacing:1px;">
+    🖌️ Художественный стиль · Массивные армии · Реалистичные мундиры
+  </p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+    const phaseDisplay = document.getElementById('phaseDisplay');
+
+    const W = 1000, H = 560;
+    let frame = 0;
+    let animationId = null;
+    let cameraShake = { x: 0, y: 0 };
+    let screenShakeAmount = 0;
+    let sketchProgress = 0; // 0 до 1 — прогресс эскиза
+    let sketchMode = true;
+
+    // ---------- ГЕРОИ (реалистичные, не сражаются лично) ----------
+    const peter = {
+      x: 180, y: 170, baseX: 180, baseY: 170,
+      health: 200, maxHealth: 200,
+    };
+    const charles = {
+      x: 820, y: 180, baseX: 820, baseY: 180,
+      health: 180, maxHealth: 180,
+    };
+
+    // Армии (увеличенные)
+    const russianArmy = [];
+    const swedishArmy = [];
+    const cannons = [];
+    const cavalry = [];
+
+    let particles = [];
+    let explosions = [];
+    let smokeClouds = [];
+    let bulletTrails = [];
+
+    let storyPhase = 'sketch';
+    let phaseTimer = 0;
+    let battleIntensity = 0;
+
+    function initArmies() {
+      russianArmy.length = 0;
+      swedishArmy.length = 0;
+      cannons.length = 0;
+      cavalry.length = 0;
+
+      // Русская пехота (40 солдат)
+      for (let i = 0; i < 40; i++) {
+        russianArmy.push({
+          x: 50 + Math.random() * 250,
+          y: 380 + Math.random() * 120,
+          targetX: 350 + Math.random() * 300,
+          speed: 0.2 + Math.random() * 0.6,
+          health: 30 + Math.random() * 25,
+          animPhase: Math.random() * Math.PI * 2,
+          type: i < 30 ? 'musketeer' : 'grenadier',
+          alive: true,
+          shooting: false,
+          shootCooldown: 0,
+        });
+      }
+      // Шведская пехота (35 солдат)
+      for (let i = 0; i < 35; i++) {
+        swedishArmy.push({
+          x: 700 + Math.random() * 250,
+          y: 380 + Math.random() * 120,
+          targetX: 300 + Math.random() * 350,
+          speed: 0.2 + Math.random() * 0.7,
+          health: 35 + Math.random() * 30,
+          animPhase: Math.random() * Math.PI * 2,
+          type: i < 25 ? 'musketeer' : 'pikeman',
+          alive: true,
+          shooting: false,
+          shootCooldown: 0,
+        });
+      }
+      // Пушки (6 штук)
+      for (let i = 0; i < 6; i++) {
+        cannons.push({
+          x: i < 3 ? 120 + i * 180 : 520 + (i - 3) * 160,
+          y: 440,
+          side: i < 3 ? 'russian' : 'swedish',
+          cooldown: 0,
+          smokeTimer: 0,
+        });
+      }
+      // Кавалерия (10 всадников)
+      for (let i = 0; i < 10; i++) {
+        cavalry.push({
+          x: i < 5 ? 80 + i * 100 : 650 + (i - 5) * 80,
+          y: 340 + Math.random() * 50,
+          side: i < 5 ? 'russian' : 'swedish',
+          targetX: i < 5 ? 550 : 400,
+          speed: 0.5 + Math.random() * 1.0,
+          health: 50,
+          alive: true,
+          lanceAnim: 0,
+        });
+      }
+    }
+
+    // ---------- РИСОВАНИЕ (ХУДОЖЕСТВЕННЫЙ СТИЛЬ) ----------
+    function drawSketchBackground() {
+      // Бумажный фон
+      const paperGrad = ctx.createLinearGradient(0, 0, 0, H);
+      paperGrad.addColorStop(0, '#faf5e8');
+      paperGrad.addColorStop(0.5, '#f0e8d0');
+      paperGrad.addColorStop(1, '#e8dcc0');
+      ctx.fillStyle = paperGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Текстура бумаги
+      ctx.fillStyle = '#00000008';
+      for (let i = 0; i < 500; i++) {
+        let tx = (i * 137 + 50) % W;
+        let ty = (i * 97 + 30) % H;
+        ctx.fillRect(tx, ty, 1, 1);
+      }
+
+      // Линии эскиза (карандаш)
+      ctx.strokeStyle = '#4a3a2a';
+      ctx.lineWidth = 0.8;
+      ctx.globalAlpha = sketchProgress;
+
+      // Горизонт
+      ctx.beginPath();
+      ctx.moveTo(0, 380);
+      ctx.lineTo(W, 380);
+      ctx.stroke();
+
+      // Холмы
+      ctx.beginPath();
+      ctx.moveTo(0, 390);
+      ctx.quadraticCurveTo(250, 350, 500, 380);
+      ctx.quadraticCurveTo(750, 410, 1000, 390);
+      ctx.stroke();
+
+      // Наброски редутов
+      [200, 350, 500, 650, 800].forEach(rx => {
+        ctx.strokeRect(rx - 15, 375, 30, 15);
+        ctx.beginPath();
+        ctx.moveTo(rx - 15, 375);
+        ctx.lineTo(rx, 365);
+        ctx.lineTo(rx + 15, 375);
+        ctx.stroke();
+      });
+
+      // Наброски армий (массы)
+      ctx.fillStyle = '#4a3a2a';
+      for (let i = 0; i < 80; i++) {
+        let sx = 80 + Math.random() * 200;
+        let sy = 400 + Math.random() * 80;
+        ctx.fillRect(sx, sy, 3, 8);
+      }
+      for (let i = 0; i < 70; i++) {
+        let sx = 720 + Math.random() * 200;
+        let sy = 400 + Math.random() * 80;
+        ctx.fillRect(sx, sy, 3, 8);
+      }
+
+      ctx.globalAlpha = 1;
+    }
+
+    function drawRealisticPeter(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let breathe = Math.sin(frameCount * 0.3) * 0.8;
+      ctx.translate(0, breathe);
+
+      // Конь (реалистичный вороной)
+      const horseGrad = ctx.createLinearGradient(-35, -20, 35, 20);
+      horseGrad.addColorStop(0, '#1a1a1a');
+      horseGrad.addColorStop(0.5, '#2a2a2a');
+      horseGrad.addColorStop(1, '#0a0a0a');
+      ctx.fillStyle = horseGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -5, 38, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Мышцы коня
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath();
+      ctx.ellipse(-15, -12, 12, 10, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(15, -10, 12, 10, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // Голова коня
+      ctx.fillStyle = '#0a0a0a';
+      ctx.beginPath();
+      ctx.ellipse(-33, -22, 16, 13, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(-40, -26, 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Грива
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-28, -30);
+      ctx.quadraticCurveTo(-20, -38, -10, -32);
+      ctx.stroke();
+      // Ноги
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 5;
+      [
+        [-22, 18, -25, 40],
+        [-8, 18, -10, 40],
+        [8, 18, 10, 40],
+        [22, 18, 25, 40]
+      ].forEach(([x1, y1, x2, y2]) => {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      });
+
+      // Пётр в седле
+      // Мундир Преображенского полка (тёмно-зелёный с красным)
+      ctx.fillStyle = '#1a3a1a';
+      ctx.fillRect(-16, -55, 32, 38);
+      // Красный камзол
+      ctx.fillStyle = '#8a1a1a';
+      ctx.fillRect(-14, -52, 28, 20);
+      // Золотые пуговицы
+      ctx.fillStyle = '#daa520';
+      for (let py = -48; py <= -38; py += 5) {
+        ctx.fillRect(8, py, 3, 2);
+      }
+      // Эполеты
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(-20, -53, 7, 8);
+      ctx.fillRect(13, -53, 7, 8);
+      // Треуголка с плюмажем
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.moveTo(-20, -63);
+      ctx.lineTo(0, -75);
+      ctx.lineTo(20, -63);
+      ctx.lineTo(0, -60);
+      ctx.fill();
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.arc(0, -73, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Лицо (реалистичное)
+      ctx.fillStyle = '#f0d5b8';
+      ctx.beginPath();
+      ctx.arc(0, -52, 10, 0, Math.PI * 2);
+      ctx.fill();
+      // Усы
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-8, -46, 16, 3);
+      ctx.fillRect(-10, -48, 4, 2);
+      ctx.fillRect(6, -48, 4, 2);
+      // Глаза
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-3, -54, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3, -54, 2, 0, Math.PI * 2);
+      ctx.fill();
+      // Шпага
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(16, -45);
+      ctx.lineTo(38, -28);
+      ctx.stroke();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(16, -45, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawRealisticCharles(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let breathe = Math.sin(frameCount * 0.35 + 1) * 0.8;
+      ctx.translate(0, breathe);
+
+      // Конь (белый)
+      const horseGrad = ctx.createLinearGradient(-35, -20, 35, 20);
+      horseGrad.addColorStop(0, '#e8e0d0');
+      horseGrad.addColorStop(0.5, '#f0e8d8');
+      horseGrad.addColorStop(1, '#d0c8b8');
+      ctx.fillStyle = horseGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -5, 38, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e0d8c8';
+      ctx.beginPath();
+      ctx.ellipse(-15, -12, 12, 10, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#d8d0c0';
+      ctx.beginPath();
+      ctx.ellipse(-33, -22, 16, 13, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-40, -26, 3, 0, Math.PI * 2);
+      ctx.fill();
+      [
+        [-22, 18, -25, 40],
+        [-8, 18, -10, 40],
+        [8, 18, 10, 40],
+        [22, 18, 25, 40]
+      ].forEach(([x1, y1, x2, y2]) => {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#d0c8b8';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+      });
+
+      // Карл XII в синем мундире
+      ctx.fillStyle = '#1a2a5a';
+      ctx.fillRect(-16, -55, 32, 38);
+      ctx.fillStyle = '#2a4a8a';
+      ctx.fillRect(-14, -52, 28, 20);
+      ctx.fillStyle = '#daa520';
+      for (let py = -48; py <= -38; py += 5) {
+        ctx.fillRect(8, py, 3, 2);
+      }
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(-20, -53, 7, 8);
+      ctx.fillRect(13, -53, 7, 8);
+      ctx.fillStyle = '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-20, -63);
+      ctx.lineTo(0, -75);
+      ctx.lineTo(20, -63);
+      ctx.lineTo(0, -60);
+      ctx.fill();
+      ctx.fillStyle = '#4488ff';
+      ctx.beginPath();
+      ctx.arc(0, -73, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f0dcc0';
+      ctx.beginPath();
+      ctx.arc(0, -52, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-8, -46, 16, 3);
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-3, -54, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3, -54, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(16, -45);
+      ctx.lineTo(38, -28);
+      ctx.stroke();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(16, -45, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawRealisticSoldier(x, y, side, type, animPhase, frameCount, shooting = false) {
+      ctx.save();
+      ctx.translate(x, y);
+      let march = Math.sin(frameCount * 0.4 + animPhase) * 1.2;
+      ctx.translate(0, march);
+
+      // Тень
+      ctx.fillStyle = '#00000022';
+      ctx.beginPath();
+      ctx.ellipse(0, 12, 8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Тело
+      const bodyGrad = ctx.createLinearGradient(-7, -20, 7, 5);
+      if (side === 'russian') {
+        bodyGrad.addColorStop(0, '#2a4a2a');
+        bodyGrad.addColorStop(0.5, '#1a3a1a');
+        bodyGrad.addColorStop(1, '#0a2a0a');
+      } else {
+        bodyGrad.addColorStop(0, '#2a3a6a');
+        bodyGrad.addColorStop(0.5, '#1a2a5a');
+        bodyGrad.addColorStop(1, '#0a1a3a');
+      }
+      ctx.fillStyle = bodyGrad;
+      ctx.fillRect(-7, -20, 14, 26);
+
+      // Портупея
+      ctx.fillStyle = '#8a6a3a';
+      ctx.fillRect(-8, -15, 16, 3);
+      ctx.fillStyle = '#daa520';
+      ctx.fillRect(4, -18, 3, 8);
+
+      // Голова
+      ctx.fillStyle = '#f0d5b8';
+      ctx.beginPath();
+      ctx.arc(0, -24, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Треуголка
+      ctx.fillStyle = side === 'russian' ? '#1a1a1a' : '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-9, -30);
+      ctx.lineTo(0, -38);
+      ctx.lineTo(9, -30);
+      ctx.lineTo(0, -28);
+      ctx.fill();
+      if (type === 'grenadier') {
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.arc(0, -36, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Мушкет / пика
+      if (type === 'musketeer' || type === 'grenadier') {
+        ctx.strokeStyle = '#4a3020';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(7, -18);
+        ctx.lineTo(7, -48);
+        ctx.stroke();
+        ctx.fillStyle = '#333';
+        ctx.fillRect(4, -52, 6, 8);
+        // Штык
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(7, -52);
+        ctx.lineTo(5, -58);
+        ctx.lineTo(9, -58);
+        ctx.fill();
+        // Дым от выстрела
+        if (shooting) {
+          ctx.fillStyle = '#888';
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(7, -52, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      } else if (type === 'pikeman') {
+        ctx.strokeStyle = '#6a4a2a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(7, -18);
+        ctx.lineTo(7, -65);
+        ctx.stroke();
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(7, -65);
+        ctx.lineTo(3, -58);
+        ctx.lineTo(11, -58);
+        ctx.fill();
+      }
+
+      // Ноги
+      ctx.fillStyle = side === 'russian' ? '#2a1a0a' : '#1a1a2a';
+      ctx.fillRect(-6, 2, 5, 10);
+      ctx.fillRect(1, 2, 5, 10);
+      // Сапоги
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-7, 10, 7, 4);
+      ctx.fillRect(0, 10, 7, 4);
+
+      ctx.restore();
+    }
+
+    function drawRealisticCannon(x, y, side, smokeTimer) {
+      ctx.save();
+      ctx.translate(x, y);
+      // Лафет
+      const woodGrad = ctx.createLinearGradient(0, -10, 0, 10);
+      woodGrad.addColorStop(0, '#6a4a2a');
+      woodGrad.addColorStop(1, '#3a2010');
+      ctx.fillStyle = woodGrad;
+      ctx.fillRect(-22, -10, 44, 18);
+      // Колёса
+      ctx.fillStyle = '#3a2010';
+      ctx.beginPath();
+      ctx.arc(-17, 10, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(17, 10, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#4a3020';
+      ctx.beginPath();
+      ctx.arc(-17, 10, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(17, 10, 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Ствол
+      const metalGrad = ctx.createLinearGradient(0, -22, 0, -10);
+      metalGrad.addColorStop(0, '#3a3a3a');
+      metalGrad.addColorStop(1, '#1a1a1a');
+      ctx.fillStyle = metalGrad;
+      ctx.fillRect(-6, -22, 34, 14);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(24, -20, 10, 10);
+
+      // Дым
+      if (smokeTimer > 0) {
+        ctx.fillStyle = '#aaaaaa';
+        ctx.globalAlpha = smokeTimer / 20;
+        ctx.beginPath();
+        ctx.arc(36, -18, 18 + smokeTimer * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(36, -18, 10 + smokeTimer * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    }
+
+    function drawRealisticCavalry(x, y, side, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let gallop = Math.sin(frameCount * 0.7) * 2.5;
+      ctx.translate(0, gallop);
+
+      // Конь
+      const horseGrad = ctx.createLinearGradient(-30, -15, 30, 15);
+      if (side === 'russian') {
+        horseGrad.addColorStop(0, '#4a2020');
+        horseGrad.addColorStop(1, '#2a1010');
+      } else {
+        horseGrad.addColorStop(0, '#3a3a5a');
+        horseGrad.addColorStop(1, '#2a2a4a');
+      }
+      ctx.fillStyle = horseGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, -3, 32, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = side === 'russian' ? '#3a1515' : '#2a2a4a';
+      ctx.beginPath();
+      ctx.ellipse(-27, -17, 14, 11, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      [
+        [-18, 15, -20, 35],
+        [18, 15, 20, 35]
+      ].forEach(([x1, y1, x2, y2]) => {
+        ctx.strokeStyle = side === 'russian' ? '#4a2020' : '#3a3a5a';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      });
+
+      // Всадник
+      ctx.fillStyle = side === 'russian' ? '#1a3a1a' : '#1a2a5a';
+      ctx.fillRect(-11, -45, 22, 30);
+      ctx.fillStyle = '#f0d5b8';
+      ctx.beginPath();
+      ctx.arc(0, -48, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = side === 'russian' ? '#111' : '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-12, -56);
+      ctx.lineTo(0, -63);
+      ctx.lineTo(12, -56);
+      ctx.fill();
+      // Сабля
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(11, -38);
+      ctx.lineTo(35, -18);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function spawnParticles(x, y, color, count = 12, spread = 7) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * spread * 2,
+          vy: (Math.random() - 0.5) * spread * 2 - 3,
+          life: 15 + Math.random() * 30,
+          color,
+          size: 1 + Math.random() * 3,
+          gravity: 0.06,
+        });
+      }
+    }
+
+    function spawnExplosion(x, y, size = 20) {
+      explosions.push({ x, y, radius: 0, maxRadius: size + Math.random() * 12, life: 16, color: '#ff8800' });
+      spawnParticles(x, y, '#ff6600', 15, 8);
+      spawnParticles(x, y, '#ffcc00', 10, 5);
+      spawnParticles(x, y, '#888', 6, 3);
+      screenShakeAmount = Math.max(screenShakeAmount, 6);
+    }
+
+    // ---------- СЮЖЕТ ----------
+    function updateBattle() {
+      // Движение солдат
+      [...russianArmy, ...swedishArmy].forEach(s => {
+        if (!s.alive) return;
+        if (Math.abs(s.x - s.targetX) > 8) s.x += (s.targetX - s.x) * 0.008 * s.speed;
+        s.animPhase += 0.04;
+        if (s.shootCooldown > 0) s.shootCooldown--;
+        s.shooting = s.shootCooldown > 3;
+      });
+
+      cavalry.forEach(c => {
+        if (!c.alive) return;
+        if (Math.abs(c.x - c.targetX) > 25) c.x += (c.targetX - c.x) * 0.012 * c.speed;
+        c.lanceAnim += 0.1;
+      });
+
+      cannons.forEach(c => { if (c.cooldown > 0) c.cooldown--; if (c.smokeTimer > 0) c.smokeTimer--; });
+
+      // Фазы
+      if (storyPhase === 'sketch') {
+        phaseTimer++;
+        sketchProgress = Math.min(1, phaseTimer / 100);
+        if (phaseTimer > 120) { storyPhase = 'armies_approach';
+          phaseTimer = 0;
+          sketchMode = false; }
+      } else if (storyPhase === 'armies_approach') {
+        phaseTimer++;
+        battleIntensity = Math.min(15, phaseTimer / 5);
+        if (phaseTimer > 90) { storyPhase = 'cannonade';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'cannonade') {
+        phaseTimer++;
+        battleIntensity = Math.min(50, 15 + phaseTimer / 3);
+        cannons.forEach(c => {
+          if (c.cooldown <= 0 && Math.random() < 0.12) {
+            c.cooldown = 25 + Math.random() * 35;
+            c.smokeTimer = 18;
+            let targetX = c.side === 'russian' ? 550 + Math.random() * 250 : 200 + Math.random() * 250;
+            let targetY = 380 + Math.random() * 80;
+            spawnExplosion(targetX, targetY, 15 + Math.random() * 15);
+            let enemyArmy = c.side === 'russian' ? swedishArmy : russianArmy;
+            enemyArmy.forEach(s => {
+              if (s.alive && Math.abs(s.x - targetX) < 35 && Math.abs(s.y - targetY) < 35) {
+                s.health -= 8 + Math.random() * 12;
+                if (s.health <= 0) s.alive = false;
+              }
+            });
+          }
+        });
+        if (phaseTimer > 140) { storyPhase = 'infantry_battle';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'infantry_battle') {
+        phaseTimer++;
+        battleIntensity = Math.min(80, 50 + phaseTimer / 2);
+        if (frame % 8 === 0) {
+          russianArmy.forEach(s => {
+            if (!s.alive) return;
+            if (s.type === 'musketeer' && s.shootCooldown <= 0 && Math.random() < 0.3) {
+              s.shootCooldown = 10;
+              let enemy = swedishArmy.find(e => e.alive && Math.abs(e.x - s.x) < 80);
+              if (enemy) {
+                enemy.health -= 5 + Math.random() * 8;
+                if (enemy.health <= 0) enemy.alive = false;
+                spawnParticles(enemy.x, enemy.y, '#ff4444', 3, 2);
+              }
+            }
+          });
+          swedishArmy.forEach(s => {
+            if (!s.alive) return;
+            if (s.type === 'musketeer' && s.shootCooldown <= 0 && Math.random() < 0.3) {
+              s.shootCooldown = 10;
+              let enemy = russianArmy.find(e => e.alive && Math.abs(e.x - s.x) < 80);
+              if (enemy) {
+                enemy.health -= 5 + Math.random() * 8;
+                if (enemy.health <= 0) enemy.alive = false;
+                spawnParticles(enemy.x, enemy.y, '#4488ff', 3, 2);
+              }
+            }
+          });
+        }
+        if (frame % 12 === 0) {
+          russianArmy.forEach(s => {
+            if (!s.alive) return;
+            let enemy = swedishArmy.find(e => e.alive && Math.abs(e.x - s.x) < 20);
+            if (enemy) {
+              enemy.health -= 2 + Math.random() * 4;
+              if (enemy.health <= 0) enemy.alive = false;
+            }
+          });
+          swedishArmy.forEach(s => {
+            if (!s.alive) return;
+            let enemy = russianArmy.find(e => e.alive && Math.abs(e.x - s.x) < 20);
+            if (enemy) {
+              enemy.health -= 2 + Math.random() * 4;
+              if (enemy.health <= 0) enemy.alive = false;
+            }
+          });
+        }
+        if (phaseTimer > 130) { storyPhase = 'cavalry_charge';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'cavalry_charge') {
+        phaseTimer++;
+        battleIntensity = 100;
+        cavalry.forEach(c => {
+          if (!c.alive) return;
+          c.targetX = c.side === 'russian' ? 650 : 350;
+        });
+        if (frame % 7 === 0) {
+          cavalry.forEach(c => {
+            if (!c.alive) return;
+            let enemyCav = cavalry.find(e => e.alive && e.side !== c.side && Math.abs(e.x - c.x) < 35);
+            if (enemyCav) {
+              enemyCav.health -= 6 + Math.random() * 10;
+              if (enemyCav.health <= 0) enemyCav.alive = false;
+              spawnParticles((c.x + enemyCav.x) / 2, (c.y + enemyCav.y) / 2, '#fff', 6, 4);
+            }
+            let enemyInf = (c.side === 'russian' ? swedishArmy : russianArmy).find(e => e.alive && Math.abs(e.x - c.x) < 25);
+            if (enemyInf) {
+              enemyInf.health -= 10;
+              if (enemyInf.health <= 0) enemyInf.alive = false;
+            }
+          });
+        }
+        if (phaseTimer > 100) { storyPhase = 'russian_victory';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'russian_victory') {
+        phaseTimer++;
+        battleIntensity = Math.max(0, 100 - phaseTimer);
+        swedishArmy.forEach(s => { if (s.alive) s.x += 2; });
+        cavalry.forEach(c => { if (c.side === 'swedish' && c.alive) c.x += 3; });
+        if (phaseTimer > 180) {
+          resetAll();
+          storyPhase = 'sketch';
+          phaseTimer = 0;
+          sketchMode = true;
+          sketchProgress = 0;
+        }
+      }
+
+      let msg = '';
+      let phaseText = '';
+      switch (storyPhase) {
+        case 'sketch':
+          msg = '🖌️ ХУДОЖНИК ДЕЛАЕТ ЭСКИЗ БИТВЫ...';
+          phaseText = '🎨 ЭСКИЗ';
+          break;
+        case 'armies_approach':
+          msg = '🥁 АРМИИ ВЫДВИГАЮТСЯ НА ПОЗИЦИИ';
+          phaseText = '🚶 ВЫДВИЖЕНИЕ';
+          break;
+        case 'cannonade':
+          msg = '💣 АРТИЛЛЕРИЙСКАЯ КАНОНАДА! ПУШКИ ГРОМЯТ!';
+          phaseText = '💥 КАНОНАДА';
+          break;
+        case 'infantry_battle':
+          msg = '⚔️ ПЕХОТА ВЕДЁТ ОГОНЬ! ШТЫКОВОЙ БОЙ!';
+          phaseText = '🔫 ПЕХОТА';
+          break;
+        case 'cavalry_charge':
+          msg = '🐎 КАВАЛЕРИЯ РУБИТСЯ! ДРАГУНЫ В АТАКЕ!';
+          phaseText = '⚔️ КАВАЛЕРИЯ';
+          break;
+        case 'russian_victory':
+          msg = '🏆 РУССКАЯ АРМИЯ ОДЕРЖИВАЕТ ПОБЕДУ! ШВЕДЫ ОТСТУПАЮТ!';
+          phaseText = '🏆 ПОБЕДА';
+          break;
+      }
+      statusEl.textContent = '⚜️ ' + msg;
+      phaseDisplay.textContent = phaseText;
+
+      // Частицы
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        explosions[i].radius += 1.5;
+        explosions[i].life--;
+        if (explosions[i].life <= 0) explosions.splice(i, 1);
+      }
+      if (screenShakeAmount > 0) {
+        cameraShake.x = (Math.random() - 0.5) * screenShakeAmount;
+        cameraShake.y = (Math.random() - 0.5) * screenShakeAmount;
+        screenShakeAmount *= 0.85;
+        if (screenShakeAmount < 0.1) screenShakeAmount = 0;
+      } else { cameraShake.x = 0;
+        cameraShake.y = 0; }
+    }
+
+    function resetAll() {
+      peter.x = peter.baseX;
+      peter.y = peter.baseY;
+      peter.health = peter.maxHealth;
+      charles.x = charles.baseX;
+      charles.y = charles.baseY;
+      charles.health = charles.maxHealth;
+      initArmies();
+      particles = [];
+      explosions = [];
+      screenShakeAmount = 0;
+      battleIntensity = 0;
+      sketchProgress = 0;
+      sketchMode = true;
+    }
+
+    function drawBattlefield() {
+      if (sketchMode) {
+        drawSketchBackground();
+        return;
+      }
+
+      // Небо
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+      skyGrad.addColorStop(0, '#5a7a9a');
+      skyGrad.addColorStop(0.3, '#9ab0c0');
+      skyGrad.addColorStop(0.6, '#c8c0a8');
+      skyGrad.addColorStop(1, '#d8d0b8');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Солнце
+      ctx.fillStyle = '#ffe8a0';
+      ctx.shadowColor = '#ffaa00';
+      ctx.shadowBlur = 60;
+      ctx.beginPath();
+      ctx.arc(800, 70, 45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Облака
+      ctx.fillStyle = '#ffffffcc';
+      [
+        [200, 50],
+        [450, 35],
+        [650, 60],
+        [300, 80]
+      ].forEach(([cx, cy]) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 28, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + 22, cy - 8, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx - 18, cy - 3, 20, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Поле
+      const groundGrad = ctx.createLinearGradient(0, 370, 0, H);
+      groundGrad.addColorStop(0, '#9aaa60');
+      groundGrad.addColorStop(0.3, '#7a8a40');
+      groundGrad.addColorStop(0.7, '#6a5a30');
+      groundGrad.addColorStop(1, '#4a3a20');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, 370, W, 200);
+
+      // Трава
+      for (let i = 0; i < 250; i++) {
+        let gx = (i * 57 + 30) % W;
+        let gy = 375 + (i * 37) % 25;
+        ctx.fillStyle = '#8aaa50';
+        ctx.fillRect(gx, gy, 1.5, 5 + Math.sin(i) * 2);
+      }
+
+      // Дым сражения
+      [
+        [350, 320],
+        [550, 310],
+        [450, 330],
+        [650, 300]
+      ].forEach(([sx, sy]) => {
+        ctx.fillStyle = '#88888833';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 35 + Math.sin(frame * 0.25 + sx) * 8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Редуты
+      [
+        [220, 405],
+        [380, 408],
+        [520, 402],
+        [680, 405]
+      ].forEach(([rx, ry]) => {
+        ctx.fillStyle = '#7a5a3a';
+        ctx.fillRect(rx - 16, ry - 6, 32, 16);
+        ctx.fillStyle = '#6a4a2a';
+        ctx.fillRect(rx - 13, ry - 10, 26, 6);
+      });
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(cameraShake.x, cameraShake.y);
+      drawBattlefield();
+
+      if (!sketchMode) {
+        // Взрывы
+        explosions.forEach(e => {
+          const alpha = e.life / 16;
+          ctx.fillStyle = `rgba(255,${100 + e.radius},0,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(255,255,150,${alpha * 0.5})`;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.radius * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Пушки
+        cannons.forEach(c => drawRealisticCannon(c.x, c.y, c.side, c.smokeTimer));
+
+        // Пехота
+        russianArmy.forEach(s => { if (s.alive) drawRealisticSoldier(s.x, s.y, 'russian', s.type, s.animPhase, frame, s.shooting); });
+        swedishArmy.forEach(s => { if (s.alive) drawRealisticSoldier(s.x, s.y, 'swedish', s.type, s.animPhase, frame, s.shooting); });
+
+        // Кавалерия
+        cavalry.forEach(c => { if (c.alive) drawRealisticCavalry(c.x, c.y, c.side, frame); });
+
+        // Полководцы (наблюдают, не сражаются)
+        drawRealisticPeter(peter.x, peter.y, frame);
+        drawRealisticCharles(charles.x, charles.y, frame);
+
+        // Частицы
+        particles.forEach(p => {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      }
+
+      ctx.restore();
+
+      // Надписи
+      if (storyPhase === 'sketch') {
+        ctx.font = 'italic 22px "Georgia", serif';
+        ctx.fillStyle = '#4a3a2a';
+        ctx.fillText('🖌️ Эскиз Полтавской битвы...', W / 2 - 130, H - 30);
+      } else if (storyPhase === 'russian_victory') {
+        ctx.font = 'bold 30px "Georgia", serif';
+        ctx.fillStyle = '#ffcc00';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 15;
+        ctx.fillText('🏆 ПОБЕДА РУССКОЙ АРМИИ! 🏆', W / 2 - 220, 50);
+        ctx.font = 'italic 18px "Georgia", serif';
+        ctx.fillText('«И грянул бой, Полтавский бой!»', W / 2 - 130, 80);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function loop() {
+      frame++;
+      updateBattle();
+      drawScene();
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function restart() {
+      if (animationId) cancelAnimationFrame(animationId);
+      resetAll();
+      storyPhase = 'sketch';
+      phaseTimer = 0;
+      frame = 0;
+      loop();
+    }
+
+    document.getElementById('restartButton').addEventListener('click', restart);
+    initArmies();
+    restart();
+
+    window.addEventListener('beforeunload', () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    });
+  })();
+</script>
+</body>
+</html>

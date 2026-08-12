@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ПСЖ · Чемпионский отпуск и исторический матч | Мультфильм</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: linear-gradient(160deg, #0a1f3b 0%, #172d4b 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Montserrat', system-ui, sans-serif;
+      padding: 20px;
+      margin: 0;
+    }
+    .cinema {
+      background: #0c1422;
+      border-radius: 3rem 3rem 2.2rem 2.2rem;
+      box-shadow: 0 35px 55px rgba(0,0,0,0.8), 0 0 0 4px #dbb042, 0 0 0 8px #0a2540;
+      padding: 20px 20px 25px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 950px;
+      width: fit-content;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #152e44;
+      border-radius: 40px;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.9), 0 25px 35px rgba(0, 0, 0, 0.8);
+      border: 3px solid #caa63d;
+    }
+    .marquee {
+      width: 100%;
+      margin-top: 18px;
+      background: #e7c468;
+      background-image: linear-gradient(90deg, #caa42b, #f9edb9, #caa42b);
+      color: #071b33;
+      font-weight: 900;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      padding: 14px 20px;
+      border-radius: 60px;
+      text-align: center;
+      box-shadow: 0 8px 0 #7a561b, 0 12px 28px black;
+      text-transform: uppercase;
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .marquee span {
+      background: #051c38;
+      color: #fddd5c;
+      padding: 5px 20px;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      letter-spacing: 0.5px;
+    }
+    button {
+      background: #dba42b;
+      border: none;
+      color: #04172e;
+      font-weight: bold;
+      font-size: 1.2rem;
+      padding: 14px 40px;
+      margin-top: 18px;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 7px 0 #7a5318, 0 10px 22px black;
+      transition: all 0.08s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: radial-gradient(circle at 30% 30%, #f5de8a, #c4911e);
+      border: 2px solid #ffeca4;
+    }
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 3px 0 #5a3c0e, 0 8px 18px black;
+    }
+    .controls {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    @media (max-width: 700px) {
+      .marquee {
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cinema">
+    <canvas id="psgMovieCanvas" width="800" height="450" aria-label="Мультфильм ПСЖ — пляж, башня, Лондон, рекордный матч"></canvas>
+    <div class="marquee">
+      ⚡🏆 ПСЖ · ЧЕМПИОНЫ 🏆⚡
+      <span>ПЛЯЖ → ЭЙФЕЛЕВА → ЛОНДОН → РАЗГРОМ</span>
+      🥇 ICI C'EST PARIS 🥇
+    </div>
+    <div class="controls">
+      <button id="replayBtn"><span>▶</span> СМОТРЕТЬ СНОВА</button>
+    </div>
+    <div style="color:#dbb042; margin-top: 8px; font-weight: bold; font-size: 0.9rem;">
+      🏖️ Отдых · 🗼 Экскурсия · 🎡 Лондон Ай · ⚽ Рекордные голы
+    </div>
+  </div>
+  <p style="color:#b4924a; margin-top: 14px; font-style: italic; text-shadow: 0 2px 6px black;">Отпуск чемпионов — а потом исторический матч!</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('psgMovieCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 800, H = 450;
+
+    // Анимационное время
+    let sceneTime = 0;
+    let animationFrameId = null;
+    let isRunning = true;
+
+    // Частицы для фейерверков и конфетти
+    let particles = [];
+    let fireworks = [];  // специальные для фейерверка
+
+    // Цвета ПСЖ
+    const BLUE_PSG = '#0f2f5e';
+    const RED_PSG = '#d42a3b';
+    const GOLD = '#eebb3c';
+    const WHITE = '#f0f0f0';
+
+    // Утилиты рисования
+    function drawPlayer(x, y, scale = 1.0, shirtColor = BLUE_PSG, number = '7', pose = 'normal') {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      // Ноги
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-5, 7, 4, 14);
+      ctx.fillRect(1, 7, 4, 14);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-6, 19, 7, 5);
+      ctx.fillRect(1, 19, 7, 5);
+      // Тело
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(-8, -7, 16, 18);
+      ctx.fillStyle = RED_PSG;
+      ctx.fillRect(-1, -7, 3, 18);
+      // Руки
+      ctx.fillStyle = '#e2c29c';
+      ctx.fillRect(-13, -4, 5, 10);
+      ctx.fillRect(8, -4, 5, 10);
+      // Голова
+      ctx.fillStyle = '#f7deb8';
+      ctx.beginPath();
+      ctx.arc(0, -11, 8, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#2b1a0c';
+      ctx.beginPath();
+      ctx.arc(0, -15, 7, Math.PI, 2*Math.PI);
+      ctx.fill();
+      ctx.fillStyle = WHITE;
+      ctx.font = 'bold 10px "Montserrat"';
+      ctx.fillText(number, -4, 6);
+      if (pose === 'celebration') {
+        ctx.fillStyle = '#e2c29c';
+        ctx.fillRect(-12, -22, 5, 12);
+        ctx.fillRect(7, -22, 5, 12);
+      }
+      ctx.restore();
+    }
+
+    function drawBall(x, y, s = 1.0) {
+      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+      ctx.fillStyle = '#f5f5f5'; ctx.beginPath(); ctx.arc(0,0,7,0,2*Math.PI); ctx.fill();
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI); ctx.fill();
+      ctx.fillStyle = '#b0b0b0'; ctx.beginPath(); ctx.arc(-2,-2,2.2,0,2*Math.PI); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawEiffelTower(baseX, baseY) {
+      ctx.fillStyle = '#3a3a3a';
+      ctx.fillRect(baseX-8, baseY-90, 16, 90);
+      ctx.fillRect(baseX-18, baseY-55, 36, 10);
+      ctx.fillRect(baseX-28, baseY-30, 56, 8);
+      ctx.beginPath(); ctx.moveTo(baseX-10, baseY-90); ctx.lineTo(baseX-4, baseY-130); ctx.lineTo(baseX+4, baseY-130); ctx.lineTo(baseX+10, baseY-90); ctx.fill();
+      ctx.fillStyle = '#f9e076'; ctx.beginPath(); ctx.arc(baseX, baseY-140, 8, 0, 2*Math.PI); ctx.fill();
+    }
+
+    function drawLondonEye(cx, cy, radius = 45) {
+      ctx.strokeStyle = '#b0c4de'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(cx, cy, radius, 0, 2*Math.PI); ctx.stroke();
+      for (let i=0; i<8; i++) {
+        let angle = (i/8)*Math.PI*2;
+        let bx = cx + Math.cos(angle)*radius*0.85;
+        let by = cy + Math.sin(angle)*radius*0.85;
+        ctx.fillStyle = '#e03a4e'; ctx.beginPath(); ctx.arc(bx, by, 6, 0, 2*Math.PI); ctx.fill();
+        ctx.fillStyle = '#1e2f4b'; ctx.beginPath(); ctx.arc(bx, by, 4, 0, 2*Math.PI); ctx.fill();
+      }
+      ctx.fillStyle = '#cccccc'; ctx.fillRect(cx-3, cy-8, 6, 16);
+    }
+
+    function spawnFirework(x, y) {
+      for (let i=0; i<30; i++) {
+        let angle = Math.random()*2*Math.PI;
+        let speed = 2 + Math.random()*5;
+        fireworks.push({
+          x: x, y: y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed,
+          life: 1.0, color: Math.random()<0.5 ? RED_PSG : GOLD, size: 2+Math.random()*4
+        });
+      }
+    }
+
+    function updateFireworks() {
+      for (let i=fireworks.length-1; i>=0; i--) {
+        let f = fireworks[i];
+        f.x += f.vx; f.y += f.vy; f.vy += 0.07; f.life -= 0.015;
+        if (f.life <= 0 || f.y > H+20) fireworks.splice(i,1);
+      }
+    }
+
+    function drawFireworks() {
+      for (let f of fireworks) {
+        ctx.globalAlpha = f.life*0.9;
+        ctx.fillStyle = f.color;
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, 2*Math.PI); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawBackground(sceneType) {
+      if (sceneType === 'beach') {
+        let grad = ctx.createLinearGradient(0,0,0,H);
+        grad.addColorStop(0,'#56b4e9'); grad.addColorStop(0.7,'#f7e3a8'); grad.addColorStop(1,'#e2c278');
+        ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#fadf8a'; ctx.fillRect(0,H-65,W,65);
+        ctx.fillStyle = '#2aa9c9'; ctx.fillRect(0,H-120,W,60);
+      } else if (sceneType === 'paris') {
+        ctx.fillStyle = '#1b2b44'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#2d4b2d'; ctx.fillRect(0,H-55,W,55);
+      } else if (sceneType === 'london') {
+        ctx.fillStyle = '#1f3040'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#2a453a'; ctx.fillRect(0,H-60,W,60);
+      } else if (sceneType === 'stadium') {
+        ctx.fillStyle = '#0d1f2c'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#1f552f'; ctx.fillRect(0,H-70,W,70);
+        ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 2; ctx.setLineDash([15,20]);
+        ctx.beginPath(); ctx.moveTo(0,H-50); ctx.lineTo(W,H-50); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    function drawScene(progress) {
+      let t = progress; // 0..1 полный цикл ~22 сек
+
+      // Определяем фазы
+      if (t < 0.18) { // ПЛЯЖ
+        drawBackground('beach');
+        ctx.fillStyle = WHITE; ctx.font = 'bold 20px "Montserrat"'; ctx.fillText('🏖️ ПЛЯЖ ЧЕМПИОНОВ', 250, 45);
+        drawPlayer(200, H-100, 0.9, '#f05423', '7', 'normal');
+        drawPlayer(270, H-110, 0.9, BLUE_PSG, '10', 'celebration');
+        drawBall(330, H-140, 0.7);
+        drawPlayer(350, H-95, 0.9, '#1e4a7a', '30');
+        ctx.fillStyle = GOLD; ctx.font = 'italic 18px "Montserrat"'; ctx.fillText('🏆 ЧЕМПИОНЫ 🏆', 500, 100);
+      }
+      else if (t < 0.38) { // ЭЙФЕЛЕВА БАШНЯ + фейерверк
+        drawBackground('paris');
+        drawEiffelTower(420, H-55);
+        drawPlayer(250, H-90, 0.9, RED_PSG, '7', 'celebration');
+        drawPlayer(320, H-100, 0.9, BLUE_PSG, '11');
+        drawPlayer(530, H-85, 0.9, '#1e3f5c', '5');
+        if (Math.floor(sceneTime*8)%3===0) spawnFirework(420, 130);
+        ctx.fillStyle = '#ffe484'; ctx.font = 'bold 22px "Montserrat"'; ctx.fillText('🗼 ЗАЖИГАЕМ В ПАРИЖЕ', 180, 55);
+      }
+      else if (t < 0.58) { // ЛОНДОН АЙ
+        drawBackground('london');
+        drawLondonEye(580, 180, 58);
+        drawPlayer(320, H-100, 0.95, '#bc2c3d', '10', 'celebration');
+        drawPlayer(400, H-110, 0.95, BLUE_PSG, '30');
+        drawBall(460, H-140, 0.7);
+        ctx.fillStyle = '#f5d742'; ctx.font = 'bold 22px "Montserrat"'; ctx.fillText('🎡 ЛОНДОН АЙ · ВЕЧЕРИНКА', 140, 60);
+        if (Math.floor(sceneTime*10)%4===0) spawnFirework(580, 130);
+      }
+      else { // СТАДИОН · ИСТОРИЧЕСКИЙ РАЗГРОМ
+        drawBackground('stadium');
+        ctx.fillStyle = GOLD; ctx.font = 'bold 28px "Montserrat"'; ctx.fillText('⚡ РЕКОРДНЫЙ МАТЧ ⚡', 180, 55);
+        // Много игроков атакуют
+        for (let i=0; i<7; i++) {
+          let px = 90 + i*90;
+          drawPlayer(px, H-85, 0.8, i%2===0 ? BLUE_PSG : RED_PSG, ''+(7+i));
+        }
+        // мячи летят в ворота
+        for (let j=0; j<5; j++) {
+          drawBall(580 + j*25, 140 + j*12, 0.7);
+        }
+        drawBall(630, 200, 0.9);
+        ctx.fillStyle = '#ffffffcc'; ctx.font = 'bold 36px "Montserrat"'; ctx.fillText('8:0', 580, 280);
+        if (Math.floor(sceneTime*15)%2===0) spawnFirework(640, 200);
+        ctx.fillStyle = WHITE; ctx.font = 'italic 20px "Montserrat"'; ctx.fillText('ВСЕХ ПОРВАЛИ!', 300, 130);
+      }
+
+      updateFireworks();
+      drawFireworks();
+    }
+
+    function animationLoop() {
+      if (!isRunning) return;
+      sceneTime += 0.016;
+      let cycle = 20.5; // секунд на полную историю
+      let progress = (sceneTime % cycle) / cycle;
+      ctx.clearRect(0,0,W,H);
+      drawScene(progress);
+      animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    function restartMovie() {
+      sceneTime = 0;
+      fireworks = [];
+    }
+
+    document.getElementById('replayBtn').addEventListener('click', restartMovie);
+    animationLoop();
+
+    window.addEventListener('beforeunload', ()=>{
+      if(animationFrameId) cancelAnimationFrame(animationFrameId);
+      isRunning = false;
+    });
+  })();
+</script>
+</body>
+</html>

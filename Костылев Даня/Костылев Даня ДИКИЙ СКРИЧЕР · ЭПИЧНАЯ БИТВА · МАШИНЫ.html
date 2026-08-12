@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ДИКИЙ СКРИЧЕР · ЭПИЧНАЯ БИТВА · МАШИНЫ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #0a0c14;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+    }
+    .cartoon-box {
+      background: #000000cc;
+      border: 3px solid #4a5568;
+      border-radius: 2.5rem;
+      padding: 1rem;
+      box-shadow: 0 0 50px #1e3a5f;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 960px;
+      height: auto;
+      border-radius: 1.8rem;
+      background: #0f172a;
+      box-shadow: inset 0 0 35px #000000, 0 25px 45px #000000e6;
+    }
+    .panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.8rem;
+      color: #e0e7ff;
+      font-weight: bold;
+      padding: 0 0.8rem;
+    }
+    .hero-tags {
+      display: flex;
+      gap: 2rem;
+      font-size: 1rem;
+      text-shadow: 0 0 12px currentColor;
+    }
+    .dragon-tag { color: #7effb2; }
+    .panther-tag { color: #b8d0ff; }
+    button {
+      background: #1e2b41;
+      border: none;
+      color: #f0f4ff;
+      font-weight: bold;
+      padding: 0.5rem 1.5rem;
+      border-radius: 3rem;
+      font-size: 1rem;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      box-shadow: 0 5px 0 #0f1722, 0 0 15px #3b4b6b;
+      transition: 0.1s ease;
+      border: 1px solid #60759b;
+    }
+    button:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 #0f1722, 0 0 20px #5f7bb0;
+    }
+    .status-badge {
+      background: #00000070;
+      padding: 0.4rem 1.7rem;
+      border-radius: 2rem;
+      color: #ffda9e;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="900" height="520" aria-label="Эпичный мультфильм Дикий Скричер"></canvas>
+    <div class="panel">
+      <div class="hero-tags">
+        <span class="dragon-tag">🐉 ИЗУМРУДНЫЙ ДРАКОН</span>
+        <span class="panther-tag">🐆 ICE STRIKE & ICE PANTER</span>
+      </div>
+      <div class="status-badge" id="liveStatus">⚡ СЮЖЕТ НАЧИНАЕТСЯ</div>
+      <button id="restartButton">🔄 НОВЫЙ ЭКШЕН</button>
+    </div>
+  </div>
+  <p style="color:#96a7c2; margin-top:0.4rem; font-style:italic;">🔥 Гиены-пулемёты · трансформация · эпичный отъезд</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+
+    const W = 900, H = 520;
+
+    // Глобальные переменные анимации
+    let frame = 0;
+    let animationId = null;
+
+    // ---------- ПЕРСОНАЖИ (более реалистичные) ----------
+    const dragon = {
+      x: 250, y: 320,
+      baseX: 250, baseY: 320,
+      vx: 0, vy: 0,
+      mode: 'beast', // beast / machine
+      transformProgress: 0,
+    };
+
+    const panther = {
+      x: 600, y: 335,
+      baseX: 600, baseY: 335,
+      vx: 0, vy: 0,
+      mode: 'beast',
+      transformProgress: 0,
+    };
+
+    // Стая гиен (3 штуки)
+    const hyenas = [
+      { x: 800, y: 340, targetX: 480, speed: 1.0, mode: 'beast', gunTimer: 0, transformProgress: 0, vy: 0 },
+      { x: 820, y: 270, targetX: 430, speed: 0.95, mode: 'beast', gunTimer: 0, transformProgress: 0, vy: 0 },
+      { x: 790, y: 410, targetX: 500, speed: 0.9, mode: 'beast', gunTimer: 0, transformProgress: 0, vy: 0 }
+    ];
+
+    // Разрушенный чёрный гриль
+    const grill = { x: 430, y: 350, w: 85, h: 70 };
+
+    // Сюжетные фазы
+    let storyPhase = 'intro'; // intro, meeting, hyena_approach, battle_start, fierce_battle, transform_all, escape
+    let phaseTimer = 0;
+    let battleIntensity = 0;
+
+    // Эффекты (вспышки, частицы)
+    let particles = [];
+    let screenShake = 0;
+
+    // ---------- РИСОВАНИЕ НАСТОЯЩИХ ЖИВОТНЫХ ----------
+    function drawRealisticDragon(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        // Изумрудный дракон (старый, детализированный)
+        let breathe = Math.sin(frameCount * 0.3) * 0.8;
+        ctx.translate(0, breathe);
+        // Тело
+        ctx.fillStyle = '#1e4a3b';
+        ctx.shadowColor = '#2e8b57';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 34, 26, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Чешуя реалистичная
+        ctx.fillStyle = '#2b6b4c';
+        ctx.beginPath(); ctx.ellipse(-12, -8, 14, 13, 0.1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3e8b5c';
+        ctx.beginPath(); ctx.ellipse(14, 6, 15, 13, -0.1, 0, Math.PI*2); ctx.fill();
+        // Голова
+        ctx.fillStyle = '#1d5a3a';
+        ctx.beginPath(); ctx.ellipse(-24, -16, 17, 18, 0.15, 0, Math.PI*2); ctx.fill();
+        // Глаз
+        ctx.fillStyle = '#f0f8e0';
+        ctx.beginPath(); ctx.arc(-30, -22, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#0a0f0a';
+        ctx.beginPath(); ctx.arc(-32 + Math.sin(frameCount*0.2)*0.8, -23, 2.8, 0, Math.PI*2); ctx.fill();
+        // Рога
+        ctx.strokeStyle = '#b5975a';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.moveTo(-36, -36); ctx.lineTo(-44, -54); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-18, -34); ctx.lineTo(-10, -52); ctx.stroke();
+        // Крылья с перепонками
+        ctx.fillStyle = '#286b46';
+        ctx.beginPath(); ctx.ellipse(-8, -32, 24, 15, -0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3a7a52';
+        ctx.beginPath(); ctx.ellipse(20, -28, 22, 13, 0.5, 0, Math.PI*2); ctx.fill();
+        // Дым из ноздрей
+        ctx.fillStyle = '#9ed4a0';
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.arc(-42, -20, 8, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        // МАШИНА-ДРАКОН (изумрудный спорткар-дракон)
+        let machineProgress = Math.min(progress, 1);
+        ctx.globalAlpha = machineProgress;
+        ctx.fillStyle = '#1f4030';
+        ctx.shadowColor = '#00fa9a';
+        ctx.shadowBlur = 18;
+        ctx.fillRect(-34, -18, 68, 36);
+        ctx.fillStyle = '#2a5e44';
+        ctx.fillRect(-26, -12, 52, 24);
+        // Колёса
+        ctx.fillStyle = '#0b0b0f';
+        ctx.beginPath(); ctx.arc(-20, 20, 10, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, 20, 10, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3c6e50';
+        ctx.beginPath(); ctx.arc(-20, 20, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, 20, 5, 0, Math.PI*2); ctx.fill();
+        // Крылья-спойлер
+        ctx.fillStyle = '#1e4a35';
+        ctx.fillRect(-28, -26, 56, 10);
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawRealisticPanther(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        let tailWag = Math.sin(frameCount * 0.6) * 1.2;
+        // Чёрная пантера + снежный барс (Ice Strike)
+        ctx.fillStyle = '#18181f';
+        ctx.shadowColor = '#6d8eb0';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 32, 28, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Пятна снежного барса
+        ctx.fillStyle = '#b9c8dd';
+        ctx.beginPath(); ctx.arc(-9, -8, 8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(14, 5, 9, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7b8ca0';
+        ctx.beginPath(); ctx.arc(6, -18, 7, 0, Math.PI*2); ctx.fill();
+        // Голова
+        ctx.fillStyle = '#0e0e16';
+        ctx.beginPath(); ctx.ellipse(-30, -8, 15, 17, 0.1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e6f0ff';
+        ctx.beginPath(); ctx.arc(-36, -13, 5.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000022';
+        ctx.beginPath(); ctx.arc(-38 + Math.sin(frameCount*0.4)*0.7, -14, 2.6, 0, Math.PI*2); ctx.fill();
+        // Уши
+        ctx.fillStyle = '#1a1a26';
+        ctx.beginPath(); ctx.ellipse(-40, -27, 7, 10, -0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-22, -28, 6, 9, 0.2, 0, Math.PI*2); ctx.fill();
+        // Хвост
+        ctx.strokeStyle = '#1f1f2b';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(28, 10); ctx.lineTo(42 + tailWag, 18); ctx.stroke();
+      } else {
+        let mp = Math.min(progress, 1);
+        ctx.globalAlpha = mp;
+        // Машина-пантера (чёрный маслкар)
+        ctx.fillStyle = '#12121c';
+        ctx.shadowColor = '#9ab0d0';
+        ctx.shadowBlur = 14;
+        ctx.fillRect(-34, -20, 68, 38);
+        ctx.fillStyle = '#1e1e30';
+        ctx.fillRect(-26, -14, 52, 26);
+        ctx.fillStyle = '#0a0a10';
+        ctx.beginPath(); ctx.arc(-22, 22, 12, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(22, 22, 12, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#40406a';
+        ctx.beginPath(); ctx.arc(-22, 22, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(22, 22, 6, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawHyenaRealistic(h, idx, frameCount) {
+      ctx.save();
+      ctx.translate(h.x, h.y);
+      if (h.mode === 'beast') {
+        // Гиена (злая, реалистичная)
+        ctx.fillStyle = '#786757';
+        ctx.shadowColor = '#4d4237';
+        ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.ellipse(0, 2, 24, 19, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8f7b66';
+        ctx.beginPath(); ctx.ellipse(-8, -5, 11, 12, 0, 0, Math.PI*2); ctx.fill();
+        // Глаза
+        ctx.fillStyle = '#e6b422';
+        ctx.beginPath(); ctx.arc(-14, -9, 3.8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-15.5, -10, 1.7, 0, Math.PI*2); ctx.fill();
+        // Пасть
+        ctx.strokeStyle = '#3a2020';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(-24, -2); ctx.lineTo(-34, 2); ctx.stroke();
+      } else {
+        // Пулемётная машина-гиена
+        ctx.fillStyle = '#4e4b44';
+        ctx.shadowColor = '#b87333';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(-26, -18, 52, 34);
+        ctx.fillStyle = '#2f2c27';
+        ctx.fillRect(-20, -13, 40, 24);
+        ctx.fillStyle = '#1a1814';
+        ctx.beginPath(); ctx.arc(-19, 18, 9, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(19, 18, 9, 0, Math.PI*2); ctx.fill();
+        // Пулемёт
+        ctx.fillStyle = '#3d3832';
+        ctx.fillRect(26, -7, 24, 8);
+        ctx.fillStyle = '#5f5542';
+        ctx.fillRect(40, -6, 16, 6);
+        if (h.gunTimer > 0) {
+          ctx.fillStyle = '#ff9900';
+          ctx.shadowColor = '#ff5500';
+          ctx.shadowBlur = 22;
+          ctx.beginPath(); ctx.arc(56, -2, 9 + Math.random()*4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#ffff80';
+          ctx.beginPath(); ctx.arc(60, -2, 4, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function spawnParticles(x, y, color, count = 8) {
+      for (let i=0; i<count; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random()-0.5)*7,
+          vy: (Math.random()-0.5)*7 - 2,
+          life: 30 + Math.random()*20,
+          color: color,
+          size: 2+Math.random()*5
+        });
+      }
+    }
+
+    // ---------- ЛОГИКА СЮЖЕТА И ЭКШЕНА ----------
+    function updateStory() {
+      // Движение гиен к цели
+      hyenas.forEach(h => {
+        if (h.x > h.targetX && storyPhase !== 'escape') {
+          h.x -= h.speed;
+        }
+        if (h.gunTimer > 0) h.gunTimer -= 0.7;
+      });
+
+      // Экшен фазы
+      if (storyPhase === 'intro') {
+        phaseTimer++;
+        if (phaseTimer > 50) { storyPhase = 'meeting'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'meeting') {
+        phaseTimer++;
+        if (phaseTimer > 70) { storyPhase = 'hyena_approach'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'hyena_approach') {
+        phaseTimer++;
+        if (phaseTimer > 50) { storyPhase = 'battle_start'; phaseTimer = 0; battleIntensity = 3; }
+      }
+      else if (storyPhase === 'battle_start') {
+        phaseTimer++;
+        // гиены превращаются в пулемёты
+        hyenas.forEach(h => { if (h.mode === 'beast') h.mode = 'machine'; });
+        if (phaseTimer > 30) { storyPhase = 'fierce_battle'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'fierce_battle') {
+        phaseTimer++;
+        battleIntensity = 6;
+        // Спецэффекты битвы
+        if (frame % 5 === 0) {
+          spawnParticles(dragon.x-15, dragon.y-10, '#7effb2', 5);
+          spawnParticles(panther.x-10, panther.y-8, '#b8d0ff', 5);
+        }
+        hyenas.forEach((h, i) => {
+          if (Math.random() < 0.3) h.gunTimer = 4 + Math.random()*6;
+          if (h.gunTimer > 2 && Math.random()<0.4) {
+            spawnParticles(h.x+35, h.y-5, '#ff8844', 3);
+          }
+        });
+        if (phaseTimer > 90) { storyPhase = 'transform_all'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'transform_all') {
+        phaseTimer++;
+        // Прогресс трансформации героев в машины
+        dragon.transformProgress = Math.min(1, phaseTimer / 50);
+        panther.transformProgress = Math.min(1, phaseTimer / 50);
+        hyenas.forEach(h => { h.mode = 'machine'; });
+        if (phaseTimer > 60) { storyPhase = 'escape'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'escape') {
+        phaseTimer++;
+        // Все уезжают вправо
+        dragon.x += 4.2;
+        panther.x += 4.5;
+        hyenas.forEach(h => { h.x += 3.8 + Math.random()*1.5; });
+        if (dragon.x > W+100) {
+          // Полный сброс для перезапуска
+          resetPositions();
+          storyPhase = 'intro';
+          phaseTimer = 0;
+        }
+      }
+
+      // Обновление статуса
+      let statusMsg = '';
+      switch(storyPhase) {
+        case 'intro': statusMsg = '🌿 Старый изумрудный дракон...'; break;
+        case 'meeting': statusMsg = '🤝 Ice Strike & Ice Panter у разрушенного гриля'; break;
+        case 'hyena_approach': statusMsg = '⚠️ Стая гиен несётся!'; break;
+        case 'battle_start': statusMsg = '🔫 Гиены превратились в пулемёты!'; break;
+        case 'fierce_battle': statusMsg = '💥 ЯРОСТНАЯ БИТВА! Искры и выстрелы!'; break;
+        case 'transform_all': statusMsg = '🚗 ВСЕ ПРЕВРАЩАЮТСЯ В МАШИНЫ!'; break;
+        case 'escape': statusMsg = '🏁 Герои уезжают в закат!'; break;
+        default: statusMsg = '⚡ ДИКИЙ СКРИЧЕР';
+      }
+      statusEl.textContent = '🎬 ' + statusMsg;
+
+      // Частицы
+      for (let i=particles.length-1; i>=0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life--;
+        if (p.life <= 0) particles.splice(i,1);
+      }
+    }
+
+    function resetPositions() {
+      dragon.x = dragon.baseX; dragon.y = dragon.baseY; dragon.mode = 'beast'; dragon.transformProgress = 0;
+      panther.x = panther.baseX; panther.y = panther.baseY; panther.mode = 'beast'; panther.transformProgress = 0;
+      hyenas[0].x = 800; hyenas[0].y = 340; hyenas[0].mode = 'beast'; hyenas[0].gunTimer = 0;
+      hyenas[1].x = 820; hyenas[1].y = 270; hyenas[1].mode = 'beast'; hyenas[1].gunTimer = 0;
+      hyenas[2].x = 790; hyenas[2].y = 410; hyenas[2].mode = 'beast'; hyenas[2].gunTimer = 0;
+      particles = [];
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0b1320');
+      grad.addColorStop(0.7, '#1f3144');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      // луна
+      ctx.fillStyle = '#fefae0';
+      ctx.shadowColor = '#ffdd99';
+      ctx.shadowBlur = 28;
+      ctx.beginPath(); ctx.arc(130, 100, 42, 0, 2*Math.PI); ctx.fill();
+      ctx.shadowBlur = 0;
+      // городские крыши
+      ctx.fillStyle = '#141c26';
+      ctx.fillRect(0, 400, W, 130);
+      for (let i=0;i<14;i++) {
+        ctx.fillStyle = '#1e2733';
+        ctx.fillRect(i*70, 370, 45, 70);
+      }
+      // разрушенный гриль
+      ctx.fillStyle = '#1a1c22';
+      ctx.strokeStyle = '#4d5562';
+      ctx.lineWidth = 4;
+      ctx.fillRect(grill.x-28, grill.y-22, grill.w, grill.h);
+      ctx.strokeRect(grill.x-28, grill.y-22, grill.w, grill.h);
+      for (let i=0;i<5;i++) {
+        ctx.beginPath();
+        ctx.moveTo(grill.x-18 + i*18, grill.y-22);
+        ctx.lineTo(grill.x-12 + i*18 + (i%2*4), grill.y+48);
+        ctx.strokeStyle = '#0f0f14';
+        ctx.stroke();
+      }
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, W, H);
+      drawBackground();
+
+      // Герои (с учётом трансформации)
+      let dragonIsMachine = (storyPhase === 'transform_all' || storyPhase === 'escape');
+      let pantherIsMachine = (storyPhase === 'transform_all' || storyPhase === 'escape');
+      drawRealisticDragon(dragon.x, dragon.y, frame, dragonIsMachine, dragon.transformProgress);
+      drawRealisticPanther(panther.x, panther.y, frame, pantherIsMachine, panther.transformProgress);
+
+      // Гиены
+      hyenas.forEach((h, i) => drawHyenaRealistic(h, i, frame));
+
+      // Частицы
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 2*Math.PI); ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+
+      // Эпичные надписи во время битвы
+      if (storyPhase === 'fierce_battle') {
+        ctx.font = 'bold 24px "Courier New"';
+        ctx.fillStyle = '#ffbb55';
+        ctx.fillText('⚡СКРИЧЕР⚡', dragon.x-70, dragon.y-65);
+        ctx.fillStyle = '#aaccff';
+        ctx.fillText('ICE STRIKE', panther.x-80, panther.y-70);
+      } else if (storyPhase === 'transform_all') {
+        ctx.font = 'italic 22px "Impact"';
+        ctx.fillStyle = '#ffdd88';
+        ctx.fillText('ТРАНСФОРМАЦИЯ!', 350, 100);
+      }
+    }
+
+    function animationLoop() {
+      frame++;
+      updateStory();
+      drawScene();
+      animationId = requestAnimationFrame(animationLoop);
+    }
+
+    function restartCartoon() {
+      if (animationId) cancelAnimationFrame(animationId);
+      resetPositions();
+      storyPhase = 'intro';
+      phaseTimer = 0;
+      battleIntensity = 0;
+      frame = 0;
+      animationLoop();
+    }
+
+    document.getElementById('restartButton').addEventListener('click', restartCartoon);
+    restartCartoon();
+
+    window.addEventListener('beforeunload', ()=>{
+      if(animationId) cancelAnimationFrame(animationId);
+    });
+  })();
+</script>
+</body>
+</html>

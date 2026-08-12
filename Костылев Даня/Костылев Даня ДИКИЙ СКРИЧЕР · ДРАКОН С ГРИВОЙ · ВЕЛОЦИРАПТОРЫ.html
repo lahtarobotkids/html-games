@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ДИКИЙ СКРИЧЕР · ДРАКОН С ГРИВОЙ · ВЕЛОЦИРАПТОРЫ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #0b0e14;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+    }
+    .cartoon-box {
+      background: #000000dd;
+      border: 3px solid #5f6b7c;
+      border-radius: 2.5rem;
+      padding: 1rem;
+      box-shadow: 0 0 55px #1f3b4f;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 960px;
+      height: auto;
+      border-radius: 1.8rem;
+      background: #0c1420;
+      box-shadow: inset 0 0 40px #000000, 0 30px 50px #000000f0;
+    }
+    .panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.9rem;
+      color: #e3e9ff;
+      font-weight: bold;
+      padding: 0 0.8rem;
+    }
+    .hero-tags {
+      display: flex;
+      gap: 2.2rem;
+      font-size: 1rem;
+      text-shadow: 0 0 14px currentColor;
+    }
+    .dragon-tag { color: #7effb2; }
+    .panther-tag { color: #b8d0ff; }
+    button {
+      background: #1f2d44;
+      border: none;
+      color: #f4f8ff;
+      font-weight: bold;
+      padding: 0.5rem 1.6rem;
+      border-radius: 3rem;
+      font-size: 1rem;
+      letter-spacing: 0.7px;
+      cursor: pointer;
+      box-shadow: 0 5px 0 #121a24, 0 0 18px #3b4f6b;
+      transition: 0.1s ease;
+      border: 1px solid #60759b;
+    }
+    button:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 #121a24, 0 0 24px #5f7bb0;
+    }
+    .status-badge {
+      background: #00000070;
+      padding: 0.4rem 1.7rem;
+      border-radius: 2rem;
+      color: #ffda9e;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="900" height="520" aria-label="Эпичный мультфильм с драконом, пантерой и велоцирапторами"></canvas>
+    <div class="panel">
+      <div class="hero-tags">
+        <span class="dragon-tag">🐉🦁 ДРАКОН С ГРИВОЙ</span>
+        <span class="panther-tag">🐆❄️ ПАНТЕРА-БАРС</span>
+      </div>
+      <div class="status-badge" id="liveStatus">⚡ СЮЖЕТ СТАРТУЕТ</div>
+      <button id="restartButton">🔄 НОВЫЙ ЭКШЕН</button>
+    </div>
+  </div>
+  <p style="color:#96a7c2; margin-top:0.4rem; font-style:italic;">🦖 Велоцирапторы атакуют · эпичная трансформация в машины</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+
+    const W = 900, H = 520;
+
+    let frame = 0;
+    let animationId = null;
+
+    // ---------- ПЕРСОНАЖИ ----------
+    const dragon = {
+      x: 240, y: 315,
+      baseX: 240, baseY: 315,
+      mode: 'beast',
+      transformProgress: 0,
+    };
+
+    const panther = {
+      x: 610, y: 330,
+      baseX: 610, baseY: 330,
+      mode: 'beast',
+      transformProgress: 0,
+    };
+
+    // Велоцирапторы (бывшие гиены)
+    const raptors = [
+      { x: 810, y: 335, targetX: 470, speed: 1.05, mode: 'beast', gunTimer: 0, transformProgress: 0 },
+      { x: 830, y: 265, targetX: 420, speed: 0.98, mode: 'beast', gunTimer: 0, transformProgress: 0 },
+      { x: 800, y: 415, targetX: 490, speed: 0.92, mode: 'beast', gunTimer: 0, transformProgress: 0 }
+    ];
+
+    const grill = { x: 435, y: 350, w: 85, h: 70 };
+
+    let storyPhase = 'intro';
+    let phaseTimer = 0;
+    let particles = [];
+
+    // ---------- РИСОВАНИЕ НАСТОЯЩИХ СУЩЕСТВ ----------
+    function drawDragonWithMane(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        let breathe = Math.sin(frameCount * 0.25) * 0.9;
+        ctx.translate(0, breathe);
+        // Тело дракона
+        ctx.fillStyle = '#1c4a38';
+        ctx.shadowColor = '#2e8b57';
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 35, 27, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Изумрудная чешуя
+        ctx.fillStyle = '#2a6b4c';
+        ctx.beginPath(); ctx.ellipse(-13, -6, 15, 14, 0.1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3e8b5c';
+        ctx.beginPath(); ctx.ellipse(15, 7, 16, 14, -0.1, 0, Math.PI*2); ctx.fill();
+        // Голова
+        ctx.fillStyle = '#1f5e3f';
+        ctx.beginPath(); ctx.ellipse(-26, -18, 18, 19, 0.15, 0, Math.PI*2); ctx.fill();
+        // ГЛАЗА
+        ctx.fillStyle = '#f5ffe0';
+        ctx.beginPath(); ctx.arc(-32, -24, 6.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#0b1300';
+        ctx.beginPath(); ctx.arc(-34 + Math.sin(frameCount*0.2)*0.7, -25, 3, 0, Math.PI*2); ctx.fill();
+        // Рога
+        ctx.strokeStyle = '#c9a24d';
+        ctx.lineWidth = 3.8;
+        ctx.beginPath(); ctx.moveTo(-38, -38); ctx.lineTo(-47, -58); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-20, -36); ctx.lineTo(-12, -56); ctx.stroke();
+        // 🦁 ГРИВА ЛЬВА (вокруг головы и шеи)
+        ctx.fillStyle = '#b8860b';
+        ctx.shadowColor = '#daa520';
+        ctx.shadowBlur = 14;
+        for (let i=0; i<18; i++) {
+          let angle = (i/18)*Math.PI*2 + 0.2;
+          let gx = -26 + Math.cos(angle)*18;
+          let gy = -18 + Math.sin(angle)*16;
+          ctx.beginPath(); ctx.arc(gx, gy, 5+Math.sin(frameCount*0.5+i)*1.2, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#b8860b';
+        ctx.beginPath(); ctx.ellipse(-26, -8, 20, 16, 0, 0, Math.PI*2); ctx.fill();
+        // Крылья
+        ctx.fillStyle = '#286b46';
+        ctx.beginPath(); ctx.ellipse(-8, -35, 25, 16, -0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3a7a52';
+        ctx.beginPath(); ctx.ellipse(22, -30, 23, 14, 0.5, 0, Math.PI*2); ctx.fill();
+      } else {
+        let mp = Math.min(progress, 1);
+        ctx.globalAlpha = mp;
+        ctx.fillStyle = '#1f4030';
+        ctx.shadowColor = '#00fa9a';
+        ctx.shadowBlur = 18;
+        ctx.fillRect(-36, -20, 72, 38);
+        ctx.fillStyle = '#2a5e44';
+        ctx.fillRect(-28, -14, 54, 26);
+        ctx.fillStyle = '#0b0b0f';
+        ctx.beginPath(); ctx.arc(-22, 22, 11, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(22, 22, 11, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawPantherSnowLeopard(x, y, frameCount, isMachine = false, progress = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (!isMachine) {
+        let tailWag = Math.sin(frameCount * 0.5) * 1.3;
+        // Тело чёрной пантеры с окрасом снежного барса
+        ctx.fillStyle = '#1a1a26';
+        ctx.shadowColor = '#7b9ec0';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 33, 29, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Пятна снежного барса (крупные розетки)
+        ctx.fillStyle = '#c4d3e8';
+        ctx.beginPath(); ctx.arc(-10, -9, 9, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(15, 6, 10, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8b9db5';
+        ctx.beginPath(); ctx.arc(7, -19, 8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#b7c7dd';
+        ctx.beginPath(); ctx.arc(-20, 12, 7, 0, Math.PI*2); ctx.fill();
+        // Голова пантеры
+        ctx.fillStyle = '#10101c';
+        ctx.beginPath(); ctx.ellipse(-32, -9, 16, 18, 0.1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#eaf2ff';
+        ctx.beginPath(); ctx.arc(-38, -14, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000022';
+        ctx.beginPath(); ctx.arc(-40 + Math.sin(frameCount*0.4)*0.7, -15, 2.8, 0, Math.PI*2); ctx.fill();
+        // Уши
+        ctx.fillStyle = '#1c1c2a';
+        ctx.beginPath(); ctx.ellipse(-43, -28, 7, 11, -0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-24, -30, 6, 10, 0.2, 0, Math.PI*2); ctx.fill();
+        // Хвост
+        ctx.strokeStyle = '#1e1e30';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.moveTo(30, 12); ctx.lineTo(46 + tailWag, 22); ctx.stroke();
+      } else {
+        let mp = Math.min(progress, 1);
+        ctx.globalAlpha = mp;
+        ctx.fillStyle = '#13131f';
+        ctx.shadowColor = '#9ab0d0';
+        ctx.shadowBlur = 14;
+        ctx.fillRect(-36, -22, 72, 40);
+        ctx.fillStyle = '#1e1e32';
+        ctx.fillRect(-28, -16, 54, 28);
+        ctx.fillStyle = '#0a0a10';
+        ctx.beginPath(); ctx.arc(-24, 24, 13, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(24, 24, 13, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function drawVelociraptor(r, idx, frameCount) {
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      if (r.mode === 'beast') {
+        // ВЕЛОЦИРАПТОР (реалистичный, юрский период)
+        ctx.fillStyle = '#6b5e4a';
+        ctx.shadowColor = '#3d362a';
+        ctx.shadowBlur = 12;
+        // Тело
+        ctx.beginPath(); ctx.ellipse(0, 4, 26, 20, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7d6c54';
+        ctx.beginPath(); ctx.ellipse(-10, -4, 13, 14, 0, 0, Math.PI*2); ctx.fill();
+        // Хвост
+        ctx.strokeStyle = '#5a4d38';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(22, 10); ctx.lineTo(48, 24); ctx.stroke();
+        // Голова велоцираптора
+        ctx.fillStyle = '#4d4232';
+        ctx.beginPath(); ctx.ellipse(-22, -8, 13, 11, 0.2, 0, Math.PI*2); ctx.fill();
+        // Челюсть с зубами
+        ctx.fillStyle = '#c4b59b';
+        ctx.beginPath(); ctx.ellipse(-28, -1, 8, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff8e0';
+        for (let t=0; t<4; t++) {
+          ctx.beginPath(); ctx.moveTo(-34 + t*2.5, -4); ctx.lineTo(-36 + t*2.5, 1); ctx.strokeStyle = '#e0d7c0'; ctx.lineWidth=1.8; ctx.stroke();
+        }
+        // Глаз
+        ctx.fillStyle = '#f0b300';
+        ctx.beginPath(); ctx.arc(-26, -14, 4.2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-27.5, -15, 2, 0, Math.PI*2); ctx.fill();
+        // Когти на ногах
+        ctx.fillStyle = '#3a3124';
+        ctx.beginPath(); ctx.moveTo(-8, 24); ctx.lineTo(-14, 34); ctx.lineTo(-2, 28); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(8, 24); ctx.lineTo(4, 35); ctx.lineTo(14, 28); ctx.fill();
+      } else {
+        // МАШИНА-ВЕЛОЦИРАПТОР (пулемётная установка)
+        ctx.fillStyle = '#4e4b44';
+        ctx.shadowColor = '#b87333';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(-28, -18, 56, 36);
+        ctx.fillStyle = '#2f2c27';
+        ctx.fillRect(-22, -13, 42, 26);
+        ctx.fillStyle = '#1a1814';
+        ctx.beginPath(); ctx.arc(-21, 20, 10, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(21, 20, 10, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#5f5542';
+        ctx.fillRect(28, -7, 26, 8);
+        if (r.gunTimer > 0) {
+          ctx.fillStyle = '#ff9900';
+          ctx.shadowColor = '#ff5500';
+          ctx.shadowBlur = 24;
+          ctx.beginPath(); ctx.arc(54, -2, 10 + Math.random()*5, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function spawnParticles(x, y, color, count=9) {
+      for (let i=0;i<count;i++) {
+        particles.push({
+          x,y, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8-2,
+          life:30+Math.random()*22, color, size:2+Math.random()*5
+        });
+      }
+    }
+
+    // ---------- СЮЖЕТ И ЭКШЕН ----------
+    function updateStory() {
+      raptors.forEach(r => {
+        if (r.x > r.targetX && storyPhase !== 'escape') r.x -= r.speed;
+        if (r.gunTimer > 0) r.gunTimer -= 0.7;
+      });
+
+      if (storyPhase === 'intro') { phaseTimer++; if(phaseTimer>50){storyPhase='meeting'; phaseTimer=0;} }
+      else if (storyPhase === 'meeting') { phaseTimer++; if(phaseTimer>70){storyPhase='raptor_approach'; phaseTimer=0;} }
+      else if (storyPhase === 'raptor_approach') { phaseTimer++; if(phaseTimer>55){storyPhase='battle_start'; phaseTimer=0;} }
+      else if (storyPhase === 'battle_start') {
+        phaseTimer++;
+        raptors.forEach(r => { if(r.mode==='beast') r.mode='machine'; });
+        if(phaseTimer>35){storyPhase='fierce_battle'; phaseTimer=0;}
+      }
+      else if (storyPhase === 'fierce_battle') {
+        phaseTimer++;
+        if(frame%4===0) {
+          spawnParticles(dragon.x-10, dragon.y-8, '#7effb2', 6);
+          spawnParticles(panther.x-8, panther.y-6, '#b8d0ff', 6);
+        }
+        raptors.forEach(r => {
+          if(Math.random()<0.35) r.gunTimer = 5+Math.random()*7;
+          if(r.gunTimer>2 && Math.random()<0.4) spawnParticles(r.x+35, r.y-5, '#ff8844', 3);
+        });
+        if(phaseTimer>100){storyPhase='transform_all'; phaseTimer=0;}
+      }
+      else if (storyPhase === 'transform_all') {
+        phaseTimer++;
+        dragon.transformProgress = Math.min(1, phaseTimer/55);
+        panther.transformProgress = Math.min(1, phaseTimer/55);
+        raptors.forEach(r => { r.mode='machine'; });
+        if(phaseTimer>65){storyPhase='escape'; phaseTimer=0;}
+      }
+      else if (storyPhase === 'escape') {
+        dragon.x += 4.5; panther.x += 4.8;
+        raptors.forEach(r => r.x += 4.0 + Math.random()*2);
+        if(dragon.x > W+120) {
+          resetAll();
+          storyPhase='intro'; phaseTimer=0;
+        }
+      }
+
+      let msg='';
+      if(storyPhase==='intro') msg='🌿 Изумрудный дракон с львиной гривой';
+      else if(storyPhase==='meeting') msg='🤝 Пантера-барс у разрушенного гриля';
+      else if(storyPhase==='raptor_approach') msg='🦖 Велоцирапторы атакуют!';
+      else if(storyPhase==='battle_start') msg='🔫 Рапторы превратились в пулемёты!';
+      else if(storyPhase==='fierce_battle') msg='💥 БИТВА! Искры, выстрелы, когти!';
+      else if(storyPhase==='transform_all') msg='🚗 ВСЕ СТАНОВЯТСЯ МАШИНАМИ';
+      else if(storyPhase==='escape') msg='🏁 Герои уезжают в закат!';
+      statusEl.textContent = '🎬 '+msg;
+
+      for(let i=particles.length-1;i>=0;i--) {
+        let p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.life--;
+        if(p.life<=0) particles.splice(i,1);
+      }
+    }
+
+    function resetAll() {
+      dragon.x=dragon.baseX; dragon.y=dragon.baseY; dragon.mode='beast'; dragon.transformProgress=0;
+      panther.x=panther.baseX; panther.y=panther.baseY; panther.mode='beast'; panther.transformProgress=0;
+      raptors[0].x=810; raptors[0].y=335; raptors[0].mode='beast'; raptors[0].gunTimer=0;
+      raptors[1].x=830; raptors[1].y=265; raptors[1].mode='beast'; raptors[1].gunTimer=0;
+      raptors[2].x=800; raptors[2].y=415; raptors[2].mode='beast'; raptors[2].gunTimer=0;
+      particles=[];
+    }
+
+    function drawBackground() {
+      const grad=ctx.createLinearGradient(0,0,0,H);
+      grad.addColorStop(0,'#0b1320'); grad.addColorStop(0.7,'#1f3144');
+      ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#fefae0'; ctx.shadowColor='#ffdd99'; ctx.shadowBlur=30;
+      ctx.beginPath(); ctx.arc(130,100,44,0,2*Math.PI); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle='#141c26'; ctx.fillRect(0,400,W,130);
+      for(let i=0;i<14;i++){ ctx.fillStyle='#1e2733'; ctx.fillRect(i*70,370,45,70); }
+      ctx.fillStyle='#1a1c22'; ctx.strokeStyle='#4d5562'; ctx.lineWidth=4;
+      ctx.fillRect(grill.x-28,grill.y-22,grill.w,grill.h); ctx.strokeRect(grill.x-28,grill.y-22,grill.w,grill.h);
+    }
+
+    function drawScene() {
+      ctx.clearRect(0,0,W,H); drawBackground();
+      let dMachine = (storyPhase==='transform_all'||storyPhase==='escape');
+      let pMachine = (storyPhase==='transform_all'||storyPhase==='escape');
+      drawDragonWithMane(dragon.x,dragon.y,frame,dMachine,dragon.transformProgress);
+      drawPantherSnowLeopard(panther.x,panther.y,frame,pMachine,panther.transformProgress);
+      raptors.forEach((r,i)=>drawVelociraptor(r,i,frame));
+      particles.forEach(p=>{ctx.fillStyle=p.color;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,2*Math.PI);ctx.fill();});
+      if(storyPhase==='fierce_battle'){
+        ctx.font='bold 26px "Courier New"'; ctx.fillStyle='#ffbb55'; ctx.fillText('⚡СКРИЧЕР⚡',dragon.x-70,dragon.y-70);
+        ctx.fillStyle='#aaccff'; ctx.fillText('ICE STRIKE',panther.x-80,panther.y-75);
+      }
+    }
+
+    function loop() {
+      frame++; updateStory(); drawScene();
+      animationId=requestAnimationFrame(loop);
+    }
+
+    function restart(){
+      if(animationId) cancelAnimationFrame(animationId);
+      resetAll(); storyPhase='intro'; phaseTimer=0; frame=0; loop();
+    }
+
+    document.getElementById('restartButton').addEventListener('click',restart);
+    restart();
+    window.addEventListener('beforeunload',()=>{if(animationId)cancelAnimationFrame(animationId);});
+  })();
+</script>
+</body>
+</html>

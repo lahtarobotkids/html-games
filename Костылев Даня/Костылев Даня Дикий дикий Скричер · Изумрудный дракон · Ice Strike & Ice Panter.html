@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Дикий дикий Скричер · Изумрудный дракон · Ice Strike & Ice Panter</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #1a1c2b;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Courier New', monospace;
+    }
+    .cartoon-wrapper {
+      background: #0b0c14;
+      border: 4px solid #5e6b7c;
+      border-radius: 2rem;
+      padding: 1.2rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 900px;
+      height: auto;
+      border-radius: 1.2rem;
+      background: radial-gradient(circle at 20% 30%, #2f3b4c, #14181f);
+      box-shadow: inset 0 0 30px #00000066, 0 15px 25px black;
+    }
+    .title-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #ccddee;
+      margin-top: 0.8rem;
+      padding: 0 0.5rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-shadow: 2px 2px 0 #00000080;
+    }
+    .hero-names {
+      display: flex;
+      gap: 2.5rem;
+    }
+    .dragon {
+      color: #7fffd4;
+      filter: drop-shadow(0 0 8px #00fa9a);
+    }
+    .panther {
+      color: #b0c4de;
+      filter: drop-shadow(0 0 10px #4682b4);
+    }
+    button {
+      background: #3e4a5a;
+      border: none;
+      color: white;
+      font-weight: bold;
+      padding: 0.5rem 1.3rem;
+      border-radius: 2rem;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 5px 0 #1e232b;
+      transition: 0.1s linear;
+      letter-spacing: 0.5px;
+      background: #2f3b4c;
+      border: 1px solid #6d7b8c;
+    }
+    button:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 #1e232b;
+    }
+    .status {
+      background: #00000055;
+      padding: 0.3rem 1.2rem;
+      border-radius: 2rem;
+      color: #f0e68c;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-wrapper">
+    <canvas id="cartoonCanvas" width="800" height="500" aria-label="Мультфильм Дикий дикий Скричер"></canvas>
+    <div class="title-panel">
+      <div class="hero-names">
+        <span class="dragon">🐉 ИЗУМРУДНЫЙ ДРАКОН</span>
+        <span class="panther">🐆 ICE STRIKE & ICE PANTER</span>
+      </div>
+      <div class="status" id="sceneStatus">🌙 Крыша · чёрный гриль</div>
+      <button id="replayBtn">🔄 ПЕРЕЗАПУСК МУЛЬТА</button>
+    </div>
+  </div>
+  <p style="color:#9aa9b9; margin-top:0.5rem; font-style:italic;">⚡ Гиены-пулемёты наступают... дикий скричер!</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('cartoonCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('sceneStatus');
+
+    // Размеры
+    const W = 800, H = 500;
+
+    // ---------- СОСТОЯНИЕ АНИМАЦИИ ----------
+    let frame = 0;
+    let animationId = null;
+
+    // Герои
+    const dragon = {
+      x: 200, y: 290,
+      baseX: 200, baseY: 290,
+    };
+
+    const pantherHybrid = {
+      x: 550, y: 300,
+      baseX: 550, baseY: 300,
+    };
+
+    // Гиены-трансформеры (стая)
+    const hyenas = [
+      { 
+        x: 700, y: 340, 
+        targetX: 480, speed: 0.9,
+        mode: 'beast', // 'beast' или 'machine'
+        transformTimer: 0,
+        gunFlame: 0,
+        angle: 0
+      },
+      { 
+        x: 750, y: 280, 
+        targetX: 430, speed: 0.8,
+        mode: 'beast',
+        transformTimer: 0,
+        gunFlame: 0,
+        angle: 0
+      },
+      { 
+        x: 720, y: 400, 
+        targetX: 500, speed: 0.85,
+        mode: 'beast',
+        transformTimer: 0,
+        gunFlame: 0,
+        angle: 0
+      }
+    ];
+
+    // Чёрный гриль (разрушенная решётка)
+    const grill = {
+      x: 380, y: 330,
+      width: 80,
+      height: 70,
+      broken: true,
+    };
+
+    // Таймлайн событий (сценарий)
+    let narrativePhase = 'intro'; // intro, meeting, hyena_approach, transform, battle
+    let phaseTimer = 0;
+
+    // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ РИСОВАНИЯ ----------
+    function drawSkyGradient() {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(0.7, '#2c3e50');
+      grad.addColorStop(1, '#1e2b38');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Луна и звёзды
+    function drawMoon() {
+      ctx.fillStyle = '#fef9e4';
+      ctx.shadowColor = '#ffecaa';
+      ctx.shadowBlur = 24;
+      ctx.beginPath();
+      ctx.arc(120, 90, 38, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      // кратеры
+      ctx.fillStyle = '#e0d7b0';
+      ctx.beginPath(); ctx.arc(108, 78, 6, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(130, 98, 8, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Разрушенный чёрный гриль (крыша/решётка)
+    function drawBrokenGrill() {
+      const gx = grill.x, gy = grill.y;
+      ctx.save();
+      // Тень конструкции
+      ctx.shadowColor = '#00000080';
+      ctx.shadowBlur = 12;
+      // Основная рама
+      ctx.fillStyle = '#1a1e24';
+      ctx.strokeStyle = '#3a414d';
+      ctx.lineWidth = 4;
+      ctx.fillRect(gx-30, gy-20, 90, 70);
+      ctx.strokeRect(gx-30, gy-20, 90, 70);
+
+      // Сломанные прутья
+      ctx.strokeStyle = '#0b0c0f';
+      ctx.lineWidth = 5;
+      for (let i = 0; i < 5; i++) {
+        let offsetX = gx - 20 + i * 18;
+        ctx.beginPath();
+        ctx.moveTo(offsetX, gy-20);
+        ctx.lineTo(offsetX + (i%2===0? 6: -5), gy+45);
+        ctx.stroke();
+      }
+      // Эффект разрушения
+      ctx.fillStyle = '#5a5f66';
+      ctx.font = 'bold 24px "Courier New"';
+      ctx.fillText('⚡', gx+15, gy-5);
+      ctx.fillStyle = '#2d2f34';
+      ctx.beginPath(); ctx.arc(gx+25, gy+12, 11, 0, Math.PI); ctx.fill();
+      ctx.restore();
+    }
+
+    // Изумрудный дракон (очень старый, дикий скричер)
+    function drawEmeraldDragon(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      // Дрожание старости
+      let shake = Math.sin(frameCount * 0.4) * 0.7;
+      ctx.translate(shake, shake*0.5);
+
+      // Тело дракона
+      ctx.fillStyle = '#0f5b4b';
+      ctx.shadowColor = '#00fa9a';
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.ellipse(0, 5, 32, 25, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Чешуя изумрудная
+      ctx.fillStyle = '#2e8b57';
+      ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.ellipse(-8, -8, 14, 12, 0.2, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#3cb371';
+      ctx.beginPath(); ctx.ellipse(12, 8, 12, 11, -0.1, 0, Math.PI*2); ctx.fill();
+
+      // Голова дракона
+      ctx.fillStyle = '#1e6b4c';
+      ctx.beginPath(); ctx.ellipse(-22, -15, 14, 16, 0.1, 0, Math.PI*2); ctx.fill();
+      // Глаза
+      ctx.fillStyle = '#f0f8ff';
+      ctx.beginPath(); ctx.arc(-28, -20, 5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000000';
+      ctx.beginPath(); ctx.arc(-30 + Math.sin(frameCount*0.2)*0.7, -21, 2.2, 0, Math.PI*2); ctx.fill();
+      // Рога
+      ctx.strokeStyle = '#b8860b';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-34, -32); ctx.lineTo(-40, -48); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-19, -30); ctx.lineTo(-13, -46); ctx.stroke();
+      // Крылья (старые, изумрудные перепонки)
+      ctx.fillStyle = '#2f6b4a';
+      ctx.beginPath(); ctx.ellipse(-5, -30, 22, 12, -0.3, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#418563';
+      ctx.beginPath(); ctx.ellipse(18, -24, 20, 10, 0.4, 0, Math.PI*2); ctx.fill();
+      // Дыхание (дымка)
+      ctx.fillStyle = '#b0e0b0';
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(-38, -18, 7, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // Гибрид чёрной пантеры и снежного барса (Ice Strike / Ice Panter)
+    function drawPantherHybrid(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      // Грациозное движение
+      let bob = Math.sin(frameCount * 0.5) * 0.9;
+      ctx.translate(0, bob);
+
+      // Тело: смесь чёрного и ледяного окраса
+      ctx.fillStyle = '#1c1c2a';
+      ctx.shadowColor = '#add8e6';
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 30, 26, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Пятна снежного барса
+      ctx.fillStyle = '#c0c0d0';
+      ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(-8, -7, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(13, 3, 8, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#708090';
+      ctx.beginPath(); ctx.arc(6, -16, 6, 0, Math.PI*2); ctx.fill();
+
+      // Голова пантеры
+      ctx.fillStyle = '#0d0d1a';
+      ctx.beginPath(); ctx.ellipse(-28, -6, 13, 15, 0.1, 0, Math.PI*2); ctx.fill();
+      // Уши
+      ctx.fillStyle = '#101018';
+      ctx.beginPath(); ctx.ellipse(-38, -22, 6, 8, -0.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-20, -24, 5, 7, 0.2, 0, Math.PI*2); ctx.fill();
+      // Глаза ледяные
+      ctx.fillStyle = '#e0ffff';
+      ctx.beginPath(); ctx.arc(-34, -10, 5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000022';
+      ctx.beginPath(); ctx.arc(-36 + Math.sin(frameCount*0.3)*0.6, -11, 2.4, 0, Math.PI*2); ctx.fill();
+      // Имя Ice Panter / Ice Strike - метка
+      ctx.fillStyle = '#b0e0ff';
+      ctx.font = 'italic 10px "Courier New"';
+      ctx.fillText('ICE', -38, -32);
+      ctx.restore();
+    }
+
+    // Гиена (обычная или пулемётная машина)
+    function drawHyena(h, index, frameCount) {
+      ctx.save();
+      ctx.translate(h.x, h.y);
+      let hyenaShake = (h.mode === 'machine') ? Math.sin(frameCount * 1.8) * 1.2 : 0;
+      ctx.translate(hyenaShake, 0);
+
+      if (h.mode === 'beast') {
+        // Злая гиена
+        ctx.fillStyle = '#6b5b4f';
+        ctx.shadowColor = '#5a4a3a';
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.ellipse(0, 0, 22, 18, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8b7a62';
+        ctx.beginPath(); ctx.ellipse(-10, -6, 9, 10, 0, 0, Math.PI*2); ctx.fill();
+        // Глаза злые
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(-15, -10, 3.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-16, -11, 1.6, 0, Math.PI*2); ctx.fill();
+        // Пасть
+        ctx.strokeStyle = '#220000';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-24, -4); ctx.lineTo(-32, -1); ctx.stroke();
+      } else {
+        // ПУЛЕМЁТНАЯ МАШИНА (трансформация)
+        ctx.fillStyle = '#3a3c40';
+        ctx.shadowColor = '#708090';
+        ctx.shadowBlur = 10;
+        // Корпус машины
+        ctx.fillRect(-24, -16, 48, 30);
+        ctx.fillStyle = '#1e1f24';
+        ctx.fillRect(-20, -12, 40, 22);
+        // Колёса/гусеницы
+        ctx.fillStyle = '#0a0a0c';
+        ctx.beginPath(); ctx.arc(-18, 16, 9, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(18, 16, 9, 0, Math.PI*2); ctx.fill();
+        // Пулемётный ствол
+        ctx.fillStyle = '#2b2b2f';
+        ctx.fillRect(24, -6, 22, 8);
+        ctx.fillStyle = '#4d4d55';
+        ctx.fillRect(38, -5, 14, 6);
+        // Вспышка выстрела
+        if (h.gunFlame > 0) {
+          ctx.fillStyle = '#ffaa00';
+          ctx.shadowColor = '#ff7700';
+          ctx.shadowBlur = 18;
+          ctx.beginPath(); ctx.arc(52, -2, 8 + Math.random()*3, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#ffff80';
+          ctx.beginPath(); ctx.arc(56, -2, 4, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Обновление логики мультфильма
+    function updateCartoon() {
+      // Движение гиен к героям
+      hyenas.forEach((h, idx) => {
+        if (h.x > h.targetX) {
+          h.x -= h.speed;
+        }
+        // Трансформация по таймеру
+        if (narrativePhase === 'transform' || narrativePhase === 'battle') {
+          if (h.mode === 'beast' && h.transformTimer <= 0) {
+            h.mode = 'machine';
+            h.gunFlame = 12; // вспышка
+          }
+        }
+        if (h.gunFlame > 0) {
+          h.gunFlame -= 0.5;
+        }
+        if (h.mode === 'machine' && narrativePhase === 'battle') {
+          // случайные выстрелы
+          if (Math.random() < 0.2) h.gunFlame = 5 + Math.random()*6;
+        }
+      });
+
+      // Сюжетные фазы
+      if (narrativePhase === 'intro') {
+        phaseTimer++;
+        if (phaseTimer > 40) {
+          narrativePhase = 'meeting';
+          phaseTimer = 0;
+        }
+      } else if (narrativePhase === 'meeting') {
+        phaseTimer++;
+        if (phaseTimer > 70) {
+          narrativePhase = 'hyena_approach';
+          phaseTimer = 0;
+        }
+      } else if (narrativePhase === 'hyena_approach') {
+        phaseTimer++;
+        if (phaseTimer > 55) {
+          narrativePhase = 'transform';
+          phaseTimer = 0;
+          // запускаем трансформацию гиен
+          hyenas.forEach(h => { if (h.mode === 'beast') h.transformTimer = 15; });
+        }
+      } else if (narrativePhase === 'transform') {
+        phaseTimer++;
+        if (phaseTimer > 50) {
+          narrativePhase = 'battle';
+          phaseTimer = 0;
+        }
+      } else if (narrativePhase === 'battle') {
+        phaseTimer++;
+        // бесконечный бой, но можно перезапустить
+      }
+
+      // Обновление статуса
+      let statusText = '';
+      if (narrativePhase === 'intro') statusText = '🌌 Старый Изумрудный дракон...';
+      else if (narrativePhase === 'meeting') statusText = '🤝 Ice Strike & Ice Panter у разрушенного гриля';
+      else if (narrativePhase === 'hyena_approach') statusText = '⚠️ Стая гиен приближается!';
+      else if (narrativePhase === 'transform') statusText = '🔫 Гиены превращаются в пулемётные машины!';
+      else if (narrativePhase === 'battle') statusText = '💥 БИТВА! Дикий скричер против машин!';
+      statusDiv.textContent = '🎬 ' + statusText;
+    }
+
+    // Отрисовка сцены
+    function drawScene() {
+      drawSkyGradient();
+      drawMoon();
+
+      // Задний план: городские крыши
+      ctx.fillStyle = '#212430';
+      ctx.fillRect(0, 380, W, 130);
+      ctx.fillStyle = '#2a2f3a';
+      for (let i=0;i<12;i++) {
+        ctx.fillRect(i*75, 360, 35, 60);
+      }
+
+      // Чёрный разрушенный гриль
+      drawBrokenGrill();
+
+      // Герои
+      drawEmeraldDragon(dragon.x, dragon.y, frame);
+      drawPantherHybrid(pantherHybrid.x, pantherHybrid.y, frame);
+
+      // Гиены
+      hyenas.forEach((h, i) => drawHyena(h, i, frame));
+
+      // Эффекты дикого скричера (искры)
+      if (narrativePhase === 'battle') {
+        ctx.fillStyle = '#ffd966';
+        ctx.font = '18px "Courier New"';
+        ctx.fillText('⚡СКРИЧЕР⚡', dragon.x-40, dragon.y-55);
+        ctx.fillStyle = '#b0e0ff';
+        ctx.fillText('ICE STRIKE', pantherHybrid.x-50, pantherHybrid.y-60);
+      }
+
+      // Текстовая подсказка
+      ctx.fillStyle = '#ffffffcc';
+      ctx.font = 'bold 13px "Courier New"';
+      ctx.fillText('ДИКИЙ ДИКИЙ СКРИЧЕР', 20, 460);
+    }
+
+    function gameLoop() {
+      frame++;
+      updateCartoon();
+      drawScene();
+      animationId = requestAnimationFrame(gameLoop);
+    }
+
+    // Сброс мультфильма
+    function resetCartoon() {
+      // Сброс позиций
+      dragon.x = dragon.baseX;
+      dragon.y = dragon.baseY;
+      pantherHybrid.x = pantherHybrid.baseX;
+      pantherHybrid.y = pantherHybrid.baseY;
+
+      hyenas[0].x = 700; hyenas[0].y = 340; hyenas[0].mode = 'beast'; hyenas[0].gunFlame = 0;
+      hyenas[1].x = 750; hyenas[1].y = 280; hyenas[1].mode = 'beast'; hyenas[1].gunFlame = 0;
+      hyenas[2].x = 720; hyenas[2].y = 400; hyenas[2].mode = 'beast'; hyenas[2].gunFlame = 0;
+
+      narrativePhase = 'intro';
+      phaseTimer = 0;
+      frame = 0;
+    }
+
+    // Старт
+    function startAnimation() {
+      if (animationId) cancelAnimationFrame(animationId);
+      resetCartoon();
+      gameLoop();
+    }
+
+    // Привязка кнопки
+    document.getElementById('replayBtn').addEventListener('click', () => {
+      startAnimation();
+    });
+
+    // Запуск при загрузке
+    startAnimation();
+
+    // Очистка при уходе (не обязательно, но хорошо)
+    window.addEventListener('beforeunload', () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    });
+  })();
+</script>
+</body>
+</html>

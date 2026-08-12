@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ПОЛТАВСКАЯ БИТВА · ПЁТР ПЕРВЫЙ · ЭПИЧНОЕ СРАЖЕНИЕ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #0a0505;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      overflow: hidden;
+    }
+    .cartoon-box {
+      background: #000000ee;
+      border: 5px solid #8a7020;
+      border-radius: 2rem;
+      padding: 0.8rem;
+      box-shadow: 0 0 100px #6b4f10, 0 0 200px #000000;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 1000px;
+      height: auto;
+      border-radius: 1.5rem;
+      background: #1a1008;
+      box-shadow: inset 0 0 80px #000000, 0 40px 70px #000000f5;
+    }
+    .panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.8rem;
+      color: #f0e0c0;
+      font-weight: bold;
+      padding: 0 0.6rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .hero-tags {
+      display: flex;
+      gap: 2rem;
+      font-size: 1rem;
+      text-shadow: 0 0 18px currentColor;
+      letter-spacing: 1px;
+    }
+    .russian-tag {
+      color: #ffcc44;
+      animation: glowRussian 1.5s infinite alternate;
+    }
+    .swedish-tag {
+      color: #5599ff;
+      animation: glowSwedish 1.5s infinite alternate;
+    }
+    @keyframes glowRussian {
+      from {
+        text-shadow: 0 0 10px #ffaa00;
+      }
+      to {
+        text-shadow: 0 0 30px #ffaa00, 0 0 50px #ff6600;
+      }
+    }
+    @keyframes glowSwedish {
+      from {
+        text-shadow: 0 0 10px #4488ff;
+      }
+      to {
+        text-shadow: 0 0 30px #4488ff, 0 0 50px #0044cc;
+      }
+    }
+    button {
+      background: linear-gradient(180deg, #6b4f10 0%, #3a2005 100%);
+      border: 2px solid #aa8833;
+      color: #ffeebb;
+      font-weight: bold;
+      padding: 0.7rem 2rem;
+      border-radius: 3rem;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #1a0a00, 0 0 30px #8a6a20;
+      transition: all 0.15s ease;
+      text-transform: uppercase;
+      font-family: 'Georgia', serif;
+    }
+    button:hover {
+      background: linear-gradient(180deg, #8a6a20 0%, #5a3a10 100%);
+      box-shadow: 0 6px 0 #1a0a00, 0 0 45px #aa8833;
+    }
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #1a0a00, 0 0 50px #ccaa55;
+    }
+    .status-badge {
+      background: #00000080;
+      padding: 0.5rem 1.5rem;
+      border-radius: 2rem;
+      color: #ffd599;
+      font-weight: bold;
+      font-size: 0.9rem;
+      border: 1px solid #8a7020;
+      backdrop-filter: blur(5px);
+      letter-spacing: 0.5px;
+    }
+    .intensity-meter {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: #ff9966;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .meter-bar {
+      width: 90px;
+      height: 10px;
+      background: #1a1a1a;
+      border-radius: 5px;
+      overflow: hidden;
+      border: 2px solid #6b4f10;
+    }
+    .meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff4400, #ffaa00, #ffdd00);
+      transition: width 0.3s;
+      box-shadow: 0 0 20px #ff6600;
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="1000" height="560" aria-label="Полтавская битва — эпичное сражение"></canvas>
+    <div class="panel">
+      <div class="hero-tags">
+        <span class="russian-tag">🇷🇺 ПЁТР I · РУССКАЯ АРМИЯ</span>
+        <span class="swedish-tag">🇸🇪 КАРЛ XII · ШВЕДЫ</span>
+      </div>
+      <div class="intensity-meter">
+        <span>⚔️ БИТВА</span>
+        <div class="meter-bar">
+          <div class="meter-fill" id="intensityFill" style="width: 0%;"></div>
+        </div>
+      </div>
+      <div class="status-badge" id="liveStatus">🏰 ПОЛТАВА · 1709</div>
+      <button id="restartButton">⚜️ НАЧАТЬ ЗАНОВО</button>
+    </div>
+  </div>
+  <p style="color:#aa9966; margin-top:0.3rem; font-style:italic; letter-spacing:1px;">
+    ⚜️ «Грянул бой, Полтавский бой!» · Пушкари · Кавалерия · Победа
+  </p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+    const intensityFill = document.getElementById('intensityFill');
+
+    const W = 1000,
+      H = 560;
+    let frame = 0;
+    let animationId = null;
+    let cameraShake = { x: 0, y: 0 };
+    let screenShakeAmount = 0;
+
+    // ---------- ПЁТР ПЕРВЫЙ ----------
+    const peter = {
+      x: 200,
+      y: 400,
+      baseX: 200,
+      baseY: 400,
+      health: 150,
+      maxHealth: 150,
+      attackCooldown: 0,
+      onHorse: true,
+      horseAnim: 0,
+    };
+
+    // ---------- ШВЕДСКИЙ КОРОЛЬ (генерал) ----------
+    const swedishKing = {
+      x: 750,
+      y: 390,
+      baseX: 750,
+      baseY: 390,
+      health: 140,
+      maxHealth: 140,
+      attackCooldown: 0,
+      onHorse: true,
+      horseAnim: 0,
+    };
+
+    // Армии
+    const russianSoldiers = [];
+    const swedishSoldiers = [];
+    const cannons = [];
+    const cavalry = [];
+
+    let particles = [];
+    let explosions = [];
+    let smokeClouds = [];
+    let bulletTrails = [];
+
+    let storyPhase = 'intro';
+    let phaseTimer = 0;
+    let battleIntensity = 0;
+
+    // Инициализация армий
+    function initArmies() {
+      russianSoldiers.length = 0;
+      swedishSoldiers.length = 0;
+      cannons.length = 0;
+      cavalry.length = 0;
+
+      // Русские солдаты (преображенцы и семёновцы)
+      for (let i = 0; i < 25; i++) {
+        russianSoldiers.push({
+          x: 80 + Math.random() * 200,
+          y: 420 + Math.random() * 80,
+          targetX: 400 + Math.random() * 200,
+          speed: 0.3 + Math.random() * 0.7,
+          health: 30 + Math.random() * 20,
+          animPhase: Math.random() * Math.PI * 2,
+          type: Math.random() < 0.7 ? 'infantry' : 'grenadier',
+          alive: true,
+        });
+      }
+
+      // Шведские солдаты (каролины)
+      for (let i = 0; i < 22; i++) {
+        swedishSoldiers.push({
+          x: 720 + Math.random() * 200,
+          y: 420 + Math.random() * 80,
+          targetX: 350 + Math.random() * 250,
+          speed: 0.3 + Math.random() * 0.8,
+          health: 35 + Math.random() * 25,
+          animPhase: Math.random() * Math.PI * 2,
+          type: Math.random() < 0.6 ? 'infantry' : 'pikeman',
+          alive: true,
+        });
+      }
+
+      // Пушки
+      for (let i = 0; i < 4; i++) {
+        cannons.push({
+          x: 150 + i * 200,
+          y: 440,
+          side: i < 2 ? 'russian' : 'swedish',
+          cooldown: 0,
+          smokeTimer: 0,
+        });
+      }
+
+      // Кавалерия
+      for (let i = 0; i < 6; i++) {
+        cavalry.push({
+          x: i < 3 ? 100 + i * 80 : 650 + i * 70,
+          y: 380 + Math.random() * 40,
+          side: i < 3 ? 'russian' : 'swedish',
+          targetX: i < 3 ? 550 : 350,
+          speed: 0.6 + Math.random() * 1.2,
+          health: 50,
+          alive: true,
+          lanceAnim: 0,
+        });
+      }
+    }
+
+    // ---------- РИСОВАНИЕ ИСТОРИЧЕСКИХ ПЕРСОНАЖЕЙ ----------
+    function drawPeterTheGreat(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let horseBob = Math.sin(frameCount * 0.4) * 1.5;
+      ctx.translate(0, horseBob);
+
+      // Конь Петра (вороной)
+      ctx.fillStyle = '#1a1a1a';
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(0, -5, 35, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Голова коня
+      ctx.fillStyle = '#0a0a0a';
+      ctx.beginPath();
+      ctx.ellipse(-30, -20, 15, 12, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Ноги
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-20, 15);
+      ctx.lineTo(-25, 35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(20, 15);
+      ctx.lineTo(25, 35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-10, 15);
+      ctx.lineTo(-15, 35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(10, 15);
+      ctx.lineTo(15, 35);
+      ctx.stroke();
+
+      // Пётр в седле
+      // Тёмно-зелёный мундир Преображенского полка
+      ctx.fillStyle = '#1a3a1a';
+      ctx.fillRect(-15, -50, 30, 35);
+      // Золотые эполеты
+      ctx.fillStyle = '#daa520';
+      ctx.fillRect(-18, -48, 6, 8);
+      ctx.fillRect(12, -48, 6, 8);
+      // Треуголка
+      ctx.fillStyle = '#111111';
+      ctx.beginPath();
+      ctx.moveTo(-18, -58);
+      ctx.lineTo(0, -68);
+      ctx.lineTo(18, -58);
+      ctx.lineTo(0, -55);
+      ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(-1, -62, 3, 6);
+      // Лицо
+      ctx.fillStyle = '#f5d5b0';
+      ctx.beginPath();
+      ctx.arc(0, -48, 9, 0, Math.PI * 2);
+      ctx.fill();
+      // Усы
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-6, -43, 12, 3);
+      // Глаза
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-3, -50, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3, -50, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Шпага
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(15, -40);
+      ctx.lineTo(35, -25);
+      ctx.stroke();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(15, -40, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Нимб славы (едва заметный)
+      ctx.strokeStyle = '#ffdd8844';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -50, 28, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawSwedishKing(x, y, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let horseBob = Math.sin(frameCount * 0.45 + 1) * 1.5;
+      ctx.translate(0, horseBob);
+
+      // Конь (белый)
+      ctx.fillStyle = '#ddd8cc';
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(0, -5, 35, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ccc5b8';
+      ctx.beginPath();
+      ctx.ellipse(-30, -20, 15, 12, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ddd8cc';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-20, 15);
+      ctx.lineTo(-25, 35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(20, 15);
+      ctx.lineTo(25, 35);
+      ctx.stroke();
+
+      // Шведский король в синем мундире
+      ctx.fillStyle = '#1a2a5a';
+      ctx.fillRect(-15, -50, 30, 35);
+      ctx.fillStyle = '#daa520';
+      ctx.fillRect(-18, -48, 6, 8);
+      ctx.fillRect(12, -48, 6, 8);
+      // Треуголка
+      ctx.fillStyle = '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-18, -58);
+      ctx.lineTo(0, -68);
+      ctx.lineTo(18, -58);
+      ctx.lineTo(0, -55);
+      ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(-1, -62, 3, 6);
+      // Лицо
+      ctx.fillStyle = '#f0dcc0';
+      ctx.beginPath();
+      ctx.arc(0, -48, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-6, -43, 12, 3);
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-3, -50, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3, -50, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Шпага
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(15, -40);
+      ctx.lineTo(35, -25);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawSoldier(x, y, side, type, animPhase, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let march = Math.sin(frameCount * 0.5 + animPhase) * 0.8;
+      ctx.translate(0, march);
+
+      // Тело
+      ctx.fillStyle = side === 'russian' ? '#1a3a1a' : '#1a2a5a';
+      ctx.fillRect(-6, -18, 12, 20);
+
+      // Голова
+      ctx.fillStyle = '#f5d5b0';
+      ctx.beginPath();
+      ctx.arc(0, -22, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Треуголка
+      ctx.fillStyle = side === 'russian' ? '#111' : '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-8, -28);
+      ctx.lineTo(0, -35);
+      ctx.lineTo(8, -28);
+      ctx.fill();
+
+      // Мушкет или пика
+      if (type === 'infantry' || type === 'grenadier') {
+        ctx.strokeStyle = '#5a3a1a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(6, -15);
+        ctx.lineTo(6, -40);
+        ctx.stroke();
+        ctx.fillStyle = '#333';
+        ctx.fillRect(4, -42, 4, 6);
+      } else if (type === 'pikeman') {
+        ctx.strokeStyle = '#8a6a3a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(6, -15);
+        ctx.lineTo(6, -55);
+        ctx.stroke();
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(6, -55);
+        ctx.lineTo(2, -50);
+        ctx.lineTo(10, -50);
+        ctx.fill();
+      }
+
+      // Ноги
+      ctx.fillStyle = side === 'russian' ? '#2a1a0a' : '#1a1a2a';
+      ctx.fillRect(-5, -2, 4, 8);
+      ctx.fillRect(1, -2, 4, 8);
+
+      ctx.restore();
+    }
+
+    function drawCannon(x, y, side, smokeTimer) {
+      ctx.save();
+      ctx.translate(x, y);
+      // Лафет
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(-20, -8, 40, 15);
+      // Колёса
+      ctx.fillStyle = '#3a2010';
+      ctx.beginPath();
+      ctx.arc(-15, 8, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(15, 8, 10, 0, Math.PI * 2);
+      ctx.fill();
+      // Ствол
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(-5, -18, 30, 12);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(20, -16, 8, 8);
+
+      // Дым от выстрела
+      if (smokeTimer > 0) {
+        ctx.fillStyle = '#aaaaaa';
+        ctx.globalAlpha = smokeTimer / 15;
+        ctx.beginPath();
+        ctx.arc(30, -14, 15 + smokeTimer, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(30, -14, 8 + smokeTimer * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    }
+
+    function drawCavalry(x, y, side, frameCount) {
+      ctx.save();
+      ctx.translate(x, y);
+      let gallop = Math.sin(frameCount * 0.8) * 2;
+      ctx.translate(0, gallop);
+
+      // Конь
+      ctx.fillStyle = side === 'russian' ? '#3a2020' : '#3a3a4a';
+      ctx.beginPath();
+      ctx.ellipse(0, -3, 30, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = side === 'russian' ? '#2a1010' : '#2a2a3a';
+      ctx.beginPath();
+      ctx.ellipse(-25, -16, 12, 10, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = side === 'russian' ? '#3a2020' : '#3a3a4a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-15, 12);
+      ctx.lineTo(-18, 30);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(15, 12);
+      ctx.lineTo(18, 30);
+      ctx.stroke();
+
+      // Всадник
+      ctx.fillStyle = side === 'russian' ? '#1a3a1a' : '#1a2a5a';
+      ctx.fillRect(-10, -40, 20, 28);
+      ctx.fillStyle = '#f5d5b0';
+      ctx.beginPath();
+      ctx.arc(0, -44, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = side === 'russian' ? '#111' : '#0a0a20';
+      ctx.beginPath();
+      ctx.moveTo(-10, -52);
+      ctx.lineTo(0, -58);
+      ctx.lineTo(10, -52);
+      ctx.fill();
+      // Сабля
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(10, -35);
+      ctx.lineTo(30, -15);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function spawnParticles(x, y, color, count = 15, spread = 8) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * spread * 2,
+          vy: (Math.random() - 0.5) * spread * 2 - 4,
+          life: 20 + Math.random() * 35,
+          color,
+          size: 1 + Math.random() * 4,
+          gravity: 0.08,
+        });
+      }
+    }
+
+    function spawnExplosion(x, y, size = 25) {
+      explosions.push({
+        x,
+        y,
+        radius: 0,
+        maxRadius: size + Math.random() * 15,
+        life: 18,
+        color: '#ff8800',
+      });
+      spawnParticles(x, y, '#ff6600', 20, 10);
+      spawnParticles(x, y, '#ffcc00', 12, 6);
+      spawnParticles(x, y, '#888888', 8, 4);
+      screenShakeAmount = Math.max(screenShakeAmount, 10);
+    }
+
+    // ---------- СЮЖЕТ БИТВЫ ----------
+    function updateBattle() {
+      // Движение солдат
+      [...russianSoldiers, ...swedishSoldiers].forEach(s => {
+        if (!s.alive) return;
+        if (Math.abs(s.x - s.targetX) > 10) {
+          s.x += (s.targetX - s.x) * 0.01 * s.speed;
+        }
+        s.animPhase += 0.05;
+      });
+
+      // Движение кавалерии
+      cavalry.forEach(c => {
+        if (!c.alive) return;
+        if (Math.abs(c.x - c.targetX) > 20) {
+          c.x += (c.targetX - c.x) * 0.015 * c.speed;
+        }
+        c.lanceAnim += 0.1;
+      });
+
+      // Кулдауны
+      if (peter.attackCooldown > 0) peter.attackCooldown--;
+      if (swedishKing.attackCooldown > 0) swedishKing.attackCooldown--;
+      cannons.forEach(c => { if (c.cooldown > 0) c.cooldown--; if (c.smokeTimer > 0) c.smokeTimer--; });
+
+      // Фазы сюжета
+      if (storyPhase === 'intro') {
+        phaseTimer++;
+        if (phaseTimer > 70) { storyPhase = 'armies_approach';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'armies_approach') {
+        phaseTimer++;
+        battleIntensity = Math.min(20, phaseTimer / 3);
+        intensityFill.style.width = battleIntensity + '%';
+        if (phaseTimer > 80) { storyPhase = 'cannonade';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'cannonade') {
+        phaseTimer++;
+        battleIntensity = Math.min(50, 20 + phaseTimer / 2);
+        intensityFill.style.width = battleIntensity + '%';
+        // Пушечные залпы
+        cannons.forEach(c => {
+          if (c.cooldown <= 0 && Math.random() < 0.15) {
+            c.cooldown = 20 + Math.random() * 30;
+            c.smokeTimer = 15;
+            let targetX = c.side === 'russian' ? 600 + Math.random() * 200 : 200 + Math.random() * 200;
+            let targetY = 400 + Math.random() * 60;
+            spawnExplosion(targetX, targetY, 20 + Math.random() * 15);
+            // Урон солдатам
+            let enemyArmy = c.side === 'russian' ? swedishSoldiers : russianSoldiers;
+            enemyArmy.forEach(s => {
+              if (s.alive && Math.abs(s.x - targetX) < 40 && Math.abs(s.y - targetY) < 40) {
+                s.health -= 10 + Math.random() * 15;
+                if (s.health <= 0) s.alive = false;
+              }
+            });
+          }
+        });
+        if (phaseTimer > 120) { storyPhase = 'infantry_clash';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'infantry_clash') {
+        phaseTimer++;
+        battleIntensity = Math.min(80, 50 + phaseTimer / 2);
+        intensityFill.style.width = battleIntensity + '%';
+        // Ближний бой пехоты
+        if (frame % 10 === 0) {
+          russianSoldiers.forEach(s => {
+            if (!s.alive) return;
+            let enemy = swedishSoldiers.find(e => e.alive && Math.abs(e.x - s.x) < 30);
+            if (enemy) {
+              enemy.health -= 3 + Math.random() * 5;
+              if (enemy.health <= 0) enemy.alive = false;
+              spawnParticles((s.x + enemy.x) / 2, (s.y + enemy.y) / 2, '#ffcc00', 3, 2);
+            }
+          });
+          swedishSoldiers.forEach(s => {
+            if (!s.alive) return;
+            let enemy = russianSoldiers.find(e => e.alive && Math.abs(e.x - s.x) < 30);
+            if (enemy) {
+              enemy.health -= 3 + Math.random() * 5;
+              if (enemy.health <= 0) enemy.alive = false;
+            }
+          });
+        }
+        if (phaseTimer > 100) { storyPhase = 'cavalry_charge';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'cavalry_charge') {
+        phaseTimer++;
+        battleIntensity = Math.min(100, 80 + phaseTimer / 2);
+        intensityFill.style.width = battleIntensity + '%';
+        // Кавалерийская атака
+        cavalry.forEach(c => {
+          if (!c.alive) return;
+          if (c.side === 'russian') c.targetX = 600;
+          else c.targetX = 350;
+        });
+        if (frame % 8 === 0) {
+          cavalry.forEach(c => {
+            if (!c.alive) return;
+            let enemyCav = cavalry.find(e => e.alive && e.side !== c.side && Math.abs(e.x - c.x) < 40);
+            if (enemyCav) {
+              enemyCav.health -= 8 + Math.random() * 10;
+              if (enemyCav.health <= 0) enemyCav.alive = false;
+              spawnParticles((c.x + enemyCav.x) / 2, (c.y + enemyCav.y) / 2, '#ffffff', 8, 5);
+            }
+          });
+        }
+        if (phaseTimer > 80) { storyPhase = 'leaders_duel';
+          phaseTimer = 0; }
+      } else if (storyPhase === 'leaders_duel') {
+        phaseTimer++;
+        battleIntensity = 100;
+        intensityFill.style.width = '100%';
+        // Пётр и шведский король сближаются
+        peter.x += (500 - peter.x) * 0.02;
+        swedishKing.x += (480 - swedishKing.x) * 0.02;
+
+        // Дуэль
+        if (frame % 15 === 0 && peter.attackCooldown <= 0) {
+          peter.attackCooldown = 14;
+          swedishKing.health -= 8 + Math.random() * 7;
+          spawnExplosion(swedishKing.x, swedishKing.y - 30, 15);
+          spawnParticles(swedishKing.x, swedishKing.y, '#ffcc00', 10, 5);
+        }
+        if (frame % 18 === 0 && swedishKing.attackCooldown <= 0) {
+          swedishKing.attackCooldown = 16;
+          peter.health -= 6 + Math.random() * 6;
+          spawnExplosion(peter.x, peter.y - 30, 12);
+          spawnParticles(peter.x, peter.y, '#4488ff', 8, 4);
+        }
+
+        if (swedishKing.health <= 0 && phaseTimer > 40) {
+          storyPhase = 'victory';
+          phaseTimer = 0;
+          spawnExplosion(swedishKing.x, swedishKing.y, 40);
+        }
+      } else if (storyPhase === 'victory') {
+        phaseTimer++;
+        battleIntensity = Math.max(0, 100 - phaseTimer);
+        intensityFill.style.width = battleIntensity + '%';
+        // Шведы отступают
+        swedishSoldiers.forEach(s => { if (s.alive) s.x += 2; });
+        cavalry.forEach(c => { if (c.side === 'swedish' && c.alive) c.x += 3; });
+        swedishKing.x += 3;
+        if (phaseTimer > 150) {
+          resetAll();
+          storyPhase = 'intro';
+          phaseTimer = 0;
+          intensityFill.style.width = '0%';
+        }
+      }
+
+      // Обновление статуса
+      let msg = '';
+      switch (storyPhase) {
+        case 'intro':
+          msg = '🏰 1709 год · Армии готовятся к битве';
+          break;
+        case 'armies_approach':
+          msg = '🥁 Войска выдвигаются на позиции';
+          break;
+        case 'cannonade':
+          msg = '💣 АРТИЛЛЕРИЙСКАЯ КАНОНАДА!';
+          break;
+        case 'infantry_clash':
+          msg = '⚔️ ПЕХОТА СОШЛАСЬ В ШТЫКОВОМ БОЮ!';
+          break;
+        case 'cavalry_charge':
+          msg = '🐎 КАВАЛЕРИЙСКАЯ АТАКА! РУБКА!';
+          break;
+        case 'leaders_duel':
+          msg = '👑 ДУЭЛЬ ПЕТРА I И ШВЕДСКОГО КОРОЛЯ!';
+          break;
+        case 'victory':
+          msg = '🏆 ПОБЕДА РУССКОГО ОРУЖИЯ! ШВЕДЫ ОТСТУПАЮТ!';
+          break;
+      }
+      statusEl.textContent = '⚜️ ' + msg;
+
+      // Обновление частиц
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        explosions[i].radius += 2;
+        explosions[i].life--;
+        if (explosions[i].life <= 0) explosions.splice(i, 1);
+      }
+      if (screenShakeAmount > 0) {
+        cameraShake.x = (Math.random() - 0.5) * screenShakeAmount;
+        cameraShake.y = (Math.random() - 0.5) * screenShakeAmount;
+        screenShakeAmount *= 0.85;
+        if (screenShakeAmount < 0.1) screenShakeAmount = 0;
+      } else {
+        cameraShake.x = 0;
+        cameraShake.y = 0;
+      }
+    }
+
+    function resetAll() {
+      peter.x = peter.baseX;
+      peter.y = peter.baseY;
+      peter.health = peter.maxHealth;
+      peter.attackCooldown = 0;
+      swedishKing.x = swedishKing.baseX;
+      swedishKing.y = swedishKing.baseY;
+      swedishKing.health = swedishKing.maxHealth;
+      swedishKing.attackCooldown = 0;
+      initArmies();
+      particles = [];
+      explosions = [];
+      screenShakeAmount = 0;
+      battleIntensity = 0;
+    }
+
+    function drawBattlefield() {
+      // Небо
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+      skyGrad.addColorStop(0, '#4a6a8a');
+      skyGrad.addColorStop(0.3, '#8a9ab0');
+      skyGrad.addColorStop(0.6, '#c0b8a0');
+      skyGrad.addColorStop(1, '#d0c8b0');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Солнце
+      ctx.fillStyle = '#ffdd88';
+      ctx.shadowColor = '#ffaa00';
+      ctx.shadowBlur = 50;
+      ctx.beginPath();
+      ctx.arc(800, 80, 50, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Облака
+      ctx.fillStyle = '#ffffffaa';
+      [
+        [200, 60],
+        [400, 40],
+        [600, 70],
+        [300, 90]
+      ].forEach(([cx, cy]) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 30, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + 25, cy - 10, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx - 20, cy - 5, 22, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Поле боя
+      const groundGrad = ctx.createLinearGradient(0, 380, 0, H);
+      groundGrad.addColorStop(0, '#8a9a50');
+      groundGrad.addColorStop(0.3, '#6a7a3a');
+      groundGrad.addColorStop(0.7, '#5a4a2a');
+      groundGrad.addColorStop(1, '#3a2a1a');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, 380, W, 200);
+
+      // Трава
+      ctx.fillStyle = '#7a9a40';
+      for (let i = 0; i < 200; i++) {
+        let gx = (i * 57 + 30) % W;
+        let gy = 385 + (i * 37) % 20;
+        ctx.fillRect(gx, gy, 2, 6 + Math.sin(i) * 3);
+      }
+
+      // Дым над полем
+      ctx.fillStyle = '#88888844';
+      [
+        [300, 350],
+        [500, 340],
+        [400, 360],
+        [600, 350]
+      ].forEach(([sx, sy]) => {
+        ctx.beginPath();
+        ctx.arc(sx, sy, 40 + Math.sin(frame * 0.3 + sx) * 10, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Укрепления (редуты)
+      ctx.fillStyle = '#6a5030';
+      [
+        [250, 410],
+        [350, 415],
+        [450, 408]
+      ].forEach(([rx, ry]) => {
+        ctx.fillRect(rx - 15, ry - 5, 30, 15);
+        ctx.fillStyle = '#5a4020';
+        ctx.fillRect(rx - 12, ry - 8, 24, 5);
+        ctx.fillStyle = '#6a5030';
+      });
+
+      // Флаги
+      [
+        [200, 350, 'russian'],
+        [700, 360, 'swedish'],
+        [450, 340, 'russian']
+      ].forEach(([fx, fy, side]) => {
+        ctx.fillStyle = '#4a3020';
+        ctx.fillRect(fx - 1, fy - 40, 2, 45);
+        ctx.fillStyle = side === 'russian' ? '#ffffff' : '#3355aa';
+        ctx.fillRect(fx, fy - 40, 20, 14);
+        ctx.fillStyle = side === 'russian' ? '#2244aa' : '#ffcc00';
+        ctx.fillRect(fx, fy - 33, 20, 7);
+        ctx.fillStyle = side === 'russian' ? '#cc0000' : '#3355aa';
+        ctx.fillRect(fx, fy - 26, 20, 7);
+      });
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(cameraShake.x, cameraShake.y);
+      drawBattlefield();
+
+      // Взрывы
+      explosions.forEach(e => {
+        const alpha = e.life / 18;
+        ctx.fillStyle = `rgba(255,${100 + e.radius},0,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255,255,150,${alpha * 0.6})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Пушки
+      cannons.forEach(c => drawCannon(c.x, c.y, c.side, c.smokeTimer));
+
+      // Солдаты
+      russianSoldiers.forEach(s => { if (s.alive) drawSoldier(s.x, s.y, 'russian', s.type, s.animPhase, frame); });
+      swedishSoldiers.forEach(s => { if (s.alive) drawSoldier(s.x, s.y, 'swedish', s.type, s.animPhase, frame); });
+
+      // Кавалерия
+      cavalry.forEach(c => { if (c.alive) drawCavalry(c.x, c.y, c.side, frame); });
+
+      // Лидеры
+      if (storyPhase !== 'victory' || phaseTimer < 80) {
+        drawPeterTheGreat(peter.x, peter.y, frame);
+        if (swedishKing.health > 0 || storyPhase !== 'victory') {
+          drawSwedishKing(swedishKing.x, swedishKing.y, frame);
+        }
+      }
+
+      // Частицы
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+
+      ctx.restore();
+
+      // Надписи
+      if (storyPhase === 'leaders_duel') {
+        ctx.font = 'bold 28px "Georgia", serif';
+        ctx.fillStyle = '#ffcc00';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 10;
+        ctx.fillText('⚜️ ДУЭЛЬ ВОЖДЕЙ ⚜️', W / 2 - 150, 50);
+        ctx.shadowBlur = 0;
+      } else if (storyPhase === 'victory') {
+        ctx.font = 'bold 32px "Georgia", serif';
+        ctx.fillStyle = '#ffdd00';
+        ctx.shadowColor = '#ff6600';
+        ctx.shadowBlur = 20;
+        ctx.fillText('🏆 ПОБЕДА! 🏆', W / 2 - 120, 60);
+        ctx.font = 'italic 20px "Georgia", serif';
+        ctx.fillText('«Грянул бой, Полтавский бой!»', W / 2 - 150, 90);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function loop() {
+      frame++;
+      updateBattle();
+      drawScene();
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function restart() {
+      if (animationId) cancelAnimationFrame(animationId);
+      resetAll();
+      storyPhase = 'intro';
+      phaseTimer = 0;
+      frame = 0;
+      intensityFill.style.width = '0%';
+      loop();
+    }
+
+    document.getElementById('restartButton').addEventListener('click', restart);
+    initArmies();
+    restart();
+
+    window.addEventListener('beforeunload', () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    });
+  })();
+</script>
+</body>
+</html>

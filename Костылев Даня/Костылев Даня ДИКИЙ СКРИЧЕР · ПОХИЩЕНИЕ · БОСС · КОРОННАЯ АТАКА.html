@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ДИКИЙ СКРИЧЕР · ПОХИЩЕНИЕ · БОСС · КОРОННАЯ АТАКА</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #020510; min-height: 100vh; display: flex; justify-content: center; align-items: center;
+      font-family: 'Impact', 'Arial Black', sans-serif; overflow: hidden;
+    }
+    .cartoon-box {
+      background: #000000f2; border: 4px solid #8a7a5a; border-radius: 2rem; padding: 0.8rem;
+      box-shadow: 0 0 80px #4a3a2a, 0 0 150px #000000;
+    }
+    canvas {
+      display: block; width: 100%; max-width: 960px; height: auto; border-radius: 1.5rem;
+      background: #0a0810; box-shadow: inset 0 0 60px #000000, 0 35px 60px #000000f5;
+    }
+    .panel {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 0.8rem;
+      color: #e8dcc8; font-weight: bold; padding: 0 0.6rem; gap: 1rem; flex-wrap: wrap;
+    }
+    .hero-tags { display: flex; gap: 1.5rem; font-size: 0.9rem; text-shadow: 0 0 16px currentColor; }
+    .dragon-tag { color: #7effb2; animation: glowDragon 1.5s infinite alternate; }
+    .panther-tag { color: #b8d0ff; animation: glowPanther 1.5s infinite alternate; }
+    @keyframes glowDragon { from { text-shadow: 0 0 10px #00ff88; } to { text-shadow: 0 0 25px #00ff88, 0 0 40px #00aa55; } }
+    @keyframes glowPanther { from { text-shadow: 0 0 10px #88aaff; } to { text-shadow: 0 0 25px #88aaff, 0 0 40px #4466cc; } }
+    button {
+      background: linear-gradient(180deg, #5a4030 0%, #2a1a10 100%); border: 2px solid #aa8866;
+      color: #ffffff; font-weight: bold; padding: 0.6rem 1.8rem; border-radius: 3rem;
+      font-size: 1rem; letter-spacing: 0.8px; cursor: pointer;
+      box-shadow: 0 6px 0 #1a0a00, 0 0 25px #8a5a3a; transition: all 0.15s ease; text-transform: uppercase;
+    }
+    button:hover { background: linear-gradient(180deg, #7a5a40 0%, #3a2a1a 100%); box-shadow: 0 6px 0 #1a0a00, 0 0 35px #aa7a5a; }
+    button:active { transform: translateY(4px); box-shadow: 0 2px 0 #1a0a00, 0 0 40px #ca9a7a; }
+    .status-badge {
+      background: #00000080; padding: 0.5rem 1.5rem; border-radius: 2rem; color: #ffd599;
+      font-weight: bold; font-size: 0.9rem; border: 1px solid #8a7a5a; backdrop-filter: blur(5px);
+    }
+    .intensity-meter { display: flex; align-items: center; gap: 0.3rem; color: #ff9966; font-size: 0.8rem; }
+    .meter-bar { width: 80px; height: 8px; background: #1a1a2e; border-radius: 4px; overflow: hidden; border: 1px solid #6a5a4a; }
+    .meter-fill { height: 100%; background: linear-gradient(90deg, #ff4400, #ffaa00); transition: width 0.3s; box-shadow: 0 0 15px #ff6600; }
+  </style>
+</head>
+<body>
+<div style="display:flex;flex-direction:column;align-items:center;">
+  <div class="cartoon-box">
+    <canvas id="mainCanvas" width="960" height="540"></canvas>
+    <div class="panel">
+      <div class="hero-tags"><span class="dragon-tag">🐉🦁 ДРАКОН</span><span class="panther-tag">🐆❄️ ПАНТЕРА-БАРС</span></div>
+      <div class="intensity-meter"><span>🔥</span><div class="meter-bar"><div class="meter-fill" id="intensityFill" style="width:0%"></div></div></div>
+      <div class="status-badge" id="liveStatus">⚡ НАЧАЛО</div>
+      <button id="restartButton">🔄 ПЕРЕЗАПУСК</button>
+    </div>
+  </div>
+  <p style="color:#aa9977;margin-top:0.3rem;font-style:italic;">🦅 ГРИФО-СКОРПИОН · ПОХИЩЕНИЕ · КОРОННАЯ АТАКА ГИЕН</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('liveStatus');
+    const intensityFill = document.getElementById('intensityFill');
+    const W = 960, H = 540;
+    let frame = 0, animationId = null;
+    let cameraShake = { x: 0, y: 0 };
+
+    // Герои
+    const dragon = { x: 200, y: 350, baseX: 200, baseY: 350, mode: 'beast', transformProgress: 0, health: 100, attackCooldown: 0, captured: false };
+    const panther = { x: 700, y: 365, baseX: 700, baseY: 365, mode: 'beast', transformProgress: 0, health: 100, attackCooldown: 0 };
+    const eagleGriffin = { x: 450, y: 200, baseX: 450, baseY: 200, health: 120, attackCooldown: 0, mode: 'beast' };
+
+    // Гиены (3 штуки)
+    const hyenas = [
+      { x: 850, y: 340, targetX: 500, speed: 1.1, mode: 'beast', gunTimer: 0, health: 60, carrying: false },
+      { x: 880, y: 280, targetX: 450, speed: 1.0, mode: 'beast', gunTimer: 0, health: 55, carrying: false },
+      { x: 830, y: 420, targetX: 520, speed: 0.95, mode: 'beast', gunTimer: 0, health: 65, carrying: false }
+    ];
+
+    // Босс гиен (гриф + скорпион)
+    const boss = { x: 800, y: 160, health: 200, maxHealth: 200, mode: 'beast', attackCooldown: 0, phase: 'idle', stingerAnim: 0 };
+
+    let storyPhase = 'intro';
+    let phaseTimer = 0;
+    let particles = [], bulletTrails = [], debris = [], explosions = [], screenShakeAmount = 0;
+    let crownAttackActive = false, crownAttackTimer = 0;
+
+    // ---------- РИСОВАНИЕ ----------
+    function drawDragon(x, y, frameCount, captured = false) {
+      ctx.save(); ctx.translate(x, y);
+      let breathe = Math.sin(frameCount * 0.2) * 1.2;
+      ctx.translate(0, breathe);
+      ctx.fillStyle = '#00000066'; ctx.beginPath(); ctx.ellipse(0, 28, 38, 12, 0, 0, Math.PI * 2); ctx.fill();
+      const bodyGrad = ctx.createLinearGradient(-30, -20, 30, 30);
+      bodyGrad.addColorStop(0, '#1a4634'); bodyGrad.addColorStop(0.5, '#2a6b4c'); bodyGrad.addColorStop(1, '#0f2f22');
+      ctx.fillStyle = bodyGrad; ctx.shadowColor = '#00ff8888'; ctx.shadowBlur = 25;
+      ctx.beginPath(); ctx.ellipse(0, 6, 38, 30, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1e5a3f'; ctx.beginPath(); ctx.ellipse(-14, -4, 17, 16, 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#35855c'; ctx.beginPath(); ctx.ellipse(16, 8, 18, 16, -0.1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1f5e3f'; ctx.beginPath(); ctx.ellipse(-28, -20, 20, 21, 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f5ffe0'; ctx.beginPath(); ctx.arc(-34, -26, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(-36, -27, 2, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-37, -29, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c9a24d'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-40, -42); ctx.lineTo(-50, -65); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-22, -40); ctx.lineTo(-14, -63); ctx.stroke();
+      const maneColors = ['#b8860b', '#daa520', '#cd853f', '#8b6508'];
+      for (let i = 0; i < 24; i++) {
+        let angle = (i / 24) * Math.PI * 2 + 0.3;
+        let dist = 20 + Math.sin(frameCount * 0.4 + i) * 2;
+        ctx.fillStyle = maneColors[i % 4]; ctx.shadowColor = '#ffd70088'; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(-28 + Math.cos(angle) * dist, -20 + Math.sin(angle) * dist, 5 + Math.sin(frameCount * 0.6 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#1a5a3a'; ctx.beginPath(); ctx.moveTo(-5, -30); ctx.quadraticCurveTo(-30, -55, -15, -45); ctx.quadraticCurveTo(0, -40, 5, -30); ctx.fill();
+      ctx.fillStyle = '#2a7a52'; ctx.beginPath(); ctx.moveTo(10, -28); ctx.quadraticCurveTo(35, -50, 20, -40); ctx.quadraticCurveTo(5, -35, -5, -28); ctx.fill();
+      if (captured) {
+        ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 3; ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.arc(0, 0, 45, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.restore();
+    }
+
+    function drawPanther(x, y, frameCount) {
+      ctx.save(); ctx.translate(x, y);
+      let tailWag = Math.sin(frameCount * 0.45) * 1.8;
+      ctx.fillStyle = '#00000066'; ctx.beginPath(); ctx.ellipse(0, 30, 36, 13, 0, 0, Math.PI * 2); ctx.fill();
+      const bodyGrad = ctx.createLinearGradient(-30, -25, 30, 25);
+      bodyGrad.addColorStop(0, '#1a1a2e'); bodyGrad.addColorStop(0.5, '#252540'); bodyGrad.addColorStop(1, '#0f0f1a');
+      ctx.fillStyle = bodyGrad; ctx.shadowColor = '#8899cc88'; ctx.shadowBlur = 22;
+      ctx.beginPath(); ctx.ellipse(0, 2, 35, 32, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c4d3e8'; ctx.beginPath(); ctx.arc(-11, -10, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(16, 8, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8b9db5'; ctx.beginPath(); ctx.arc(8, -22, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#b7c7dd'; ctx.beginPath(); ctx.arc(-22, 14, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#10101c'; ctx.beginPath(); ctx.ellipse(-34, -12, 18, 20, 0.1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#eaf2ff'; ctx.beginPath(); ctx.arc(-40, -17, 6.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000022'; ctx.beginPath(); ctx.ellipse(-42, -18, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(-43, -20, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1c1c2a'; ctx.beginPath(); ctx.ellipse(-45, -32, 8, 12, -0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-26, -34, 7, 11, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1e1e30'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(32, 14); ctx.lineTo(50 + tailWag, 26); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawEagleGriffin(x, y, frameCount) {
+      ctx.save(); ctx.translate(x, y);
+      let hover = Math.sin(frameCount * 0.3) * 3;
+      ctx.translate(0, hover);
+      // Тело орла
+      ctx.fillStyle = '#4a3a2a'; ctx.shadowColor = '#8a7a5a88'; ctx.shadowBlur = 20;
+      ctx.beginPath(); ctx.ellipse(0, 5, 40, 30, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5a4a3a'; ctx.beginPath(); ctx.ellipse(-15, -8, 20, 18, 0.1, 0, Math.PI * 2); ctx.fill();
+      // Голова грифа
+      ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.ellipse(-30, -20, 18, 16, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(-36, -25, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-38, -26, 2, 0, Math.PI * 2); ctx.fill();
+      // Клюв
+      ctx.fillStyle = '#ff8800'; ctx.beginPath(); ctx.moveTo(-45, -22); ctx.lineTo(-55, -20); ctx.lineTo(-45, -18); ctx.fill();
+      // Крылья
+      ctx.fillStyle = '#6a5a4a'; ctx.beginPath(); ctx.moveTo(-5, -25); ctx.quadraticCurveTo(-40, -60, -25, -40); ctx.quadraticCurveTo(-10, -30, 5, -20); ctx.fill();
+      ctx.fillStyle = '#7a6a5a'; ctx.beginPath(); ctx.moveTo(10, -22); ctx.quadraticCurveTo(45, -55, 30, -35); ctx.quadraticCurveTo(15, -25, -5, -18); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawHyena(h, idx, frameCount) {
+      ctx.save(); ctx.translate(h.x, h.y);
+      if (h.mode === 'beast') {
+        let run = Math.sin(frameCount * 0.8 + idx) * 2; ctx.translate(0, run);
+        ctx.fillStyle = '#00000066'; ctx.beginPath(); ctx.ellipse(0, 28, 28, 10, 0, 0, Math.PI * 2); ctx.fill();
+        const bg = ctx.createLinearGradient(-25, -15, 25, 20);
+        bg.addColorStop(0, '#6b5e4a'); bg.addColorStop(0.5, '#8b7b64'); bg.addColorStop(1, '#4d4232');
+        ctx.fillStyle = bg; ctx.shadowColor = '#3d362a88'; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.ellipse(0, 5, 28, 22, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a3124'; for (let s = -20; s <= 15; s += 8) ctx.fillRect(s, -18, 5, 8);
+        ctx.strokeStyle = '#5a4d38'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(24, 12); ctx.quadraticCurveTo(40, 18, 52, 28); ctx.stroke();
+        ctx.fillStyle = '#4d4232'; ctx.beginPath(); ctx.ellipse(-24, -10, 14, 12, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c4b59b'; ctx.beginPath(); ctx.ellipse(-30, -3, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff8e0';
+        for (let t = 0; t < 5; t++) { ctx.beginPath(); ctx.moveTo(-36 + t * 2.5, -5); ctx.lineTo(-38 + t * 2.5, 2); ctx.strokeStyle = '#e0d7c0'; ctx.lineWidth = 2; ctx.stroke(); }
+        ctx.fillStyle = '#f0b300'; ctx.beginPath(); ctx.arc(-28, -16, 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(-30, -17, 1.8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#4e4b44'; ctx.shadowColor = '#b8733388'; ctx.shadowBlur = 16;
+        ctx.fillRect(-30, -20, 60, 38); ctx.fillStyle = '#2f2c27'; ctx.fillRect(-24, -15, 46, 28);
+        ctx.fillStyle = '#1a1814'; ctx.beginPath(); ctx.arc(-23, 22, 11, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(23, 22, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5f5542'; ctx.fillRect(30, -8, 28, 9);
+        if (h.gunTimer > 0) {
+          ctx.fillStyle = '#ff8800'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 28;
+          ctx.beginPath(); ctx.arc(60, -3, 12 + Math.random() * 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(64, -3, 5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawBoss(x, y, frameCount, health) {
+      ctx.save(); ctx.translate(x, y);
+      let hover = Math.sin(frameCount * 0.2) * 2;
+      ctx.translate(0, hover);
+      // Тело скорпиона
+      ctx.fillStyle = '#3a2020'; ctx.shadowColor = '#ff440088'; ctx.shadowBlur = 25;
+      ctx.beginPath(); ctx.ellipse(0, 10, 50, 35, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a2a2a'; ctx.beginPath(); ctx.ellipse(-20, -10, 25, 22, 0.1, 0, Math.PI * 2); ctx.fill();
+      // Голова грифа
+      ctx.fillStyle = '#5a3a2a'; ctx.beginPath(); ctx.ellipse(-40, -20, 22, 18, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff4400'; ctx.beginPath(); ctx.arc(-48, -26, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-50, -27, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8800'; ctx.beginPath(); ctx.moveTo(-58, -22); ctx.lineTo(-70, -20); ctx.lineTo(-58, -18); ctx.fill();
+      // Крылья
+      ctx.fillStyle = '#4a3020'; ctx.beginPath(); ctx.moveTo(-10, -30); ctx.quadraticCurveTo(-50, -70, -30, -45); ctx.quadraticCurveTo(-10, -35, 5, -25); ctx.fill();
+      ctx.fillStyle = '#5a4030'; ctx.beginPath(); ctx.moveTo(15, -28); ctx.quadraticCurveTo(55, -65, 35, -40); ctx.quadraticCurveTo(15, -30, -5, -22); ctx.fill();
+      // Хвост скорпиона
+      ctx.strokeStyle = '#6a3a2a'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(40, 15); ctx.quadraticCurveTo(60, 0, 55, -30); ctx.stroke();
+      ctx.fillStyle = '#ff2200'; ctx.beginPath(); ctx.arc(55, -30, 10, 0, Math.PI * 2); ctx.fill();
+      // Полоска здоровья
+      ctx.fillStyle = '#000'; ctx.fillRect(-40, -70, 80, 10);
+      const hpPercent = health / 200;
+      ctx.fillStyle = hpPercent > 0.5 ? '#00ff00' : hpPercent > 0.25 ? '#ffaa00' : '#ff0000';
+      ctx.fillRect(-40, -70, 80 * hpPercent, 10);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.fillText('БОСС', -15, -72);
+      ctx.restore();
+    }
+
+    function spawnParticles(x, y, color, count = 12, spread = 6) {
+      for (let i = 0; i < count; i++) particles.push({ x, y, vx: (Math.random() - 0.5) * spread * 2, vy: (Math.random() - 0.5) * spread * 2 - 3, life: 25 + Math.random() * 30, color, size: 1.5 + Math.random() * 5, gravity: 0.1 });
+    }
+    function spawnExplosion(x, y, size = 30) {
+      explosions.push({ x, y, radius: 0, maxRadius: size + Math.random() * 20, life: 20 });
+      spawnParticles(x, y, '#ff8800', 20, 8); spawnParticles(x, y, '#ffcc00', 15, 5);
+      screenShakeAmount = Math.max(screenShakeAmount, 8);
+    }
+
+    // ---------- СЮЖЕТ ----------
+    function updateStory() {
+      hyenas.forEach(h => { if (h.gunTimer > 0) h.gunTimer -= 0.8; });
+      if (dragon.attackCooldown > 0) dragon.attackCooldown--;
+      if (panther.attackCooldown > 0) panther.attackCooldown--;
+      if (eagleGriffin.attackCooldown > 0) eagleGriffin.attackCooldown--;
+      if (boss.attackCooldown > 0) boss.attackCooldown--;
+
+      if (storyPhase === 'intro') { phaseTimer++; if (phaseTimer > 60) { storyPhase = 'meeting'; phaseTimer = 0; } }
+      else if (storyPhase === 'meeting') { phaseTimer++; if (phaseTimer > 80) { storyPhase = 'hyena_attack'; phaseTimer = 0; } }
+      else if (storyPhase === 'hyena_attack') {
+        phaseTimer++;
+        hyenas.forEach(h => { if (h.x > h.targetX) h.x -= h.speed; });
+        if (phaseTimer > 50) { storyPhase = 'capture'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'capture') {
+        phaseTimer++;
+        // Гиены хватают пантеру и тащат к боссу
+        panther.x += (boss.x - 100 - panther.x) * 0.03;
+        panther.y += (boss.y + 60 - panther.y) * 0.03;
+        hyenas.forEach(h => { h.x += (boss.x - 150 - h.x) * 0.02; h.y += (boss.y + 40 - h.y) * 0.02; });
+        if (phaseTimer > 80) { storyPhase = 'boss_fight'; phaseTimer = 0; panther.captured = true; }
+      }
+      else if (storyPhase === 'boss_fight') {
+        phaseTimer++;
+        // Орёл-грифон сражается с боссом
+        if (frame % 20 === 0 && eagleGriffin.attackCooldown <= 0) {
+          eagleGriffin.attackCooldown = 18;
+          spawnExplosion(boss.x - 10, boss.y - 5, 20);
+          boss.health -= 8;
+          spawnParticles(boss.x, boss.y, '#ffaa00', 12, 6);
+        }
+        if (frame % 30 === 0 && boss.attackCooldown <= 0) {
+          boss.attackCooldown = 25;
+          spawnExplosion(eagleGriffin.x + 10, eagleGriffin.y, 15);
+          eagleGriffin.health -= 10;
+          spawnParticles(eagleGriffin.x, eagleGriffin.y, '#ff4400', 10, 5);
+        }
+        if (boss.health <= 0 && phaseTimer > 40) { storyPhase = 'boss_defeated'; phaseTimer = 0; }
+      }
+      else if (storyPhase === 'boss_defeated') {
+        phaseTimer++;
+        spawnExplosion(boss.x, boss.y, 50);
+        if (phaseTimer > 30) { storyPhase = 'hyenas_scared'; phaseTimer = 0; panther.captured = false; }
+      }
+      else if (storyPhase === 'hyenas_scared') {
+        phaseTimer++;
+        // Гиены в страхе превращаются в машины
+        hyenas.forEach(h => { if (h.mode === 'beast') h.mode = 'machine'; });
+        if (phaseTimer > 30) { storyPhase = 'crown_attack'; phaseTimer = 0; crownAttackActive = true; crownAttackTimer = 0; }
+      }
+      else if (storyPhase === 'crown_attack') {
+        phaseTimer++; crownAttackTimer++;
+        intensityFill.style.width = '100%';
+        // Коронная атака гиен: шквальный огонь
+        hyenas.forEach(h => {
+          if (Math.random() < 0.5) h.gunTimer = 8;
+          if (h.gunTimer > 2) {
+            spawnParticles(h.x + 40, h.y - 8, '#ff4400', 6, 4);
+            spawnBulletTrail(h.x + 35, h.y - 5, dragon.x, dragon.y);
+            spawnBulletTrail(h.x + 35, h.y - 5, panther.x, panther.y);
+            spawnBulletTrail(h.x + 35, h.y - 5, eagleGriffin.x, eagleGriffin.y);
+          }
+        });
+        // Но скричеры всё равно побеждают
+        if (frame % 15 === 0 && dragon.attackCooldown <= 0) { dragon.attackCooldown = 12; spawnExplosion(hyenas[0].x, hyenas[0].y, 30); hyenas[0].health -= 15; }
+        if (frame % 18 === 0 && panther.attackCooldown <= 0) { panther.attackCooldown = 14; spawnExplosion(hyenas[1].x, hyenas[1].y, 30); hyenas[1].health -= 15; }
+        if (frame % 20 === 0 && eagleGriffin.attackCooldown <= 0) { eagleGriffin.attackCooldown = 16; spawnExplosion(hyenas[2].x, hyenas[2].y, 30); hyenas[2].health -= 15; }
+        if (hyenas.every(h => h.health <= 0) && phaseTimer > 40) { storyPhase = 'victory'; phaseTimer = 0; crownAttackActive = false; }
+      }
+      else if (storyPhase === 'victory') {
+        phaseTimer++; intensityFill.style.width = '0%';
+        if (phaseTimer > 100) { resetAll(); storyPhase = 'intro'; phaseTimer = 0; }
+      }
+
+      let msg = '';
+      switch (storyPhase) {
+        case 'intro': msg = '🌿 ДРАКОН И ПАНТЕРА В ДРЕВНЕМ ГОРОДЕ'; break;
+        case 'meeting': msg = '🤝 ГЕРОИ ВСТРЕЧАЮТСЯ У РУИН'; break;
+        case 'hyena_attack': msg = '🦖 ГИЕНЫ НАПАДАЮТ!'; break;
+        case 'capture': msg = '🔗 ГИЕНЫ ХВАТАЮТ ПАНТЕРУ И ТАЩАТ К БОССУ!'; break;
+        case 'boss_fight': msg = '🦅 ОРЁЛ-ГРИФОН СРАЖАЕТСЯ С БОССОМ!'; break;
+        case 'boss_defeated': msg = '💥 БОСС ПОВЕРЖЕН! ГИЕНЫ В УЖАСЕ!'; break;
+        case 'hyenas_scared': msg = '😱 ГИЕНЫ ПРЕВРАЩАЮТСЯ В МАШИНЫ!'; break;
+        case 'crown_attack': msg = '👑 КОРОННАЯ АТАКА ГИЕН! НО СКРИЧЕРЫ СИЛЬНЕЕ!'; break;
+        case 'victory': msg = '🏆 ПОБЕДА ДИКИХ СКРИЧЕРОВ!'; break;
+      }
+      statusEl.textContent = '🎬 ' + msg;
+
+      for (let i = particles.length - 1; i >= 0; i--) { let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += p.gravity; p.life--; if (p.life <= 0) particles.splice(i, 1); }
+      for (let i = bulletTrails.length - 1; i >= 0; i--) { bulletTrails[i].life--; if (bulletTrails[i].life <= 0) bulletTrails.splice(i, 1); }
+      for (let i = explosions.length - 1; i >= 0; i--) { explosions[i].radius += 2; explosions[i].life--; if (explosions[i].life <= 0) explosions.splice(i, 1); }
+      if (screenShakeAmount > 0) { cameraShake.x = (Math.random() - 0.5) * screenShakeAmount; cameraShake.y = (Math.random() - 0.5) * screenShakeAmount; screenShakeAmount *= 0.85; if (screenShakeAmount < 0.1) screenShakeAmount = 0; }
+      else { cameraShake.x = 0; cameraShake.y = 0; }
+    }
+
+    function resetAll() {
+      dragon.x = dragon.baseX; dragon.y = dragon.baseY; dragon.health = 100; dragon.captured = false;
+      panther.x = panther.baseX; panther.y = panther.baseY; panther.health = 100; panther.captured = false;
+      eagleGriffin.x = eagleGriffin.baseX; eagleGriffin.y = eagleGriffin.baseY; eagleGriffin.health = 120;
+      hyenas[0] = { x: 850, y: 340, targetX: 500, speed: 1.1, mode: 'beast', gunTimer: 0, health: 60, carrying: false };
+      hyenas[1] = { x: 880, y: 280, targetX: 450, speed: 1.0, mode: 'beast', gunTimer: 0, health: 55, carrying: false };
+      hyenas[2] = { x: 830, y: 420, targetX: 520, speed: 0.95, mode: 'beast', gunTimer: 0, health: 65, carrying: false };
+      boss.health = 200; boss.attackCooldown = 0;
+      particles = []; bulletTrails = []; explosions = []; screenShakeAmount = 0; crownAttackActive = false;
+    }
+
+    function drawBackground() {
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+      skyGrad.addColorStop(0, '#0a0515'); skyGrad.addColorStop(0.5, '#1a1025'); skyGrad.addColorStop(1, '#2a1a2a');
+      ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fefae0'; ctx.shadowColor = '#ffdd99'; ctx.shadowBlur = 35;
+      ctx.beginPath(); ctx.arc(140, 100, 48, 0, 2 * Math.PI); ctx.fill(); ctx.shadowBlur = 0;
+      const groundGrad = ctx.createLinearGradient(0, 400, 0, H);
+      groundGrad.addColorStop(0, '#3a2a1a'); groundGrad.addColorStop(1, '#1a0f08');
+      ctx.fillStyle = groundGrad; ctx.fillRect(0, 400, W, 150);
+      ctx.fillStyle = '#8a7a6a';
+      [100, 300, 550, 750].forEach((cx, i) => {
+        ctx.fillRect(cx - 10, 280 - i * 10, 20, 140 + i * 10);
+        ctx.fillStyle = '#6a5a4a'; ctx.fillRect(cx - 14, 270 - i * 10 - 15, 28, 15);
+      });
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.save(); ctx.translate(cameraShake.x, cameraShake.y);
+      drawBackground();
+      bulletTrails.forEach(t => {
+        ctx.strokeStyle = t.color; ctx.lineWidth = 1.5; ctx.globalAlpha = t.life / 8;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.targetX, t.targetY); ctx.stroke(); ctx.globalAlpha = 1;
+      });
+      explosions.forEach(e => {
+        ctx.fillStyle = `rgba(255,${100 + e.radius},0,${e.life / 20})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
+      });
+      drawDragon(dragon.x, dragon.y, frame, dragon.captured);
+      drawPanther(panther.x, panther.y, frame);
+      drawEagleGriffin(eagleGriffin.x, eagleGriffin.y, frame);
+      hyenas.forEach((h, i) => drawHyena(h, i, frame));
+      if (storyPhase === 'boss_fight' || storyPhase === 'boss_defeated') drawBoss(boss.x, boss.y, frame, boss.health);
+      particles.forEach(p => { ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 2 * Math.PI); ctx.fill(); });
+      ctx.restore();
+      if (crownAttackActive) {
+        ctx.font = 'bold 24px Impact'; ctx.fillStyle = '#ff0000'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 15;
+        ctx.fillText('👑 КОРОННАЯ АТАКА! 👑', W / 2 - 150, 60);
+      }
+    }
+
+    function loop() { frame++; updateStory(); drawScene(); animationId = requestAnimationFrame(loop); }
+    function restart() { if (animationId) cancelAnimationFrame(animationId); resetAll(); storyPhase = 'intro'; phaseTimer = 0; frame = 0; loop(); }
+    document.getElementById('restartButton').addEventListener('click', restart);
+    restart();
+    window.addEventListener('beforeunload', () => { if (animationId) cancelAnimationFrame(animationId); });
+  })();
+</script>
+</body>
+</html>

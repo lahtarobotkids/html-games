@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>ПСЖ · Лучшие моменты | Мультфильм</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: linear-gradient(145deg, #0b1a3a 0%, #0d2b4e 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Montserrat', system-ui, sans-serif;
+      padding: 20px;
+      margin: 0;
+    }
+    .cinema {
+      background: #0a0f1c;
+      border-radius: 3rem 3rem 2rem 2rem;
+      box-shadow: 0 30px 50px rgba(0,0,0,0.7), 0 0 0 4px #c99c47, 0 0 0 8px #0b1f40;
+      padding: 20px 20px 25px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 900px;
+      width: fit-content;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: radial-gradient(circle at 20% 20%, #2b5a2b, #0f3b0f);
+      border-radius: 36px;
+      box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 20px 30px rgba(0, 0, 0, 0.7);
+      border: 3px solid #b68b3c;
+    }
+    .marquee {
+      width: 100%;
+      margin-top: 15px;
+      background: #e6c468;
+      background-image: linear-gradient(90deg, #d4af37, #f5e7b3, #d4af37);
+      color: #082142;
+      font-weight: 800;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      padding: 12px 20px;
+      border-radius: 60px;
+      text-align: center;
+      box-shadow: 0 8px 0 #7a5f1e, 0 12px 25px rgba(0,0,0,0.6);
+      text-transform: uppercase;
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+    .marquee span {
+      background: #082142;
+      color: #f7e05e;
+      padding: 5px 18px;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      letter-spacing: 0.5px;
+    }
+    button {
+      background: #c49b2c;
+      border: none;
+      color: #051630;
+      font-weight: bold;
+      font-size: 1.2rem;
+      padding: 12px 35px;
+      margin-top: 15px;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #6b4c14, 0 10px 20px black;
+      transition: all 0.08s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: radial-gradient(circle at 30% 20%, #efd275, #b8861e);
+      border: 2px solid #ffe484;
+    }
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #5a3f0f, 0 8px 15px black;
+    }
+    .controls {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+    }
+    @media (max-width: 650px) {
+      .marquee {
+        font-size: 1rem;
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+<div style="display: flex; flex-direction: column; align-items: center;">
+  <div class="cinema">
+    <canvas id="psgMovieCanvas" width="800" height="450" aria-label="Мультфильм ПСЖ — лучшие моменты"></canvas>
+    <div class="marquee">
+      ⚡ ПАРИ СЕН-ЖЕРМЕН ⚡
+      <span>ЛУЧШИЕ МОМЕНТЫ</span>
+      ⚡ ICI C'EST PARIS ⚡
+    </div>
+    <div class="controls">
+      <button id="replayBtn"><span>▶</span> СМОТРЕТЬ СНОВА</button>
+    </div>
+    <div style="color:#c9a53b; margin-top: 8px; font-weight: bold; font-size: 0.9rem;">
+      🏆 Лига 1 · Кубок · Лига чемпионов · легенды 🏆
+    </div>
+  </div>
+  <p style="color:#ad8b4c; margin-top: 12px; font-style: italic; text-shadow: 0 2px 4px black;">Анимация: голы, сейвы, празднования — Париж в сердце!</p>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('psgMovieCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Размеры холста
+    const W = 800, H = 450;
+
+    // ---------- СОСТОЯНИЕ СЦЕНЫ ----------
+    let sceneTime = 0;          // общий таймер анимации (в кадрах ~60fps)
+    let animationFrameId = null;
+    let isRunning = true;
+
+    // Цветовая палитра ПСЖ
+    const BLUE_DARK = '#0b2b5c';
+    const BLUE_MID = '#154a8a';
+    const RED_PSG = '#e42039';
+    const GOLD = '#e7b42c';
+    const WHITE = '#f5f5f5';
+    const PITCH_GREEN = '#1f6d2f';
+    const SKY_TOP = '#1a3b5c';
+    const SKY_BOT = '#2c5f2c';
+
+    // Для движения и эффектов
+    let particles = [];
+    let confettiPieces = [];
+
+    // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ РИСОВАНИЯ ----------
+    function drawBackground() {
+      // Небо / стадионное освещение
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#122442');
+      grad.addColorStop(0.7, '#1d3d2c');
+      grad.addColorStop(1, '#0f6122');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Трибуны (силуэты)
+      ctx.fillStyle = '#0d1f2e';
+      for (let i = 0; i < 18; i++) {
+        let x = i * 55 - 10;
+        ctx.beginPath();
+        ctx.arc(x, H-70, 55, Math.PI, 0);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#152c42';
+      ctx.fillRect(0, H-55, W, 30);
+      // Газон
+      ctx.fillStyle = PITCH_GREEN;
+      ctx.fillRect(0, H-65, W, 65);
+      // Линии поля
+      ctx.strokeStyle = '#e9f5e9';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([20, 25]);
+      ctx.beginPath();
+      ctx.moveTo(0, H-45);
+      ctx.lineTo(W, H-45);
+      ctx.stroke();
+      ctx.setLineDash([]); // сброс
+
+      // Центральный круг
+      ctx.beginPath();
+      ctx.arc(W/2, H-55, 45, 0, Math.PI*2);
+      ctx.strokeStyle = '#ffffffcc';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+    }
+
+    // Рисуем игрока (упрощённый, но узнаваемый)
+    function drawPlayer(x, y, scale = 1.0, jerseyColor = BLUE_DARK, number = '7', isKicking = false) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+
+      // Ноги
+      ctx.fillStyle = '#1e1e1e';
+      ctx.fillRect(-5, 8, 4, 14);
+      ctx.fillRect(1, 8, 4, 14);
+      // Бутсы
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-6, 20, 7, 5);
+      ctx.fillRect(1, 20, 7, 5);
+
+      // Тело (футболка)
+      ctx.fillStyle = jerseyColor;
+      ctx.fillRect(-8, -6, 16, 18);
+      // Полоса на форме (красная вертикаль)
+      ctx.fillStyle = RED_PSG;
+      ctx.fillRect(-1, -6, 3, 18);
+
+      // Руки
+      ctx.fillStyle = '#d4b48c';
+      ctx.fillRect(-13, -3, 5, 9);
+      ctx.fillRect(8, -3, 5, 9);
+
+      // Голова
+      ctx.fillStyle = '#f5dbb1';
+      ctx.beginPath();
+      ctx.arc(0, -10, 8, 0, Math.PI*2);
+      ctx.fill();
+      // Волосы
+      ctx.fillStyle = '#2b1e0e';
+      ctx.beginPath();
+      ctx.arc(0, -13, 7, Math.PI, 2*Math.PI);
+      ctx.fill();
+
+      // Номер на спине (стилизовано)
+      ctx.fillStyle = WHITE;
+      ctx.font = 'bold 10px "Montserrat", "Segoe UI"';
+      ctx.fillText(number, -4, 7);
+
+      // Если бьет - динамичная поза
+      if (isKicking) {
+        ctx.fillStyle = '#d4b48c';
+        ctx.fillRect(7, -8, 8, 4); // рука вперед
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(3, 10, 7, 4); // нога вперед
+      }
+
+      ctx.restore();
+    }
+
+    // Вратарь
+    function drawGoalkeeper(x, y, scale = 1.0) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-9, -4, 18, 20);
+      ctx.fillStyle = '#eab308';
+      ctx.fillRect(-8, -6, 16, 6);
+      // перчатки
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(-13, -2, 6, 7);
+      ctx.fillRect(7, -2, 6, 7);
+      ctx.fillStyle = '#f5dbb1';
+      ctx.beginPath();
+      ctx.arc(0, -11, 9, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.arc(0, -14, 8, Math.PI, 0);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Мяч
+    function drawBall(x, y, scale = 1.0) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#f0f0f0';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = '#1e1e1e';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#c0c0c0';
+      ctx.beginPath();
+      ctx.arc(-2, -2, 2.2, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Эффект конфетти / звезды
+    function spawnConfetti(x, y, count = 12) {
+      for (let i=0; i<count; i++) {
+        confettiPieces.push({
+          x: x, y: y,
+          vx: (Math.random() - 0.5) * 5.5,
+          vy: (Math.random() - 1.5) * 4 - 2,
+          size: Math.random() * 5 + 2,
+          color: Math.random() < 0.5 ? RED_PSG : GOLD,
+          life: 1.0,
+          decay: 0.015 + Math.random() * 0.025
+        });
+      }
+    }
+
+    function updateConfetti() {
+      for (let i=confettiPieces.length-1; i>=0; i--) {
+        let p = confettiPieces[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12;
+        p.life -= p.decay;
+        if (p.life <= 0 || p.y > H+20) {
+          confettiPieces.splice(i,1);
+        }
+      }
+    }
+
+    function drawConfetti() {
+      for (let p of confettiPieces) {
+        ctx.globalAlpha = p.life * 0.9;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size*0.7);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- ГЛАВНАЯ СЦЕНА: ЛУЧШИЕ МОМЕНТЫ ПСЖ ----------
+    function drawScene(progress) {
+      // progress от 0 до 1 (цикл ~12 секунд)
+      drawBackground();
+
+      // Определяем фазы мультфильма (5 ключевых моментов)
+      const phase0 = 0.18;   // Мбаппе гол
+      const phase1 = 0.38;   // Неймар дриблинг
+      const phase2 = 0.58;   // Вратарь сейв (Доннарумма)
+      const phase3 = 0.78;   // Месси празднование
+      const phase4 = 0.96;   // Командное празднование с кубком
+
+      // Анимационные параметры
+      let t = progress;
+
+      // ----- МОМЕНТ 1: КИЛИАН МБАППЕ ЗАБИВАЕТ (0.0 - 0.25) -----
+      if (t < 0.25) {
+        let local = t / 0.25; // 0..1
+        // Мбаппе бежит слева к центру
+        let mbappeX = 150 + local * 300;
+        let mbappeY = H-105 + Math.sin(local * Math.PI * 3) * 4;
+        drawPlayer(mbappeX, mbappeY, 1.0, BLUE_DARK, '7', local > 0.6);
+
+        // Мяч движется к воротам
+        let ballX = mbappeX + 35 + local * 90;
+        let ballY = mbappeY - 8 - local * 15;
+        if (local > 0.7) {
+          ballX = 560 + (local-0.7)*160;
+          ballY = 190 + (local-0.7)*25;
+        }
+        drawBall(ballX, ballY, 1.0);
+
+        // Вратарь соперника
+        drawGoalkeeper(680, 190, 0.9);
+        // Ворота
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(640, 140, 80, 120);
+        ctx.fillStyle = '#ffffff30';
+        ctx.fillRect(642, 142, 76, 116);
+
+        if (local > 0.85 && confettiPieces.length < 30) {
+          spawnConfetti(680, 200, 18);
+        }
+      }
+
+      // ----- МОМЕНТ 2: НЕЙМАР ДРИБЛИНГ (0.25 - 0.45) -----
+      else if (t >= 0.25 && t < 0.45) {
+        let local = (t - 0.25) / 0.2;
+        let neyX = 500 - local * 220;
+        let neyY = H-115 + Math.sin(local * Math.PI * 4) * 5;
+        drawPlayer(neyX, neyY, 0.95, '#c41e3a', '10', true);
+
+        // Мяч рядом с ногой
+        drawBall(neyX + 18, neyY + 5, 0.85);
+
+        // Защитники
+        drawPlayer(280, H-100, 0.9, '#2c3e50', '4');
+        drawPlayer(190, H-108, 0.9, '#34495e', '5');
+
+        if (local > 0.7) {
+          spawnConfetti(neyX, neyY-10, 4);
+        }
+      }
+
+      // ----- МОМЕНТ 3: СЕЙВ ДОННАРУММЫ (0.45 - 0.65) -----
+      else if (t >= 0.45 && t < 0.65) {
+        let local = (t - 0.45) / 0.2;
+        drawGoalkeeper(160, 210, 1.1);
+        // мяч летит в ворота
+        let ballX = 280 + local * 150;
+        let ballY = 150 + Math.sin(local*Math.PI)*30;
+        drawBall(ballX, ballY, 0.9);
+        // сейв рукой
+        if (local > 0.65) {
+          ctx.fillStyle = '#facc15';
+          ctx.beginPath();
+          ctx.arc(170, 180, 15, 0, Math.PI*2);
+          ctx.fill();
+          spawnConfetti(170, 180, 10);
+        }
+        // ворота ПСЖ
+        ctx.strokeStyle = '#ddd';
+        ctx.strokeRect(90, 110, 70, 110);
+      }
+
+      // ----- МОМЕНТ 4: МЕССИ ПРАЗДНУЕТ (0.65 - 0.85) -----
+      else if (t >= 0.65 && t < 0.85) {
+        let local = (t - 0.65) / 0.2;
+        let messiX = 400;
+        let messiY = H-105 - Math.sin(local*Math.PI*2)*4;
+        drawPlayer(messiX, messiY, 1.0, '#b3243b', '30', false);
+        // поднятые руки
+        ctx.fillStyle = '#d4b48c';
+        ctx.fillRect(messiX-12, messiY-32, 5, 12);
+        ctx.fillRect(messiX+7, messiY-32, 5, 12);
+        drawBall(messiX+30, messiY-25, 0.8);
+
+        if (local > 0.5) {
+          spawnConfetti(messiX, messiY-40, 14);
+        }
+        // надпись
+        ctx.fillStyle = GOLD;
+        ctx.font = 'bold 22px "Montserrat"';
+        ctx.fillText('MESSI ♕', 340, 100);
+      }
+
+      // ----- МОМЕНТ 5: КОМАНДА С КУБКОМ (0.85 - 1.0) -----
+      else {
+        let local = (t - 0.85) / 0.15;
+        // Группа игроков
+        drawPlayer(280, H-90, 0.9, BLUE_DARK, '7');
+        drawPlayer(330, H-95, 0.9, '#c41e3a', '10');
+        drawPlayer(390, H-92, 0.9, BLUE_DARK, '30');
+        drawPlayer(440, H-98, 0.9, '#1e3a5f', '5');
+        // Кубок
+        ctx.fillStyle = GOLD;
+        ctx.fillRect(380, H-180, 50, 60);
+        ctx.fillStyle = '#b68b40';
+        ctx.fillRect(370, H-195, 70, 20);
+        ctx.fillStyle = '#f9e076';
+        ctx.font = 'bold 24px "Segoe UI"';
+        ctx.fillText('🏆', 385, H-145);
+        ctx.fillStyle = WHITE;
+        ctx.font = 'italic 20px "Montserrat"';
+        ctx.fillText('CHAMPIONS', 330, H-210);
+
+        spawnConfetti(400, H-200, 20);
+      }
+
+      // Отрисовка всех конфетти
+      updateConfetti();
+      drawConfetti();
+
+      // Дополнительно: логотип ПСЖ (стилизованный)
+      ctx.fillStyle = '#ffffffdd';
+      ctx.font = 'bold 20px "Montserrat"';
+      ctx.fillText('PSG', 30, 60);
+      ctx.fillStyle = RED_PSG;
+      ctx.fillRect(30, 65, 55, 5);
+      ctx.fillStyle = BLUE_DARK;
+      ctx.fillRect(30, 72, 55, 5);
+    }
+
+    // ---------- ЦИКЛ АНИМАЦИИ ----------
+    function animationLoop() {
+      if (!isRunning) return;
+
+      // Увеличиваем время сцены (примерно 12 секунд на полный цикл)
+      sceneTime += 0.016; // ~60 fps шаг
+      let cycleDuration = 13.5; // секунд
+      let progress = (sceneTime % cycleDuration) / cycleDuration;
+
+      // Очистка и отрисовка
+      ctx.clearRect(0, 0, W, H);
+      drawScene(progress);
+
+      animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    // Сброс и перезапуск
+    function restartMovie() {
+      sceneTime = 0;
+      confettiPieces = [];
+      // Не останавливаем цикл, просто сбрасываем таймер
+    }
+
+    // Запуск
+    function startAnimation() {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      isRunning = true;
+      animationLoop();
+    }
+
+    // Привязка кнопки
+    document.getElementById('replayBtn').addEventListener('click', () => {
+      restartMovie();
+    });
+
+    // Запускаем сразу
+    startAnimation();
+
+    // Очистка при уходе со страницы (не обязательно, но хорошо)
+    window.addEventListener('beforeunload', () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      isRunning = false;
+    });
+
+  })();
+</script>
+</body>
+</html>
