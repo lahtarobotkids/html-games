@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Соник vs Шэдоу · Воздушная битва с Кристаллом Хаоса</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0f1e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            border: 3px solid #2a3a5c;
+            border-radius: 20px;
+            box-shadow: 0 0 60px rgba(0, 180, 255, 0.3);
+            display: block;
+            width: 100%;
+            max-width: 1100px;
+            height: auto;
+            image-rendering: crisp-edges;
+        }
+        .info {
+            position: absolute;
+            bottom: 20px;
+            color: #b0d0ff;
+            font-weight: bold;
+            text-shadow: 0 0 10px cyan;
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 20px;
+            border-radius: 40px;
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="cityCanvas" width="1100" height="500"></canvas>
+    <div class="info">⚡ ВОЗДУШНАЯ БИТВА: СОНИК vs ШЭДОУ ⚡</div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('cityCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // ---------- ПАРАМЕТРЫ ГОРОДА ----------
+            const W = 1100, H = 500;
+            const groundY = 410;
+            
+            // Массивы зданий и окон
+            const buildings = [];
+            const windows = [];
+
+            // Генерация фона
+            function generateCity() {
+                let x = 0;
+                while (x < W) {
+                    const w = 50 + Math.random() * 70;
+                    const h = 100 + Math.random() * 220;
+                    buildings.push({ x, w, h, color: `hsl(${220 + Math.random() * 40}, 30%, ${12 + Math.random() * 15}%)` });
+                    
+                    const cols = Math.floor(w / 18);
+                    const rows = Math.floor(h / 22);
+                    for (let c = 0; c < cols; c++) {
+                        for (let r = 0; r < rows; r++) {
+                            if (Math.random() < 0.65) {
+                                windows.push({
+                                    wx: x + 6 + c * 18,
+                                    wy: groundY - h + 8 + r * 22,
+                                    ww: 8,
+                                    wh: 12,
+                                    color: Math.random() < 0.5 ? '#ffd966' : '#7fc9ff'
+                                });
+                            }
+                        }
+                    }
+                    x += w + 6 + Math.random() * 12;
+                }
+                if (buildings.length > 0) {
+                    const last = buildings[buildings.length - 1];
+                    if (last.x + last.w > W) last.w = W - last.x;
+                }
+            }
+            generateCity();
+
+            // ---------- СОСТОЯНИЕ АНИМАЦИИ ----------
+            const state = {
+                phase: 'chase', // chase, standoff, chaos, jump, air_hold, lightning, sonic_fall, shadow_land, shadow_talk, shadow_walk
+                timer: 0,
+                sonicX: 350,
+                sonicY: 0,
+                sonicVY: 0,
+                sonicLying: false,
+                shadowX: 650,
+                shadowY: 0,
+                shadowVY: 0,
+                chaosGlow: 0,
+                lightningBolts: [],
+                timeScale: 1,
+                shakeAmount: 0,
+                flash: 0,
+                shadowOnBike: true,
+                showText: false
+            };
+
+            // ---------- ФУНКЦИИ МОЛНИЙ ----------
+            function drawLightningTrail(x, y, color, length, width, timeOffset, direction = -1) {
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 20;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                
+                let currentX = x;
+                let currentY = y;
+                const segments = 7 + Math.floor(Math.random() * 4);
+                
+                for (let i = 0; i < segments; i++) {
+                    const nextX = currentX + direction * (15 + Math.random() * 25);
+                    const nextY = currentY + (Math.random() - 0.5) * 30;
+                    ctx.lineTo(nextX, nextY);
+                    currentX = nextX;
+                    currentY = nextY;
+                }
+                ctx.stroke();
+                
+                for (let i = 0; i < 4; i++) {
+                    const branchX = x - Math.random() * length * 0.7;
+                    const branchY = y + (Math.random() - 0.5) * 40;
+                    ctx.beginPath();
+                    ctx.moveTo(branchX, branchY);
+                    ctx.lineTo(branchX - 15 - Math.random() * 30, branchY + (Math.random() - 0.5) * 25);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+
+            function drawGreenLightning(x, y, targetX, targetY, progress) {
+                ctx.save();
+                ctx.shadowColor = '#00ff00';
+                ctx.shadowBlur = 30;
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 4;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                
+                let currentX = x;
+                let currentY = y;
+                const segments = 12;
+                
+                for (let i = 0; i < segments; i++) {
+                    const t = (i + 1) / segments;
+                    const nextX = x + (targetX - x) * t + (Math.random() - 0.5) * 15;
+                    const nextY = y + (targetY - y) * t + (Math.random() - 0.5) * 15;
+                    ctx.lineTo(nextX, nextY);
+                    currentX = nextX;
+                    currentY = nextY;
+                }
+                
+                ctx.lineTo(targetX, targetY);
+                ctx.stroke();
+                
+                for (let i = 0; i < 6; i++) {
+                    const t = Math.random();
+                    const branchX = x + (targetX - x) * t;
+                    const branchY = y + (targetY - y) * t;
+                    ctx.beginPath();
+                    ctx.moveTo(branchX, branchY);
+                    ctx.lineTo(branchX + (Math.random() - 0.5) * 30, branchY + (Math.random() - 0.5) * 30);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+
+            // ---------- ФУНКЦИИ РИСОВАНИЯ ПЕРСОНАЖЕЙ ----------
+            function drawShadowOnBike(x, y) {
+                const bikeY = y;
+                
+                // Мотоцикл
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.arc(x - 18, bikeY, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.arc(x + 18, bikeY, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ccc';
+                ctx.stroke();
+                
+                ctx.fillStyle = '#2a2a2a';
+                ctx.beginPath();
+                ctx.moveTo(x - 30, bikeY - 8);
+                ctx.lineTo(x - 5, bikeY - 25);
+                ctx.lineTo(x + 20, bikeY - 30);
+                ctx.lineTo(x + 28, bikeY - 18);
+                ctx.lineTo(x + 10, bikeY - 8);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(x + 5, bikeY - 24);
+                ctx.lineTo(x + 28, bikeY - 32);
+                ctx.lineTo(x + 32, bikeY - 24);
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                drawShadowBody(x - 2, bikeY - 36);
+            }
+
+            function drawShadowBody(x, y) {
+                // Тело Шэдоу
+                ctx.fillStyle = '#1c1c1c';
+                ctx.beginPath();
+                ctx.ellipse(x, y, 18, 22, -0.1, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Белая шерстка
+                ctx.fillStyle = '#f0f0f0';
+                ctx.beginPath();
+                ctx.ellipse(x, y + 4, 5, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(x, y, 3, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Голова
+                ctx.fillStyle = '#1c1c1c';
+                ctx.beginPath();
+                ctx.arc(x + 4, y - 20, 14, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Мордочка
+                ctx.fillStyle = '#f0d0b0';
+                ctx.beginPath();
+                ctx.ellipse(x + 4, y - 11, 11, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Уши
+                ctx.fillStyle = '#1c1c1c';
+                ctx.beginPath();
+                ctx.moveTo(x - 4, y - 28);
+                ctx.lineTo(x - 12, y - 40);
+                ctx.lineTo(x, y - 32);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x + 12, y - 28);
+                ctx.lineTo(x + 20, y - 40);
+                ctx.lineTo(x + 8, y - 32);
+                ctx.fill();
+                
+                // Красные полоски
+                ctx.fillStyle = '#c00';
+                ctx.beginPath();
+                ctx.moveTo(x - 2, y - 32);
+                ctx.lineTo(x + 4, y - 36);
+                ctx.lineTo(x + 8, y - 30);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x + 10, y - 30);
+                ctx.lineTo(x + 14, y - 36);
+                ctx.lineTo(x + 16, y - 28);
+                ctx.fill();
+                
+                // Глаза
+                ctx.fillStyle = '#ff4444';
+                ctx.beginPath();
+                ctx.arc(x, y - 22, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + 8, y - 22, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Нос
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(x + 4, y - 14, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Рот
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x, y - 10);
+                ctx.lineTo(x + 4, y - 8);
+                ctx.stroke();
+                
+                // Руки с перчатками
+                // Левая рука
+                ctx.fillStyle = '#1c1c1c';
+                ctx.fillRect(x - 16, y - 2, 6, 14);
+                // Левая перчатка
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x - 18, y + 10, 10, 8);
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillRect(x - 18, y + 16, 10, 3);
+                
+                // Правая рука
+                ctx.fillStyle = '#1c1c1c';
+                ctx.fillRect(x + 12, y - 2, 6, 14);
+                // Правая перчатка
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x + 10, y + 10, 10, 8);
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillRect(x + 10, y + 16, 10, 3);
+                
+                // Ноги
+                ctx.fillStyle = '#1c1c1c';
+                ctx.fillRect(x - 8, y + 18, 6, 12);
+                ctx.fillRect(x + 4, y + 18, 6, 12);
+                
+                // Кроссовки Шэдоу (белый верх, красная подошва)
+                // Левый кроссовок
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x - 10, y + 26, 10, 6);
+                ctx.fillStyle = '#cc0000';
+                ctx.fillRect(x - 10, y + 32, 10, 4);
+                
+                // Правый кроссовок
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x + 2, y + 26, 10, 6);
+                ctx.fillStyle = '#cc0000';
+                ctx.fillRect(x + 2, y + 32, 10, 4);
+            }
+
+            function drawSonic(x, y, lying = false) {
+                if (lying) {
+                    // Соник лежит на земле
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.beginPath();
+                    ctx.ellipse(x, y - 10, 22, 12, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#f0d0b0';
+                    ctx.beginPath();
+                    ctx.ellipse(x + 10, y - 12, 10, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.beginPath();
+                    ctx.arc(x + 16, y - 18, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#f0d0b0';
+                    ctx.beginPath();
+                    ctx.ellipse(x + 18, y - 16, 7, 5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(x + 14, y - 20, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 20, y - 20, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Руки с перчатками (лежит)
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.fillRect(x - 10, y - 4, 8, 4);
+                    ctx.fillRect(x + 4, y - 4, 8, 4);
+                    
+                    // Перчатки
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(x - 12, y - 2, 8, 5);
+                    ctx.fillRect(x + 4, y - 2, 8, 5);
+                    
+                    ctx.fillStyle = '#d22';
+                    ctx.fillRect(x - 12, y, 10, 5);
+                    ctx.fillRect(x + 4, y, 10, 5);
+                } else {
+                    const sonicY = y;
+                    
+                    // Тело
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.beginPath();
+                    ctx.ellipse(x, sonicY - 22, 15, 18, 0.05, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Живот
+                    ctx.fillStyle = '#f0d0b0';
+                    ctx.beginPath();
+                    ctx.ellipse(x, sonicY - 16, 10, 12, 0.05, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Голова
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.beginPath();
+                    ctx.arc(x + 2, sonicY - 38, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Мордочка
+                    ctx.fillStyle = '#f0d0b0';
+                    ctx.beginPath();
+                    ctx.ellipse(x + 2, sonicY - 34, 9, 7, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Иглы
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.beginPath();
+                    ctx.moveTo(x - 8, sonicY - 46);
+                    ctx.lineTo(x - 14, sonicY - 62);
+                    ctx.lineTo(x - 2, sonicY - 48);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(x + 2, sonicY - 48);
+                    ctx.lineTo(x - 2, sonicY - 66);
+                    ctx.lineTo(x + 8, sonicY - 48);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(x + 12, sonicY - 46);
+                    ctx.lineTo(x + 20, sonicY - 60);
+                    ctx.lineTo(x + 14, sonicY - 42);
+                    ctx.fill();
+                    
+                    // Глаза
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(x - 2, sonicY - 39, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 6, sonicY - 39, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Зрачки
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(x - 1, sonicY - 40, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 7, sonicY - 40, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Нос
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(x + 2, sonicY - 35, 1.8, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Улыбка
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(x + 2, sonicY - 33, 6, 0.1, Math.PI - 0.1);
+                    ctx.stroke();
+                    
+                    // Руки с перчатками
+                    // Левая рука
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.fillRect(x - 16, sonicY - 22, 5, 14);
+                    // Левая перчатка
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(x - 18, sonicY - 10, 9, 8);
+                    ctx.fillStyle = '#ffcc00';
+                    ctx.fillRect(x - 18, sonicY - 4, 9, 3);
+                    
+                    // Правая рука
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.fillRect(x + 12, sonicY - 22, 5, 14);
+                    // Правая перчатка
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(x + 10, sonicY - 10, 9, 8);
+                    ctx.fillStyle = '#ffcc00';
+                    ctx.fillRect(x + 10, sonicY - 4, 9, 3);
+                    
+                    // Ноги
+                    ctx.fillStyle = '#1e4fd8';
+                    ctx.fillRect(x - 8, sonicY - 10, 6, 12);
+                    ctx.fillRect(x + 4, sonicY - 10, 6, 12);
+                    
+                    // Кроссовки
+                    ctx.fillStyle = '#d22';
+                    ctx.fillRect(x - 10, sonicY - 2, 10, 6);
+                    ctx.fillRect(x + 2, sonicY - 2, 10, 6);
+                }
+            }
+
+            function drawChaosCrystal(x, y, glow) {
+                ctx.save();
+                ctx.shadowColor = '#00ff00';
+                ctx.shadowBlur = 30 + glow;
+                
+                ctx.fillStyle = '#00ff88';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 15);
+                ctx.lineTo(x + 10, y);
+                ctx.lineTo(x, y + 15);
+                ctx.lineTo(x - 10, y);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = `rgba(0, 255, 136, ${0.3 + glow * 0.02})`;
+                ctx.beginPath();
+                ctx.arc(x, y, 25 + glow, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+
+            function drawBackground() {
+                const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+                skyGrad.addColorStop(0, '#0a0f2c');
+                skyGrad.addColorStop(0.5, '#1a1f3a');
+                skyGrad.addColorStop(1, '#2a2f4a');
+                ctx.fillStyle = skyGrad;
+                ctx.fillRect(0, 0, W, groundY);
+
+                for (let i = 0; i < 80; i++) {
+                    const sx = (i * 137.5) % W;
+                    const sy = (i * 97.3) % (groundY - 20);
+                    const bright = 0.5 + Math.sin(Date.now() * 0.002 + i) * 0.4;
+                    ctx.fillStyle = `rgba(255, 255, 200, ${bright})`;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 1.2 + bright * 0.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#f0f0e0';
+                ctx.shadowColor = '#fffacd';
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(930, 70, 32, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                for (let b of buildings) {
+                    ctx.fillStyle = b.color;
+                    ctx.fillRect(b.x, groundY - b.h, b.w, b.h);
+                    ctx.fillStyle = 'rgba(120, 160, 220, 0.25)';
+                    ctx.fillRect(b.x, groundY - b.h - 2, b.w, 2);
+                }
+
+                for (let win of windows) {
+                    ctx.fillStyle = win.color;
+                    ctx.shadowColor = win.color;
+                    ctx.shadowBlur = 6;
+                    ctx.fillRect(win.wx, win.wy, win.ww, win.wh);
+                }
+                ctx.shadowBlur = 0;
+
+                ctx.fillStyle = '#151a22';
+                ctx.fillRect(0, groundY, W, H - groundY);
+                ctx.strokeStyle = '#aaa';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([20, 30]);
+                ctx.beginPath();
+                ctx.moveTo(0, groundY + 28);
+                ctx.lineTo(W, groundY + 28);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(100, 120, 140, 0.2)';
+                ctx.fillRect(0, groundY, W, 6);
+            }
+
+            // ---------- ФУНКЦИЯ ОТРИСОВКИ ТЕКСТА ----------
+            function drawSpeechBubble(x, y, text) {
+                ctx.save();
+                
+                // Пузырь
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                
+                const textWidth = ctx.measureText(text).width;
+                const bubbleWidth = textWidth + 40;
+                const bubbleHeight = 40;
+                
+                // Пузырь
+                ctx.beginPath();
+                ctx.roundRect(x - bubbleWidth / 2, y - bubbleHeight, bubbleWidth, bubbleHeight, 10);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Хвостик пузыря
+                ctx.beginPath();
+                ctx.moveTo(x - 10, y);
+                ctx.lineTo(x, y + 15);
+                ctx.lineTo(x + 10, y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                // Текст
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, x, y - bubbleHeight / 2);
+                
+                ctx.restore();
+            }
+
+            // ---------- ОБНОВЛЕНИЕ СОСТОЯНИЯ ----------
+            function updateState() {
+                state.timer += state.timeScale;
+                
+                switch(state.phase) {
+                    case 'chase':
+                        if (state.shadowX < W - 80) {
+                            state.shadowX += 3.2 * state.timeScale;
+                        } else {
+                            state.shadowX = 60;
+                        }
+                        if (state.sonicX < W - 80) {
+                            state.sonicX += 3.8 * state.timeScale;
+                        } else {
+                            state.sonicX = 30;
+                        }
+                        if (state.sonicX > state.shadowX - 50) {
+                            state.sonicX = state.shadowX - 60;
+                        }
+                        
+                        if (state.timer > 180) {
+                            state.phase = 'standoff';
+                            state.timer = 0;
+                            state.sonicX = W / 2 - 80;
+                            state.shadowX = W / 2 + 80;
+                        }
+                        break;
+                        
+                    case 'standoff':
+                        state.chaosGlow = Math.min(state.chaosGlow + 0.5, 30);
+                        
+                        if (state.timer > 120) {
+                            state.phase = 'chaos';
+                            state.timer = 0;
+                            state.chaosGlow = 0;
+                        }
+                        break;
+                        
+                    case 'chaos':
+                        state.chaosGlow = Math.min(state.chaosGlow + 2, 50);
+                        state.timeScale = 0.2;
+                        
+                        if (state.timer > 90) {
+                            state.phase = 'jump';
+                            state.timer = 0;
+                            state.shadowVY = -18;
+                            state.shadowOnBike = false;
+                            state.sonicVY = -12;
+                            state.timeScale = 1;
+                        }
+                        break;
+                        
+                    case 'jump':
+                        // Быстрый прыжок вверх
+                        state.shadowY += state.shadowVY;
+                        state.shadowVY += 0.8;
+                        
+                        state.sonicY += state.sonicVY;
+                        state.sonicVY += 0.8;
+                        
+                        if (state.shadowY < -150) {
+                            state.shadowVY = 0;
+                            state.shadowY = -150;
+                        }
+                        if (state.sonicY < -80) {
+                            state.sonicVY = 0;
+                            state.sonicY = -80;
+                        }
+                        
+                        // Через 0.5 секунды - зависание в воздухе
+                        if (state.timer > 30) {
+                            state.phase = 'air_hold';
+                            state.timer = 0;
+                            state.shadowVY = 0;
+                            state.sonicVY = 0;
+                        }
+                        break;
+                        
+                    case 'air_hold':
+                        // Персонажи зависли в воздухе на 2 секунды
+                        // Шэдоу на высоте -150, Соник на -80
+                        state.shadowY = -150;
+                        state.sonicY = -80;
+                        
+                        // Через 2 секунды (120 кадров) - атака молнией
+                        if (state.timer > 120) {
+                            state.phase = 'lightning';
+                            state.timer = 0;
+                            state.lightningBolts.push({
+                                fromX: state.shadowX,
+                                fromY: state.shadowY + groundY - 30,
+                                toX: state.sonicX,
+                                toY: state.sonicY + groundY - 25,
+                                progress: 0
+                            });
+                        }
+                        break;
+                        
+                    case 'lightning':
+                        state.chaosGlow = Math.max(state.chaosGlow - 1, 20);
+                        state.shakeAmount = 15;
+                        
+                        if (state.lightningBolts.length > 0) {
+                            state.lightningBolts[0].progress += 0.15;
+                            if (state.lightningBolts[0].progress >= 1) {
+                                state.lightningBolts = [];
+                                state.flash = 1;
+                                state.shakeAmount = 30;
+                                state.phase = 'sonic_fall';
+                                state.timer = 0;
+                            }
+                        }
+                        break;
+                        
+                    case 'sonic_fall':
+                        // Соник падает на землю
+                        state.sonicY += state.sonicVY;
+                        state.sonicVY += 0.8;
+                        
+                        if (state.sonicY >= 0) {
+                            state.sonicY = 0;
+                            state.sonicVY = 0;
+                            state.sonicLying = true;
+                            state.phase = 'shadow_land';
+                            state.timer = 0;
+                        }
+                        break;
+                        
+                    case 'shadow_land':
+                        // Шэдоу приземляется на ноги
+                        state.shadowY += state.shadowVY;
+                        state.shadowVY += 0.5;
+                        
+                        if (state.shadowY >= 0) {
+                            state.shadowY = 0;
+                            state.shadowVY = 0;
+                            state.phase = 'shadow_talk';
+                            state.timer = 0;
+                            state.showText = true;
+                        }
+                        break;
+                        
+                    case 'shadow_talk':
+                        // Шэдоу говорит "Слабак" 2 секунды
+                        if (state.timer > 120) {
+                            state.phase = 'shadow_walk';
+                            state.timer = 0;
+                            state.showText = false;
+                        }
+                        break;
+                        
+                    case 'shadow_walk':
+                        // Шэдоу уходит вправо, Соник лежит
+                        state.shadowX += 2;
+                        
+                        if (state.timer > 180) {
+                            state.phase = 'chase';
+                            state.timer = 0;
+                            state.shadowOnBike = true;
+                            state.sonicLying = false;
+                            state.sonicX = 350;
+                            state.shadowX = 650;
+                        }
+                        break;
+                }
+                
+                state.shakeAmount *= 0.9;
+                state.flash *= 0.9;
+            }
+
+            // ---------- ОТРИСОВКА ----------
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                
+                ctx.save();
+                if (state.shakeAmount > 1) {
+                    ctx.translate(
+                        (Math.random() - 0.5) * state.shakeAmount,
+                        (Math.random() - 0.5) * state.shakeAmount
+                    );
+                }
+                
+                drawBackground();
+                
+                if (state.phase === 'chase') {
+                    drawLightningTrail(state.sonicX - 20, groundY - 35, 'rgba(0, 170, 255, 0.8)', 60, 3, 0, -1);
+                    drawLightningTrail(state.shadowX - 25, groundY - 40, 'rgba(255, 50, 0, 0.8)', 70, 3.5, 0, -1);
+                }
+                
+                if (state.phase === 'standoff' || state.phase === 'chaos' || state.phase === 'jump' || state.phase === 'air_hold' || state.phase === 'lightning') {
+                    drawChaosCrystal(state.shadowX, state.shadowY + groundY - 60, state.chaosGlow);
+                }
+                
+                if (state.shadowOnBike) {
+                    drawShadowOnBike(state.shadowX, groundY - 8);
+                } else {
+                    drawShadowBody(state.shadowX, state.shadowY + groundY - 30);
+                }
+                
+                drawSonic(state.sonicX, state.sonicY + groundY - 6, state.sonicLying);
+                
+                if (state.lightningBolts.length > 0) {
+                    const bolt = state.lightningBolts[0];
+                    drawGreenLightning(bolt.fromX, bolt.fromY, bolt.toX, bolt.toY, bolt.progress);
+                }
+                
+                // Текст "Слабак"
+                if (state.showText && state.phase === 'shadow_talk') {
+                    drawSpeechBubble(state.shadowX + 30, groundY - 60, 'Слабак');
+                }
+                
+                if (state.flash > 0.1) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${state.flash})`;
+                    ctx.fillRect(0, 0, W, H);
+                }
+                
+                ctx.restore();
+                
+                if (state.phase === 'chaos') {
+                    ctx.fillStyle = 'rgba(0, 255, 136, 0.05)';
+                    ctx.fillRect(0, 0, W, H);
+                }
+                
+                updateState();
+                requestAnimationFrame(draw);
+            }
+
+            // Полифилл для roundRect
+            if (!CanvasRenderingContext2D.prototype.roundRect) {
+                CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                    if (r > w / 2) r = w / 2;
+                    if (r > h / 2) r = h / 2;
+                    this.moveTo(x + r, y);
+                    this.lineTo(x + w - r, y);
+                    this.quadraticCurveTo(x + w, y, x + w, y + r);
+                    this.lineTo(x + w, y + h - r);
+                    this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                    this.lineTo(x + r, y + h);
+                    this.quadraticCurveTo(x, y + h, x, y + h - r);
+                    this.lineTo(x, y + r);
+                    this.quadraticCurveTo(x, y, x + r, y);
+                };
+            }
+
+            draw();
+        })();
+    </script>
+</body>
+</html>

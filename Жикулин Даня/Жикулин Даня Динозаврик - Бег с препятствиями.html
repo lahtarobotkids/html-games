@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Динозаврик - Бег с препятствиями</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f7f7f7;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            background: #fff;
+            display: block;
+            max-width: 100%;
+            max-height: 100vh;
+            touch-action: manipulation;
+            /* отключает двойной тап для зума на мобильных */
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #333;
+            text-align: center;
+            pointer-events: none;
+            display: none;
+        }
+
+        .game-over span {
+            display: block;
+            font-size: 18px;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div class="game-over" id="gameOverMessage">
+        Игра окончена!
+        <span>Нажмите пробел или кликните, чтобы начать заново</span>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const gameOverMessage = document.getElementById('gameOverMessage');
+
+            // Настройки canvas
+            const CANVAS_WIDTH = 800;
+            const CANVAS_HEIGHT = 300;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+
+            // Константы игры
+            const GROUND_Y = 250; // координата земли (верхняя граница)
+            const GRAVITY = 0.6;
+            const JUMP_FORCE = -12;
+            const FAST_FALL_MULTIPLIER = 1.8; // ускоренное падение при зажатой стрелке вниз
+            const INITIAL_SPEED = 6;
+            const MAX_SPEED = 14;
+            const SPEED_INCREMENT = 0.001; // плавное увеличение скорости за кадр (можно оставить)
+            const OBSTACLE_SPEED_BOOST = 0.5; // ускорение за каждое пройденное препятствие
+            const MIN_OBSTACLE_INTERVAL = 80; // минимальное расстояние между препятствиями в кадрах
+            const MAX_OBSTACLE_INTERVAL = 150;
+            const OBSTACLE_WIDTH = 30;
+            const CACTUS_HEIGHT_SMALL = 40;
+            const CACTUS_HEIGHT_LARGE = 70;
+            const BIRD_WIDTH = 40;
+            const BIRD_HEIGHT = 25;
+            const DINO_WIDTH = 40;
+            const DINO_HEIGHT_STAND = 50;
+            const DINO_HEIGHT_DUCK = 30;
+            const DINO_X = 80; // позиция динозавра по X
+
+            // Состояние игры
+            let gameRunning = false;
+            let gameSpeed = INITIAL_SPEED;
+            let score = 0;
+            let obstacles = [];
+            let frameCount = 0;
+            let nextObstacleFrame = 50; // через сколько кадров появится первое препятствие
+            let dino = {
+                x: DINO_X,
+                y: GROUND_Y - DINO_HEIGHT_STAND,
+                width: DINO_WIDTH,
+                height: DINO_HEIGHT_STAND,
+                velY: 0,
+                isJumping: false,
+                isDucking: false,
+                duckPressed: false,
+                stand: function() {
+                    this.height = DINO_HEIGHT_STAND;
+                    this.y = GROUND_Y - this.height;
+                    this.isDucking = false;
+                },
+                duck: function() {
+                    if (!this.isJumping) {
+                        this.height = DINO_HEIGHT_DUCK;
+                        this.y = GROUND_Y - this.height;
+                        this.isDucking = true;
+                    }
+                },
+                jump: function() {
+                    if (!this.isJumping && !this.isDucking) {
+                        this.isJumping = true;
+                        this.velY = JUMP_FORCE;
+                    }
+                },
+                update: function() {
+                    if (this.isJumping) {
+                        const gravity = this.duckPressed ? GRAVITY * FAST_FALL_MULTIPLIER : GRAVITY;
+                        this.velY += gravity;
+                        this.y += this.velY;
+
+                        if (this.y >= GROUND_Y - this.height) {
+                            this.y = GROUND_Y - this.height;
+                            this.isJumping = false;
+                            this.velY = 0;
+                            if (this.duckPressed) {
+                                this.duck();
+                            } else {
+                                this.stand();
+                            }
+                        }
+                    } else {
+                        if (this.duckPressed) {
+                            this.duck();
+                        } else if (this.isDucking) {
+                            this.stand();
+                        }
+                    }
+                },
+                draw: function(ctx) {
+                    const x = this.x;
+                    const y = this.y;
+                    const w = this.width;
+                    const h = this.height;
+
+                    // тело
+                    ctx.fillStyle = '#4a7a3a';
+                    ctx.fillRect(x, y, w, h);
+
+                    // голова
+                    const headSize = 18;
+                    ctx.fillStyle = '#5a9a4a';
+                    ctx.fillRect(x + w - headSize, y - headSize, headSize, headSize);
+
+                    // глаз
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(x + w - 8, y - headSize + 8, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(x + w - 8, y - headSize + 8, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // ноги
+                    if (!this.isDucking) {
+                        ctx.fillStyle = '#3a5a2a';
+                        ctx.fillRect(x + 5, y + h, 8, 10);
+                        ctx.fillRect(x + w - 13, y + h, 8, 10);
+                    } else {
+                        ctx.fillStyle = '#3a5a2a';
+                        ctx.fillRect(x + 2, y + h - 5, 15, 8);
+                        ctx.fillRect(x + w - 17, y + h - 5, 15, 8);
+                    }
+
+                    // хвост
+                    ctx.fillStyle = '#4a7a3a';
+                    ctx.fillRect(x - 12, y + h - 15, 12, 8);
+                },
+                getBounds: function() {
+                    return {
+                        x: this.x + 5,
+                        y: this.y + 5,
+                        width: this.width - 10,
+                        height: this.height - 10
+                    };
+                }
+            };
+
+            function createCactus() {
+                const isLarge = Math.random() < 0.4;
+                const height = isLarge ? CACTUS_HEIGHT_LARGE : CACTUS_HEIGHT_SMALL;
+                return {
+                    type: 'cactus',
+                    x: CANVAS_WIDTH + 50,
+                    y: GROUND_Y - height,
+                    width: OBSTACLE_WIDTH,
+                    height: height,
+                    passed: false,
+                    draw: function(ctx) {
+                        ctx.fillStyle = '#2d6a2d';
+                        ctx.fillRect(this.x + 5, this.y, 20, this.height);
+                        if (this.height > 50) {
+                            ctx.fillRect(this.x - 8, this.y + 10, 15, 8);
+                            ctx.fillRect(this.x + 23, this.y + 25, 15, 8);
+                        } else {
+                            ctx.fillRect(this.x - 5, this.y + 15, 12, 6);
+                            ctx.fillRect(this.x + 23, this.y + 8, 12, 6);
+                        }
+                        ctx.fillStyle = '#1a4a1a';
+                        for (let i = 0; i < 5; i++) {
+                            ctx.beginPath();
+                            ctx.arc(this.x + 5 + Math.random() * 20, this.y + Math.random() * this.height, 2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    },
+                    getBounds: function() {
+                        return {
+                            x: this.x,
+                            y: this.y,
+                            width: this.width,
+                            height: this.height
+                        };
+                    }
+                };
+            }
+
+            function createBird() {
+                const isHigh = Math.random() < 0.5;
+                const birdY = isHigh ? GROUND_Y - DINO_HEIGHT_DUCK - BIRD_HEIGHT - 10 :
+                    GROUND_Y - DINO_HEIGHT_STAND + 5;
+                return {
+                    type: 'bird',
+                    x: CANVAS_WIDTH + 50,
+                    y: birdY,
+                    width: BIRD_WIDTH,
+                    height: BIRD_HEIGHT,
+                    wingPhase: 0,
+                    passed: false,
+                    draw: function(ctx) {
+                        this.wingPhase += 0.2;
+                        const wingAngle = Math.sin(this.wingPhase) * 20;
+                        ctx.fillStyle = '#8b4513';
+                        ctx.beginPath();
+                        ctx.ellipse(this.x + 20, this.y + 12, 15, 10, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#ffa500';
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + 35, this.y + 8);
+                        ctx.lineTo(this.x + 45, this.y + 12);
+                        ctx.lineTo(this.x + 35, this.y + 16);
+                        ctx.fill();
+                        ctx.fillStyle = 'white';
+                        ctx.beginPath();
+                        ctx.arc(this.x + 22, this.y + 8, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = 'black';
+                        ctx.beginPath();
+                        ctx.arc(this.x + 22, this.y + 8, 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#6b3410';
+                        ctx.save();
+                        ctx.translate(this.x + 10, this.y + 5);
+                        ctx.rotate(wingAngle * Math.PI / 180);
+                        ctx.fillRect(-10, 0, 20, 6);
+                        ctx.restore();
+                    },
+                    getBounds: function() {
+                        return {
+                            x: this.x + 5,
+                            y: this.y + 5,
+                            width: this.width - 10,
+                            height: this.height - 10
+                        };
+                    }
+                };
+            }
+
+            function generateObstacle() {
+                const random = Math.random();
+                if (random < 0.6) {
+                    obstacles.push(createCactus());
+                } else {
+                    obstacles.push(createBird());
+                }
+            }
+
+            function checkCollision(rect1, rect2) {
+                return rect1.x < rect2.x + rect2.width &&
+                    rect1.x + rect1.width > rect2.x &&
+                    rect1.y < rect2.y + rect2.height &&
+                    rect1.y + rect1.height > rect2.y;
+            }
+
+            function resetGame() {
+                gameRunning = true;
+                gameSpeed = INITIAL_SPEED;
+                score = 0;
+                obstacles = [];
+                frameCount = 0;
+                nextObstacleFrame = 50;
+                dino.y = GROUND_Y - DINO_HEIGHT_STAND;
+                dino.height = DINO_HEIGHT_STAND;
+                dino.velY = 0;
+                dino.isJumping = false;
+                dino.isDucking = false;
+                dino.duckPressed = false;
+                gameOverMessage.style.display = 'none';
+            }
+
+            function gameOver() {
+                gameRunning = false;
+                gameOverMessage.style.display = 'block';
+            }
+
+            function update() {
+                if (!gameRunning) return;
+
+                frameCount++;
+
+                // Плавное увеличение скорости со временем (можно оставить маленьким)
+                if (gameSpeed < MAX_SPEED) {
+                    gameSpeed += SPEED_INCREMENT;
+                }
+
+                dino.update();
+
+                // Генерация препятствий
+                if (frameCount >= nextObstacleFrame) {
+                    generateObstacle();
+                    const interval = Math.floor(Math.random() * (MAX_OBSTACLE_INTERVAL - MIN_OBSTACLE_INTERVAL + 1)) + MIN_OBSTACLE_INTERVAL;
+                    nextObstacleFrame = frameCount + Math.max(interval, Math.floor(30 / (gameSpeed / INITIAL_SPEED)));
+                }
+
+                const dinoBounds = dino.getBounds();
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    obs.x -= gameSpeed;
+
+                    if (checkCollision(dinoBounds, obs.getBounds())) {
+                        gameOver();
+                        return;
+                    }
+
+                    // Прохождение препятствия — начисляем очко и ускоряем игру
+                    if (!obs.passed && obs.x + obs.width < dino.x) {
+                        obs.passed = true;
+                        score++;
+                        // Ускорение за каждое пройденное препятствие
+                        if (gameSpeed < MAX_SPEED) {
+                            gameSpeed = Math.min(gameSpeed + OBSTACLE_SPEED_BOOST, MAX_SPEED);
+                        }
+                    }
+
+                    if (obs.x + obs.width < -50) {
+                        obstacles.splice(i, 1);
+                    }
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                ctx.fillStyle = '#f7f7f7';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                ctx.fillStyle = '#ccc';
+                ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, GROUND_Y);
+                ctx.lineTo(CANVAS_WIDTH, GROUND_Y);
+                ctx.stroke();
+
+                obstacles.forEach(obs => obs.draw(ctx));
+                dino.draw(ctx);
+
+                // Счёт и скорость
+                ctx.fillStyle = '#333';
+                ctx.font = '20px "Courier New", monospace';
+                ctx.fillText('Счет: ' + Math.floor(score), 600, 40);
+                ctx.fillText('Скорость: ' + gameSpeed.toFixed(1), 700, 40);
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+
+            function handleKeyDown(e) {
+                if (!gameRunning && (e.code === 'Space' || e.key === ' ' || e.code === 'ArrowUp')) {
+                    resetGame();
+                    return;
+                }
+
+                if (!gameRunning) return;
+
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ') {
+                    e.preventDefault();
+                    dino.jump();
+                }
+                if (e.code === 'ArrowDown') {
+                    e.preventDefault();
+                    dino.duckPressed = true;
+                    if (!dino.isJumping) {
+                        dino.duck();
+                    }
+                }
+            }
+
+            function handleKeyUp(e) {
+                if (e.code === 'ArrowDown') {
+                    dino.duckPressed = false;
+                    if (!dino.isJumping && dino.isDucking) {
+                        dino.stand();
+                    }
+                }
+            }
+
+            function handleMouseDown(e) {
+                if (!gameRunning) {
+                    resetGame();
+                    return;
+                }
+                dino.jump();
+            }
+
+            function handleTouchStart(e) {
+                e.preventDefault();
+                if (!gameRunning) {
+                    resetGame();
+                    return;
+                }
+                dino.jump();
+            }
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+
+            resetGame();
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>

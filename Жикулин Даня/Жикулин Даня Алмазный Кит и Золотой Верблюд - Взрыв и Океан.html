@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Алмазный Кит и Золотой Верблюд - Взрыв и Океан</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #ffaa00;
+            box-shadow: 0 0 40px rgba(255, 170, 0, 0.6);
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        #hint {
+            position: absolute;
+            bottom: 20px;
+            color: #ccc;
+            font-size: 18px;
+            text-shadow: 0 0 10px black;
+            letter-spacing: 2px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="scene" width="900" height="500"></canvas>
+<div id="hint">🎬 НАЖМИ НА КАРТИНКУ, ЧТОБЫ НАЧАТЬ / ПЕРЕЗАПУСТИТЬ</div>
+
+<script>
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+
+    // Параметры анимации
+    let animationId = null;
+    let time = 0;
+    let cloudOffset = 0;
+    let explosionParticles = [];
+    let waterLevel = 0;
+    let oceanFormed = false;
+    let explosionHappened = false;
+    let explosionTime = 0;
+
+    // Координаты героев
+    let whaleX = 300;
+    let whaleY = 220;
+    let camelX = 600;
+    let camelY = 400;
+
+    // Фазы сюжета
+    let whaleFlying = true;
+    let whaleHovering = false;
+    let whaleDescending = false;
+    let whaleHurt = false;
+    let whaleExploded = false;
+    let whaleSwimming = false;
+    let whaleVisible = true;
+
+    // Класс для частиц взрыва
+    class Particle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 15 + 5;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life = 1;
+            this.size = Math.random() * 8 + 3;
+            this.color = `hsl(${Math.random() * 60 + 20}, 100%, ${Math.random() * 50 + 50}%)`;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += 0.3;
+            this.life -= 0.02;
+            this.size *= 0.98;
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillStyle = this.color;
+            ctx.shadowColor = '#ff6600';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // Функция запуска/перезапуска
+    function startAnimation() {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+        }
+        // Сброс параметров
+        time = 0;
+        whaleX = 300;
+        whaleY = 220;
+        camelX = 600;
+        camelY = 400;
+        whaleFlying = true;
+        whaleHovering = false;
+        whaleDescending = false;
+        whaleHurt = false;
+        whaleExploded = false;
+        whaleSwimming = false;
+        whaleVisible = true;
+        explosionParticles = [];
+        waterLevel = 0;
+        oceanFormed = false;
+        explosionHappened = false;
+        explosionTime = 0;
+        cloudOffset = 0;
+        animate();
+    }
+
+    // Создание взрыва
+    function createExplosion(x, y) {
+        for (let i = 0; i < 100; i++) {
+            explosionParticles.push(new Particle(x, y));
+        }
+        explosionHappened = true;
+        explosionTime = time;
+        whaleVisible = false; // Кит исчезает при взрыве
+    }
+
+    // Рисуем фон
+    function drawBackground() {
+        if (oceanFormed) {
+            // Небо над океаном
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, 220);
+            skyGradient.addColorStop(0, '#4a90e2');
+            skyGradient.addColorStop(1, '#87ceeb');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, 220);
+
+            // Солнце
+            ctx.beginPath();
+            ctx.arc(700, 80, 50, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffee88';
+            ctx.shadowColor = '#ffaa00';
+            ctx.shadowBlur = 40;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Облака
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath();
+            ctx.ellipse(200 + cloudOffset, 100, 50, 25, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(600 - cloudOffset, 60, 40, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Океан
+            const waterGradient = ctx.createLinearGradient(0, 220, 0, 500);
+            waterGradient.addColorStop(0, '#36b9ff');
+            waterGradient.addColorStop(0.35, '#087fe0');
+            waterGradient.addColorStop(1, '#002d73');
+            ctx.fillStyle = waterGradient;
+            ctx.fillRect(0, 220, canvas.width, 280);
+
+            // Волны
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, 245 + i * 48);
+                for (let x = 0; x < canvas.width; x += 20) {
+                    ctx.lineTo(x, 245 + i * 48 + Math.sin(x * 0.05 + time * 2 + i) * 7);
+                }
+                ctx.stroke();
+            }
+        } else {
+            // Пустыня Сахара
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, 400);
+            skyGradient.addColorStop(0, '#ff9a00');
+            skyGradient.addColorStop(0.5, '#ffcc33');
+            skyGradient.addColorStop(1, '#ffe0a0');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, 400);
+
+            // Солнце
+            ctx.beginPath();
+            ctx.arc(750, 100, 60, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffee88';
+            ctx.shadowColor = '#ffaa00';
+            ctx.shadowBlur = 40;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Облака
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(150 + cloudOffset, 80, 40, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(500 + cloudOffset, 50, 50, 25, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Песчаные дюны
+            ctx.fillStyle = '#e6b800';
+            ctx.beginPath();
+            ctx.moveTo(0, 350);
+            ctx.quadraticCurveTo(200, 300, 400, 370);
+            ctx.quadraticCurveTo(600, 420, 900, 340);
+            ctx.lineTo(900, 500);
+            ctx.lineTo(0, 500);
+            ctx.fill();
+
+            ctx.fillStyle = '#f0c040';
+            ctx.beginPath();
+            ctx.moveTo(0, 400);
+            ctx.quadraticCurveTo(300, 360, 600, 420);
+            ctx.quadraticCurveTo(800, 450, 900, 390);
+            ctx.lineTo(900, 500);
+            ctx.lineTo(0, 500);
+            ctx.fill();
+
+            // Кактусы
+            ctx.fillStyle = '#2d5a27';
+            ctx.beginPath();
+            ctx.rect(100, 330, 30, 60);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(130, 340, 15, 40);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.rect(70, 340, 15, 40);
+            ctx.fill();
+        }
+    }
+
+    // Рисуем Алмазного Кита
+    function drawWhale(x, y, state) {
+        if (!whaleVisible) return;
+        
+        ctx.save();
+        ctx.translate(x, y);
+
+        if (state === 'hurt') {
+            ctx.rotate(Math.PI / 12);
+        } else if (state === 'swimming') {
+            ctx.rotate(Math.sin(time * 3) * 0.1);
+        }
+
+        // Тело кита
+        const bodyGradient = ctx.createLinearGradient(-80, 0, 80, 0);
+        bodyGradient.addColorStop(0, '#b0e0e6');
+        bodyGradient.addColorStop(0.5, '#e0ffff');
+        bodyGradient.addColorStop(1, '#87ceeb');
+        ctx.fillStyle = bodyGradient;
+        ctx.strokeStyle = '#4682b4';
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 80, 40, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Хвост
+        ctx.fillStyle = '#b0e0e6';
+        ctx.beginPath();
+        ctx.moveTo(-70, -10);
+        ctx.lineTo(-100, -30);
+        ctx.lineTo(-90, 0);
+        ctx.lineTo(-100, 30);
+        ctx.lineTo(-70, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        // Плавник
+        ctx.fillStyle = '#87ceeb';
+        ctx.beginPath();
+        ctx.moveTo(10, 35);
+        ctx.lineTo(30, 55);
+        ctx.lineTo(50, 40);
+        ctx.fill();
+        ctx.stroke();
+
+        // Глаз
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(40, -10, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(45, -10, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Бриллиантовые вкрапления
+        ctx.fillStyle = '#ffffff';
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.arc(-30 + i * 15, 10 + i * 5, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Капли пота
+        if (state === 'flying') {
+            ctx.fillStyle = '#4dd2ff';
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.arc(60 + i * 10, -30, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Если ранен
+        if (state === 'hurt') {
+            ctx.fillStyle = '#ff6666';
+            ctx.font = 'bold 25px Arial';
+            ctx.fillText('АЙ!', -20, -50);
+        }
+
+        // Если плавает
+        if (state === 'swimming') {
+            ctx.fillStyle = '#00ffcc';
+            ctx.font = 'bold 30px Arial';
+            ctx.fillText('УРА!', -25, -50);
+            // Фонтанчик
+            ctx.fillStyle = 'rgba(100,200,255,0.7)';
+            ctx.beginPath();
+            ctx.arc(0, -40, 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    // Рисуем Золотого Верблюда
+    function drawCamel(x, y, inWater = false) {
+        ctx.save();
+        ctx.translate(x, y);
+
+        if (inWater) {
+            ctx.globalAlpha = 0.8;
+            ctx.translate(0, -20);
+        }
+
+        // Ноги
+        ctx.strokeStyle = '#8B6508';
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        ctx.moveTo(-30, 20);
+        ctx.lineTo(-40, 70);
+        ctx.moveTo(-10, 20);
+        ctx.lineTo(-10, 75);
+        ctx.moveTo(20, 20);
+        ctx.lineTo(30, 75);
+        ctx.moveTo(40, 20);
+        ctx.lineTo(50, 70);
+        ctx.stroke();
+
+        // Тело
+        const bodyGrad = ctx.createLinearGradient(-50, 0, 50, 0);
+        bodyGrad.addColorStop(0, '#cd9b1d');
+        bodyGrad.addColorStop(0.5, '#ffd700');
+        bodyGrad.addColorStop(1, '#cd950c');
+        ctx.fillStyle = bodyGrad;
+        ctx.strokeStyle = '#8B6508';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 55, 35, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Горб
+        ctx.fillStyle = '#daa520';
+        ctx.beginPath();
+        ctx.ellipse(10, -25, 25, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Шея и голова
+        ctx.fillStyle = '#daa520';
+        ctx.strokeStyle = '#8B6508';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(40, -10);
+        ctx.lineTo(65, -60);
+        ctx.lineTo(55, -30);
+        ctx.fill();
+        ctx.stroke();
+
+        // Голова
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.ellipse(75, -60, 22, 15, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Морда
+        ctx.fillStyle = '#cd950c';
+        ctx.beginPath();
+        ctx.ellipse(90, -60, 12, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Глаз
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(78, -65, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Колючки
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 12; i++) {
+            let angle = (i / 12) * Math.PI * 2;
+            let px = Math.cos(angle) * 45;
+            let py = Math.sin(angle) * 25 - 10;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px * 1.4, py * 1.4 - 5);
+            ctx.stroke();
+        }
+        for (let i = 0; i < 6; i++) {
+            let px = -10 + i * 8;
+            let py = -40;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px + 3, py - 18);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    // Рисуем текст
+    function drawText() {
+        ctx.font = 'bold 24px Arial';
+        ctx.fillStyle = 'white';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 10;
+
+        if (!explosionHappened && !oceanFormed) {
+            if (whaleFlying && !whaleDescending && !whaleHurt) {
+                ctx.fillText('Алмазный Кит: "Ох, как жарко в Сахаре!"', 200, 80);
+                ctx.fillText('Золотой Верблюд: "Я весь в колючках..."', 180, 130);
+            } else if (whaleHovering) {
+                ctx.fillText('Кит спускается, но...', 250, 80);
+            } else if (whaleHurt) {
+                ctx.fillText('Кит: "Ай! Колючки! Больно!"', 250, 80);
+                ctx.fillText('Верблюд: "Извини, я же золотой..."', 200, 130);
+            }
+        } else if (explosionHappened && !oceanFormed) {
+            ctx.fillText('БУМ! ВЗРЫВ!', 350, 80);
+            ctx.fillText('Кит: "Я взорвался!"', 300, 130);
+        } else if (oceanFormed) {
+            ctx.fillText('Кит: "Ура! Океан!"', 250, 80);
+            ctx.fillText('Верблюд: "Теперь я поплыву!"', 200, 130);
+        }
+
+        ctx.shadowBlur = 0;
+    }
+
+    // Обновление сюжета
+    function updateStory() {
+        cloudOffset = (cloudOffset + 0.2) % 200;
+
+        if (!explosionHappened && !oceanFormed) {
+            // Фаза 1: Кит летает (первые 2 секунды)
+            if (time > 2 && whaleFlying) {
+                whaleHovering = true;
+                whaleFlying = false;
+            }
+
+            // Фаза 2: Кит спускается
+            if (whaleHovering && !whaleDescending) {
+                whaleY += 0.5;
+                if (whaleY > 310) {
+                    whaleDescending = true;
+                    whaleHovering = false;
+                }
+            }
+
+            // Фаза 3: Кит опускается и сталкивается
+            if (whaleDescending && !whaleHurt) {
+                // Кит не падает в пустоту: он летит вниз к верблюду.
+                whaleX += 3.8;
+                whaleY += 0.6;
+                if (whaleX + 50 > camelX - 30 && whaleX - 50 < camelX + 50 && whaleY + 40 > camelY - 30) {
+                    whaleHurt = true;
+                    whaleDescending = false;
+                }
+            }
+
+            // Фаза 4: Кит ранен, через 2 секунды взрыв
+            if (whaleHurt && !explosionHappened) {
+                if (time > 8) {
+                    createExplosion(whaleX, whaleY);
+                    whaleHurt = false;
+                }
+            }
+        }
+
+        // Обновляем частицы взрыва
+        if (explosionHappened) {
+            explosionParticles.forEach(p => p.update());
+            explosionParticles = explosionParticles.filter(p => p.life > 0);
+
+            // Через 2 секунды после взрыва появляется океан
+            if (time > explosionTime + 2 && !oceanFormed) {
+                oceanFormed = true;
+                whaleSwimming = true;
+                whaleVisible = true;
+                whaleY = 335;
+                camelY = 400;
+                explosionParticles = []; // Очищаем частицы
+            }
+        }
+
+        // Океан сформирован
+        if (oceanFormed) {
+            whaleSwimming = true;
+            whaleY = 330 + Math.sin(time * 2) * 10;
+            whaleX += Math.sin(time * 1.5) * 0.5;
+            
+            camelY = 400 + Math.sin(time * 2 + 1) * 8;
+            camelX += Math.cos(time * 1.2) * 0.3;
+        }
+    }
+
+    // Рисуем взрыв
+    function drawExplosion() {
+        explosionParticles.forEach(p => p.draw(ctx));
+        
+        // Вспышка
+        if (explosionHappened && !oceanFormed && explosionParticles.length > 20) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, explosionParticles.length / 80);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ff6600';
+            ctx.shadowBlur = 50;
+            ctx.beginPath();
+            ctx.arc(whaleX, whaleY, 60, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // Главный цикл
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        drawBackground();
+        
+        // Рисуем верблюда
+        if (!explosionHappened || oceanFormed) {
+            drawCamel(camelX, camelY, oceanFormed);
+        }
+        
+        // Рисуем кита
+        if (whaleVisible) {
+            let whaleState = 'flying';
+            if (whaleHurt) whaleState = 'hurt';
+            else if (whaleSwimming) whaleState = 'swimming';
+            drawWhale(whaleX, whaleY, whaleState);
+        }
+        
+        drawExplosion();
+        drawText();
+
+        updateStory();
+        time += 0.05;
+
+        animationId = requestAnimationFrame(animate);
+    }
+
+    // Запуск
+    canvas.addEventListener('click', startAnimation);
+    startAnimation();
+</script>
+</body>
+</html>
