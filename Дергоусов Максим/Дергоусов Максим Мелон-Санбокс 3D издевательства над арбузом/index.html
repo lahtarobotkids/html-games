@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🍉 Мелон-Санбокс 3D — издевательства над арбузом</title>
+<style>
+  :root { --green:#2e9e3d; --red:#e63b3b; --pink:#ff4fa3; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0e1120;
+    font-family:'Segoe UI', system-ui, sans-serif; color:#fff;
+    touch-action:none; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  #game { position:fixed; inset:0; display:block; }
+
+  #topbar { position:fixed; top:0; left:0; right:0; z-index:6; pointer-events:none;
+    padding:12px 16px; display:flex; align-items:center; gap:14px; }
+  #stats { font-size:15px; font-weight:700; color:rgba(255,255,255,.9); text-shadow:0 1px 3px #000; white-space:nowrap; }
+  #hint { font-size:12px; color:rgba(255,255,255,.5); margin-left:auto; }
+
+  #toolbar { position:fixed; left:0; right:0; bottom:0; z-index:6; padding:10px;
+    display:flex; gap:8px; justify-content:center; flex-wrap:wrap; background:linear-gradient(transparent, rgba(0,0,0,.55)); }
+  .tool { pointer-events:auto; border:2px solid rgba(255,255,255,.2); border-radius:14px;
+    background:rgba(20,24,40,.85); color:#fff; padding:8px 12px; font-size:14px; font-weight:600;
+    cursor:pointer; transition:all .12s; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .tool .ic { font-size:24px; }
+  .tool .k { font-size:10px; color:rgba(255,255,255,.5); }
+  .tool.sel { border-color:var(--pink); background:rgba(255,79,163,.22); box-shadow:0 0 16px rgba(255,79,163,.5); }
+
+  #toast { position:fixed; top:16%; left:50%; transform:translateX(-50%) scale(.8); z-index:8;
+    font-size:34px; font-weight:800; color:#fff; text-shadow:0 0 20px rgba(255,0,60,.8), 0 2px 6px #000;
+    opacity:0; pointer-events:none; transition:all .25s; white-space:nowrap; }
+  #toast.show { opacity:1; transform:translateX(-50%) scale(1); }
+
+  #flash { position:fixed; inset:0; z-index:7; background:#fff; opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="topbar">
+  <div id="stats">Мелонов: 1 · Урона: 0 · Убито: 0</div>
+  <div id="hint">ЛКМ — инструмент · ПКМ — вращать · колесо — зум</div>
+</div>
+
+<div id="flash"></div>
+<div id="toast">💥 Мелон уничтожен!</div>
+<div id="toolbar"></div>
+
+<script src="three.min.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const $stats = document.getElementById('stats');
+  const $toast = document.getElementById('toast');
+  const $flash = document.getElementById('flash');
+  const $toolbar = document.getElementById('toolbar');
+
+  // ==================== THREE ====================
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x131a33);
+  scene.fog = new THREE.Fog(0x131a33, 30, 90);
+
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+  camera.position.set(0, 16, 22);
+
+  // свет
+  scene.add(new THREE.HemisphereLight(0xbdd4ff, 0x1a2030, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+  sun.position.set(14, 24, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
+  sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 80;
+  sun.shadow.bias = -0.0004;
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0x334, 0.5));
+
+  // пол
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 40),
+    new THREE.MeshStandardMaterial({ color: 0x232838, roughness: .95 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  const grid = new THREE.GridHelper(40, 40, 0x3a4a6a, 0x232a3a);
+  grid.position.y = 0.01;
+  scene.add(grid);
+
+  // ==================== ТЕКСТУРЫ / ГЕОМЕТРИЯ ====================
+  function makeMelonTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#4fc068'); grad.addColorStop(.5, '#3aa14f'); grad.addColorStop(1, '#2c8739');
+    g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+    g.fillStyle = 'rgba(15,72,36,.55)';
+    for (let i = 0; i < 8; i++) g.fillRect(i * 32 + 6, 0, 16, 256);
+    g.fillStyle = 'rgba(255,255,255,.10)';
+    g.beginPath(); g.ellipse(90, 80, 70, 42, -.5, 0, Math.PI * 2); g.fill();
+    // лицо
+    g.fillStyle = '#152416'; g.strokeStyle = '#152416'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.arc(104, 118, 7, 0, Math.PI * 2); g.arc(152, 118, 7, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(128, 138, 22, .15 * Math.PI, .85 * Math.PI); g.stroke();
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+    return t;
+  }
+  const melonTex = makeMelonTexture();
+
+  function makeWhiteTex() {
+    const c = document.createElement('canvas'); c.width = c.height = 4;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 4, 4);
+    return new THREE.CanvasTexture(c);
+  }
+  const whiteTex = makeWhiteTex();
+
+  const sphereGeo = new THREE.SphereGeometry(1, 48, 48);
+  const decalGeo = new THREE.CircleGeometry(1, 28);
+
+  // ==================== АУДИО ====================
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function nowAudio() { return audioCtx ? audioCtx.currentTime : 0; }
+  function tone(freq, type, vol, dur, when, slideTo) {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, when);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), when + dur);
+    g.gain.setValueAtTime(vol, when);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(when); o.stop(when + dur + 0.03);
+  }
+  function noise(vol, dur, when, lp) {
+    if (!audioCtx) return;
+    const len = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    let node = src;
+    if (lp) { const f = audioCtx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; src.connect(f); node = f; }
+    const g = audioCtx.createGain(); g.gain.value = vol;
+    node.connect(g); g.connect(audioCtx.destination);
+    src.start(when);
+  }
+  const snd = {
+    punch() { const n = nowAudio(); tone(120, 'sine', .35, .12, n, 50); noise(.3, .07, n, 900); },
+    slap()  { const n = nowAudio(); tone(200, 'triangle', .3, .1, n, 80); noise(.25, .05, n, 1400); },
+    slice() { const n = nowAudio(); noise(.35, .18, n, 6000); tone(900, 'sawtooth', .08, .12, n, 200); },
+    shoot() { const n = nowAudio(); tone(700, 'square', .18, .06, n, 200); },
+    boom()  { const n = nowAudio(); noise(.6, .5, n, 500); tone(60, 'sine', .5, .5, n, 30); },
+    hammer(){ const n = nowAudio(); tone(180, 'square', .35, .12, n, 60); noise(.3, .08, n, 700); },
+    splat() { const n = nowAudio(); noise(.3, .12, n, 500); tone(150, 'triangle', .2, .1, n, 60); },
+    throw_(){ const n = nowAudio(); noise(.2, .2, n, 2500); },
+    pop()   { const n = nowAudio(); tone(300, 'sine', .25, .12, n, 600); },
+    moan(dmg) {
+      const n = nowAudio();
+      const f = 320 + Math.random() * 180;
+      tone(f, 'triangle', .12 + Math.min(.1, dmg * .02), .3, n, f * .5);
+    }
+  };
+
+  // ==================== СОСТОЯНИЕ ====================
+  const R = 1;
+  const GRAVITY = -22;
+  const BOUNCE = 0.45;
+  const WALLX = 14, WALLZ = 9;
+
+  const melons = [];
+  let halves = [], projectiles = [], bombs = [], weights = [], decals = [];
+  let hammer = null;
+  let shake = 0, flash = 0;
+  let damageDealt = 0, kills = 0;
+  let now = performance.now();
+
+  // частицы (THREE.Points)
+  const MAXP = 300;
+  const parts = [];
+  const particleGeo = new THREE.BufferGeometry();
+  const pPos = new Float32Array(MAXP * 3);
+  const pCol = new Float32Array(MAXP * 3);
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  particleGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+  const particleMat = new THREE.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, depthWrite: false });
+  const particlePoints = new THREE.Points(particleGeo, particleMat);
+  scene.add(particlePoints);
+
+  function burstParticles(pos, n, color, power) {
+    for (let i = 0; i < n; i++) {
+      if (parts.length >= MAXP) parts.shift();
+      const dir = new THREE.Vector3(Math.random() - .5, Math.random() * .9 + .2, Math.random() - .5).normalize();
+      const sp = 2 + Math.random() * power;
+      parts.push({
+        pos: pos.clone(), vel: dir.multiplyScalar(sp),
+        life: .6 + Math.random() * .6, maxLife: 1.2,
+        color: new THREE.Color(color)
+      });
+    }
+  }
+
+  function makeHpBar() {
+    const mat = new THREE.SpriteMaterial({ map: whiteTex, color: 0x5eff7d, depthTest: true });
+    const sp = new THREE.Sprite(mat);
+    sp.scale.set(2.4, 0.18, 1);
+    return sp;
+  }
+
+  function makeMelon(x, y, z) {
+    const mat = new THREE.MeshStandardMaterial({ map: melonTex, roughness: .55, metalness: 0 });
+    const mesh = new THREE.Mesh(sphereGeo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    const m = {
+      mesh, mat, r: R, hp: 100, maxHp: 100, dead: false,
+      vel: new THREE.Vector3(), squash: 0, hurtUntil: 0, grabbed: false,
+      hpBar: makeHpBar()
+    };
+    mesh.userData.melon = m;
+    scene.add(mesh);
+    scene.add(m.hpBar);
+    return m;
+  }
+  function spawnMelon(x, z) {
+    const m = makeMelon(x, R, z);
+    melons.push(m);
+    snd.pop();
+    burstParticles(new THREE.Vector3(x, R, z), 6, 0x46b65c, 3);
+    return m;
+  }
+
+  function toast(msg) { $toast.textContent = msg; $toast.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => $toast.classList.remove('show'), 1600); }
+
+  function addDecal(x, z, r) {
+    const mesh = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color: 0xc83232, transparent: true, opacity: .8 }));
+    mesh.position.set(x, 0.02, z);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.scale.set(r, r, 1);
+    scene.add(mesh);
+    decals.push({ mesh, life: 1 });
+    if (decals.length > 120) { const d = decals.shift(); scene.remove(d.mesh); }
+  }
+
+  function squash(m, k) { m.squash = Math.min(.65, k); }
+
+  function damage(m, dmg, dx, dy, dz, pow) {
+    if (m.dead) return;
+    m.hp -= dmg;
+    damageDealt += dmg;
+    m.hurtUntil = now + 320;
+    if (dx !== undefined) { m.vel.x += dx * (pow || 5); m.vel.y += (dy || -1) * (pow || 5); m.vel.z += (dz || 0) * (pow || 5); }
+    burstParticles(m.mesh.position, 8 + dmg, 0xff5040, 5);
+    snd.moan(dmg);
+    shake = Math.min(1, shake + .3);
+    if (m.hp <= 0) dieMelon(m, 'explode');
+  }
+
+  function dieMelon(m, mode) {
+    m.dead = true; m.hp = 0;
+    kills++;
+    shake = 1; flash = .5;
+    snd.boom();
+    burstParticles(m.mesh.position, 50, 0xff5040, 9);
+    addDecal(m.mesh.position.x, m.mesh.position.z, 1.3);
+    if (mode === 'slice') { spawnHalves(m); toast('🔪 Арбуз разрезан!'); }
+    else toast('💥 Арбуз уничтожен!');
+    scene.remove(m.mesh); scene.remove(m.hpBar);
+    m.mat.dispose();
+  }
+
+  function spawnHalves(m) {
+    const p = m.mesh.position;
+    for (const s of [1, -1]) {
+      const geo = new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, s > 0 ? 0 : Math.PI / 2, Math.PI / 2);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xe63b3b, roughness: .7 });
+      const hm = new THREE.Mesh(geo, mat);
+      hm.position.copy(p);
+      hm.castShadow = true;
+      scene.add(hm);
+      halves.push({ mesh: hm, vel: new THREE.Vector3(s * 3, 5, (Math.random() - .5) * 3), life: 4 });
+    }
+  }
+
+  // ==================== ИНСТРУМЕНТЫ ====================
+  const TOOLS = [
+    { id: 'punch',  name: 'Кулак', icon: '👊', key: '1', cur: 'crosshair' },
+    { id: 'drag',   name: 'Тянуть', icon: '🖐️', key: '2', cur: 'grab' },
+    { id: 'slice',  name: 'Резать', icon: '🔪', key: '3', cur: 'crosshair' },
+    { id: 'shoot',  name: 'Пушка', icon: '🔫', key: '4', cur: 'crosshair' },
+    { id: 'bomb',   name: 'Бомба', icon: '💣', key: '5', cur: 'crosshair' },
+    { id: 'hammer', name: 'Молот', icon: '🔨', key: '6', cur: 'crosshair' },
+    { id: 'weight', name: 'Гиря', icon: '🏋️', key: '7', cur: 'crosshair' },
+    { id: 'spawn',  name: 'Спавн', icon: '🍉', key: '8', cur: 'copy' },
+  ];
+  let tool = 'punch';
+
+  function setTool(id) {
+    tool = id;
+    const t = TOOLS.find(x => x.id === id);
+    canvas.style.cursor = t ? t.cur : 'default';
+    document.querySelectorAll('.tool').forEach(b => b.classList.toggle('sel', b.dataset.id === id));
+  }
+  TOOLS.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tool'; b.dataset.id = t.id;
+    b.innerHTML = `<span class="ic">${t.icon}</span><span>${t.name}</span><span class="k">[${t.key}]</span>`;
+    b.addEventListener('pointerdown', e => { e.stopPropagation(); ensureAudio(); setTool(t.id); });
+    $toolbar.appendChild(b);
+  });
+
+  // рейкастинг
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  function setRay(cx, cy) {
+    ndc.x = (cx / W) * 2 - 1;
+    ndc.y = -(cy / H) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+  }
+  function rayToGround() {
+    const pt = new THREE.Vector3();
+    return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), pt) ? pt : null;
+  }
+  function rayToMelon() {
+    const hits = raycaster.intersectObjects(melons.map(m => m.mesh), false);
+    return hits.length ? hits[0].object.userData.melon : null;
+  }
+
+  function punch() {
+    const m = rayToMelon();
+    if (!m) return;
+    const dir = new THREE.Vector3().subVectors(m.mesh.position, camera.position);
+    dir.y = 0; dir.normalize();
+    m.vel.x += dir.x * 8; m.vel.z += dir.z * 8; m.vel.y += 4;
+    damage(m, 12, dir.x, -.4, dir.z, 4);
+    snd.punch(); squash(m, .5); flash = .12;
+  }
+
+  // drag
+  let grabbed = null, dragPlane = new THREE.Plane(), grabOffset = new THREE.Vector3();
+  function dragStart() {
+    const m = rayToMelon();
+    if (!m) return;
+    grabbed = m; m.grabbed = true;
+    const n = camera.getWorldDirection(new THREE.Vector3());
+    dragPlane.setFromNormalAndCoplanarPoint(n, m.mesh.position);
+    const hit = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dragPlane, hit);
+    grabOffset.subVectors(m.mesh.position, hit);
+  }
+  function dragMove(cx, cy) {
+    setRay(cx, cy);
+    const hit = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+      grabbed.mesh.position.copy(hit.add(grabOffset));
+      grabbed.mesh.position.y = Math.max(R, grabbed.mesh.position.y);
+      grabbed.vel.set(0, 0, 0);
+    }
+  }
+  let dragLast = { x: 0, y: 0, t: 0 }, dragVX = 0, dragVY = 0;
+  function releaseDrag(cx, cy) {
+    if (!grabbed) return;
+    grabbed.grabbed = false;
+    grabbed.vel.set(dragVX * .5, dragVY * .5, 0);
+    grabbed = null; snd.throw_();
+  }
+
+  // slice
+  let slicing = false, slicePts = [];
+  function sliceStart(cx, cy) { slicing = true; slicePts = [{ x: cx, y: cy }]; }
+  function finishSlice() {
+    slicing = false;
+    if (slicePts.length < 2) return;
+    const a = slicePts[0], b = slicePts[slicePts.length - 1];
+    snd.slice();
+    for (const m of melons) {
+      if (m.dead) continue;
+      const c = m.mesh.position.clone().project(camera);
+      const sx = (c.x + 1) / 2 * W, sy = (-c.y + 1) / 2 * H;
+      // радиус на экране
+      const e = m.mesh.position.clone(); e.y += R; e.project(camera);
+      const sr = Math.hypot(((e.x + 1) / 2 * W - sx), ((-e.y + 1) / 2 * H - sy));
+      // расстояние от центра до отрезка
+      const d = distToSegment(sx, sy, a.x, a.y, b.x, b.y);
+      if (d < sr * 1.4) dieMelon(m, 'slice');
+    }
+  }
+  function distToSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - x1) * dx + (py - y1) * dy) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + dx * t), py - (y1 + dy * t));
+  }
+
+  function shoot() {
+    const dir = raycaster.ray.direction.clone();
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(.12, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffd24a }));
+    mesh.position.copy(camera.position).addScaledVector(dir, 1.5);
+    scene.add(mesh);
+    projectiles.push({ mesh, vel: dir.multiplyScalar(30) });
+    snd.shoot();
+  }
+
+  function placeBomb() {
+    const pt = rayToGround();
+    if (!pt) return;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(.32, 20, 20), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: .5 }));
+    mesh.position.set(pt.x, .32, pt.z);
+    scene.add(mesh);
+    bombs.push({ mesh, fuse: now + 1000 });
+    snd.throw_();
+  }
+
+  function swingHammer() {
+    const pt = rayToGround();
+    if (!pt) return;
+    const g = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x8a5a2b }));
+    handle.position.y = .8;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(.7, .4, .4), new THREE.MeshStandardMaterial({ color: 0x555b70 }));
+    head.position.y = 1.75;
+    g.add(handle); g.add(head);
+    g.position.set(pt.x, 3, pt.z);
+    scene.add(g);
+    hammer = { group: g, t: now, x: pt.x, z: pt.z, hit: false };
+    snd.hammer();
+  }
+
+  function dropWeight() {
+    const pt = rayToGround();
+    if (!pt) return;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(.55, 20, 20), new THREE.MeshStandardMaterial({ color: 0x4a4f66, roughness: .4, metalness: .3 }));
+    mesh.position.set(pt.x, 8, pt.z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    weights.push({ mesh, vel: new THREE.Vector3(0, 0, 0), landed: false });
+  }
+
+  // ==================== ОБНОВЛЕНИЕ ====================
+  function update(dt) {
+    // мелоны
+    for (const m of melons) {
+      if (m.dead || m.grabbed) continue;
+      m.vel.y += GRAVITY * dt;
+      m.mesh.position.addScaledVector(m.vel, dt);
+
+      // качение
+      const sp = Math.hypot(m.vel.x, m.vel.z);
+      if (sp > .05) {
+        const axis = new THREE.Vector3(-m.vel.z, 0, m.vel.x).normalize();
+        m.mesh.rotateOnWorldAxis(axis, sp * dt / R);
+      }
+
+      // пол
+      if (m.mesh.position.y < R) {
+        m.mesh.position.y = R;
+        if (m.vel.y < -1.5) { squash(m, Math.min(.5, -m.vel.y / 22)); snd.splat(); burstParticles(m.mesh.position, 4, 0x46b65c, 3); }
+        if (m.vel.y < 0) m.vel.y = -m.vel.y * BOUNCE; else m.vel.y = 0;
+        m.vel.x *= .9; m.vel.z *= .9;
+      }
+      // стены
+      if (m.mesh.position.x < -WALLX) { m.mesh.position.x = -WALLX; m.vel.x = Math.abs(m.vel.x) * .6; }
+      if (m.mesh.position.x > WALLX)  { m.mesh.position.x = WALLX;  m.vel.x = -Math.abs(m.vel.x) * .6; }
+      if (m.mesh.position.z < -WALLZ) { m.mesh.position.z = -WALLZ; m.vel.z = Math.abs(m.vel.z) * .6; }
+      if (m.mesh.position.z > WALLZ)  { m.mesh.position.z = WALLZ;  m.vel.z = -Math.abs(m.vel.z) * .6; }
+
+      // восстановление сквоша
+      m.squash = Math.max(0, m.squash - dt * 4);
+      const k = m.squash;
+      m.mesh.scale.set(1 + k * .7, Math.max(.4, 1 - k), 1 + k * .7);
+
+      // подсветка урона
+      const hurt = now < m.hurtUntil;
+      m.mat.emissive.setHex(0xff2222);
+      m.mat.emissiveIntensity = hurt ? .55 : 0;
+
+      // hp-бар
+      const pct = Math.max(0, m.hp / m.maxHp);
+      m.hpBar.position.set(m.mesh.position.x, m.mesh.position.y + R + .55, m.mesh.position.z);
+      m.hpBar.scale.x = 2.4 * pct;
+      m.hpBar.material.color.setHex(pct > .5 ? 0x5eff7d : pct > .25 ? 0xffd24a : 0xff5a6e);
+      m.hpBar.visible = pct < .999;
+    }
+
+    // столкновения
+    for (let i = 0; i < melons.length; i++) {
+      const a = melons[i]; if (a.dead || a.grabbed) continue;
+      for (let j = i + 1; j < melons.length; j++) {
+        const b = melons[j]; if (b.dead || b.grabbed) continue;
+        const dx = b.mesh.position.x - a.mesh.position.x;
+        const dy = b.mesh.position.y - a.mesh.position.y;
+        const dz = b.mesh.position.z - a.mesh.position.z;
+        const d = Math.hypot(dx, dy, dz);
+        const min = a.r + b.r;
+        if (d < min && d > 1e-5) {
+          const nx = dx / d, ny = dy / d, nz = dz / d, ov = min - d;
+          a.mesh.position.x -= nx * ov / 2; a.mesh.position.y -= ny * ov / 2; a.mesh.position.z -= nz * ov / 2;
+          b.mesh.position.x += nx * ov / 2; b.mesh.position.y += ny * ov / 2; b.mesh.position.z += nz * ov / 2;
+          const rel = (b.vel.x - a.vel.x) * nx + (b.vel.y - a.vel.y) * ny + (b.vel.z - a.vel.z) * nz;
+          if (rel < 0) {
+            a.vel.x += nx * rel * .5; a.vel.y += ny * rel * .5; a.vel.z += nz * rel * .5;
+            b.vel.x -= nx * rel * .5; b.vel.y -= ny * rel * .5; b.vel.z -= nz * rel * .5;
+          }
+        }
+      }
+    }
+    // убрать мёртвых
+    for (let i = melons.length - 1; i >= 0; i--) if (melons[i].dead) melons.splice(i, 1);
+
+    // половины
+    for (const h of halves) {
+      h.vel.y += GRAVITY * dt;
+      h.mesh.position.addScaledVector(h.vel, dt);
+      h.mesh.rotation.x += dt * 3; h.mesh.rotation.z += dt * 2;
+      if (h.mesh.position.y < R) { h.mesh.position.y = R; h.vel.y = -h.vel.y * .4; }
+      h.life -= dt;
+    }
+    for (let i = halves.length - 1; i >= 0; i--) {
+      if (halves[i].life <= 0) { scene.remove(halves[i].mesh); halves[i].mesh.material.dispose(); halves.splice(i, 1); }
+    }
+
+    // пули
+    for (const p of projectiles) {
+      p.mesh.position.addScaledVector(p.vel, dt);
+      for (const m of melons) {
+        if (m.dead) continue;
+        if (p.mesh.position.distanceTo(m.mesh.position) < m.r + .12) {
+          damage(m, 18, p.vel.x / 30, p.vel.y / 30, p.vel.z / 30, 5);
+          p.dead = true; break;
+        }
+      }
+      if (p.mesh.position.y < .1 || Math.abs(p.mesh.position.x) > 30 || Math.abs(p.mesh.position.z) > 30) p.dead = true;
+    }
+    for (let i = projectiles.length - 1; i >= 0; i--) if (projectiles[i].dead) { scene.remove(projectiles[i].mesh); projectiles.splice(i, 1); }
+
+    // бомбы
+    for (const b of bombs) {
+      if (now >= b.fuse) {
+        b.dead = true; snd.boom(); shake = 1; flash = .4;
+        burstParticles(b.mesh.position, 40, 0xff8833, 8);
+        addDecal(b.mesh.position.x, b.mesh.position.z, 1.6);
+        for (const m of melons) {
+          if (m.dead) continue;
+          const d = m.mesh.position.distanceTo(b.mesh.position);
+          if (d < 4) {
+            const nx = (m.mesh.position.x - b.mesh.position.x) / (d || 1);
+            const nz = (m.mesh.position.z - b.mesh.position.z) / (d || 1);
+            damage(m, 45, nx, -.4, nz, 7);
+          }
+        }
+      }
+    }
+    for (let i = bombs.length - 1; i >= 0; i--) if (bombs[i].dead) { scene.remove(bombs[i].mesh); bombs.splice(i, 1); }
+
+    // гири
+    for (const w of weights) {
+      if (!w.landed) {
+        w.vel.y += GRAVITY * dt;
+        w.mesh.position.addScaledVector(w.vel, dt);
+        if (w.mesh.position.y < .55) {
+          w.mesh.position.y = .55; w.landed = true; snd.hammer(); shake = .7;
+          addDecal(w.mesh.position.x, w.mesh.position.z, .9);
+          for (const m of melons) {
+            if (m.dead) continue;
+            const d = Math.hypot(w.mesh.position.x - m.mesh.position.x, w.mesh.position.z - m.mesh.position.z);
+            if (d < m.r + .9) { damage(m, 35, 0, -1, 0, 5); squash(m, .6); }
+          }
+        }
+      } else if (w.mesh.position.y < 20) { /* остаётся на полу */ }
+    }
+
+    // молот
+    if (hammer) {
+      const k = Math.min(1, (now - hammer.t) / 400);
+      const targetY = 3 - k * 2.6;
+      hammer.group.position.y = targetY;
+      if (k >= 1 && !hammer.hit) {
+        hammer.hit = true;
+        snd.hammer(); shake = .8; flash = .15;
+        for (const m of melons) {
+          if (m.dead) continue;
+          const d = Math.hypot(hammer.x - m.mesh.position.x, hammer.z - m.mesh.position.z);
+          if (d < m.r * 1.6) { damage(m, 30, 0, -1, 0, 5); squash(m, .65); }
+        }
+      }
+      if (now - hammer.t > 800) { scene.remove(hammer.group); hammer = null; }
+    }
+
+    // частицы
+    const pa = particleGeo.getAttribute('position').array;
+    const ca = particleGeo.getAttribute('color').array;
+    for (let i = 0; i < MAXP; i++) {
+      if (i < parts.length) {
+        const p = parts[i];
+        p.vel.y += GRAVITY * .4 * dt;
+        p.pos.addScaledVector(p.vel, dt);
+        p.life -= dt;
+        if (p.pos.y < .03) { p.pos.y = .03; p.vel.y *= -.4; p.vel.x *= .8; p.vel.z *= .8; }
+        const a = Math.max(0, Math.min(1, p.life / p.maxLife * 1.8));
+        pa[i * 3] = p.pos.x; pa[i * 3 + 1] = p.pos.y; pa[i * 3 + 2] = p.pos.z;
+        ca[i * 3] = p.color.r * a; ca[i * 3 + 1] = p.color.g * a; ca[i * 3 + 2] = p.color.b * a;
+      } else {
+        pa[i * 3 + 1] = -9999;
+      }
+    }
+    particleGeo.getAttribute('position').needsUpdate = true;
+    particleGeo.getAttribute('color').needsUpdate = true;
+    for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
+
+    // декали
+    for (let i = decals.length - 1; i >= 0; i--) {
+      const d = decals[i];
+      d.life -= dt * .4;
+      d.mesh.material.opacity = d.life * .8;
+      if (d.life <= 0) { scene.remove(d.mesh); decals.splice(i, 1); }
+    }
+
+    shake = Math.max(0, shake - dt * 3);
+    flash = Math.max(0, flash - dt * 2.4);
+  }
+
+  // ==================== КАМЕРА ====================
+  let camTheta = .7, camPhi = 1.05, camDist = 26;
+  const camTarget = new THREE.Vector3(0, 1, 0);
+  function updateCamera() {
+    const shx = (Math.random() - .5) * shake, shy = (Math.random() - .5) * shake;
+    camera.position.set(
+      camTarget.x + camDist * Math.sin(camPhi) * Math.cos(camTheta) + shx,
+      camTarget.y + camDist * Math.cos(camPhi) + shy,
+      camTarget.z + camDist * Math.sin(camPhi) * Math.sin(camTheta)
+    );
+    camera.lookAt(camTarget);
+  }
+
+  // ==================== ВВОД ====================
+  let W = 0, H = 0;
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    renderer.setSize(W, H);
+    camera.aspect = W / H;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+
+  const pointers = new Map();
+  let orbitActive = false, orbitLast = { x: 0, y: 0 }, orbitPinch = 0;
+
+  canvas.addEventListener('pointerdown', e => {
+    ensureAudio();
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.button === 2) { orbitActive = true; orbitLast = { x: e.clientX, y: e.clientY }; return; }
+    if (e.pointerType === 'touch' && pointers.size >= 2) {
+      orbitActive = true;
+      const p = [...pointers.values()];
+      orbitPinch = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      orbitLast = { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+      return;
+    }
+    setRay(e.clientX, e.clientY);
+    if (tool === 'punch') punch();
+    else if (tool === 'drag') dragStart();
+    else if (tool === 'slice') sliceStart(e.clientX, e.clientY);
+    else if (tool === 'shoot') shoot();
+    else if (tool === 'bomb') placeBomb();
+    else if (tool === 'hammer') swingHammer();
+    else if (tool === 'weight') dropWeight();
+    else if (tool === 'spawn') { const pt = rayToGround(); if (pt) spawnMelon(pt.x, pt.z); }
+    dragLast = { x: e.clientX, y: e.clientY, t: now };
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    const prev = pointers.get(e.pointerId) || { x: e.clientX, y: e.clientY };
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (orbitActive) {
+      if (e.pointerType === 'touch' && pointers.size >= 2) {
+        const p = [...pointers.values()];
+        const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        if (orbitPinch > 0) camDist = Math.max(8, Math.min(60, camDist * (orbitPinch / d)));
+        orbitPinch = d;
+        const cx = (p[0].x + p[1].x) / 2, cy = (p[0].y + p[1].y) / 2;
+        camTheta -= (cx - orbitLast.x) * .005;
+        camPhi = Math.max(.25, Math.min(1.5, camPhi - (cy - orbitLast.y) * .005));
+        orbitLast = { x: cx, y: cy };
+      } else {
+        camTheta -= (e.clientX - orbitLast.x) * .005;
+        camPhi = Math.max(.25, Math.min(1.5, camPhi - (e.clientY - orbitLast.y) * .005));
+        orbitLast = { x: e.clientX, y: e.clientY };
+      }
+      return;
+    }
+    const dtm = Math.max(.016, (now - dragLast.t) / 1000);
+    dragVX = (e.clientX - dragLast.x) / dtm; dragVY = (e.clientY - dragLast.y) / dtm;
+    dragLast = { x: e.clientX, y: e.clientY, t: now };
+    if (tool === 'slice' && slicing) slicePts.push({ x: e.clientX, y: e.clientY });
+    else if (tool === 'drag' && grabbed) dragMove(e.clientX, e.clientY);
+  });
+
+  function pointerEnd(e) {
+    pointers.delete(e.pointerId);
+    if (orbitActive) { orbitActive = false; orbitPinch = 0; return; }
+    if (tool === 'slice' && slicing) finishSlice();
+    else if (tool === 'drag' && grabbed) releaseDrag(e.clientX, e.clientY);
+  }
+  canvas.addEventListener('pointerup', pointerEnd);
+  canvas.addEventListener('pointercancel', pointerEnd);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('wheel', e => { camDist = Math.max(8, Math.min(60, camDist * (1 + e.deltaY * .001))); }, { passive: true });
+
+  window.addEventListener('keydown', e => {
+    const t = TOOLS.find(x => x.key === e.key);
+    if (t) { ensureAudio(); setTool(t.id); }
+  });
+
+  // ==================== ЦИКЛ ====================
+  let last = performance.now();
+  function loop(t) {
+    requestAnimationFrame(loop);
+    now = t;
+    const dt = Math.min(.05, (t - last) / 1000 || .016);
+    last = t;
+    update(dt);
+    updateCamera();
+    renderer.render(scene, camera);
+    $flash.style.opacity = flash;
+    $flash.style.background = flash > 0 ? '#fff' : '#fff';
+    $stats.textContent = `Мелонов: ${melons.length} · Урона: ${damageDealt} · Убито: ${kills}`;
+  }
+
+  // старт
+  resize();
+  spawnMelon(0, 0);
+  setTool('punch');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

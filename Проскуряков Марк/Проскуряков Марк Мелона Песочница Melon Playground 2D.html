@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мелона Песочница 🍉 (Melon Playground 2D)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #87ceeb;
+    user-select: none; -webkit-user-select: none;
+  }
+  #game { display: block; cursor: crosshair; }
+  #bar {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+    background: rgba(255,255,255,0.92);
+    border-radius: 14px; padding: 8px 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    z-index: 10; max-width: 96vw;
+  }
+  .group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .sep { width: 1px; height: 30px; background: #d5dde5; margin: 0 4px; }
+  .lbl { font-size: 11px; color: #7a8a99; font-weight: 700; letter-spacing: .4px; padding: 0 2px; }
+  button.t {
+    border: 2px solid transparent; background: #eef3f7; border-radius: 10px;
+    padding: 6px 9px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: #33475b; display: flex; align-items: center; gap: 4px;
+    transition: transform .06s ease, background .1s ease, border-color .1s ease;
+  }
+  button.t:hover { background: #e2ebf2; }
+  button.t:active { transform: scale(0.94); }
+  button.t .em { font-size: 18px; line-height: 1; }
+  button.t.active { background: #ffe1a8; border-color: #f5a623; color: #8a5a00; }
+  button.t.onlyEmoji { padding: 6px 7px; }
+  button.t.onlyEmoji .em { font-size: 20px; }
+  button.t.wide { padding: 6px 12px; }
+  button.danger { color: #c0392b; }
+  #hint {
+    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,26,32,0.72); color: #dfe8f0; font-size: 13px;
+    padding: 7px 16px; border-radius: 999px; z-index: 10;
+    pointer-events: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="bar">
+  <div class="group">
+    <span class="lbl">СОЗДАТЬ</span>
+    <button class="t active" data-tool="spawn-person" title="Человек — тряпичная кукла"><span class="em">👤</span>Человек</button>
+    <button class="t" data-tool="spawn-melonman" title="Мелон — сложный мелон-человек (полный скелет)"><span class="em">🍈</span>Мелон</button>
+    <button class="t" data-tool="spawn-megamelon" title="Мега-мелон — самый сложный (20 частей)"><span class="em">🦾</span>Мега-мелон</button>
+    <button class="t" data-tool="spawn-ball" title="Мяч"><span class="em">⚽</span>Мяч</button>
+    <button class="t" data-tool="spawn-box" title="Ящик"><span class="em">📦</span>Ящик</button>
+    <button class="t" data-tool="spawn-platform" title="Платформа"><span class="em">🟫</span>Платформа</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group" id="fruitGroup">
+    <span class="lbl">ФРУКТЫ</span>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <span class="lbl">ИНСТРУМЕНТЫ</span>
+    <button class="t" data-tool="drag" title="Держать и бросать"><span class="em">✋</span>Держать</button>
+    <button class="t" data-tool="gun" title="Пистолет (тяни и отпускай)"><span class="em">🔫</span>Пистолет</button>
+    <button class="t" data-tool="grenade" title="Граната"><span class="em">💣</span>Граната</button>
+    <button class="t" data-tool="knife" title="Нож (режет фрукты)"><span class="em">🔪</span>Нож</button>
+    <button class="t" data-tool="erase" title="Ластик"><span class="em">🧽</span>Ластик</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <button class="t wide danger" id="btnClear"><span class="em">🗑</span>Очистить</button>
+    <button class="t wide" id="btnGravity"><span class="em">🌍</span>Гравитация: вкл</button>
+    <button class="t wide" id="btnSound"><span class="em">🔊</span>Звук</button>
+  </div>
+</div>
+
+<div id="hint">ЛКМ — использовать инструмент · ПКМ — двигать камеру · Колесо — масштаб · WASD/стрелки — камера</div>
+
+<script>
+"use strict";
+/* ================= КАНВАС И КАМЕРА ================= */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth, H = window.innerHeight;
+const PI = Math.PI, PI2 = Math.PI * 2;
+
+const cam = { x: 0, y: -140, zoom: 1.0 };
+let mouse = { x: 0, y: 0, wx: 0, wy: 0, down: false, rdown: false, sx: 0, sy: 0, panX: 0, panY: 0, panCamX: 0, panCamY: 0 };
+
+function worldFromScreen(sx, sy) {
+  return { x: cam.x + (sx - W / 2) / cam.zoom, y: cam.y + (sy - H / 2) / cam.zoom };
+}
+
+/* ================= ЗВУК ================= */
+let audioCtx = null, soundOn = true;
+function ensureAudio() {
+  if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freq, dur, type, vol, slideTo) {
+  if (!soundOn || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, vol) {
+  if (!soundOn || !audioCtx) return;
+  const t = audioCtx.currentTime, len = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = vol || 0.3;
+  src.connect(g).connect(audioCtx.destination); src.start(t);
+}
+const sfx = {
+  pop()   { tone(300, 0.08, 'triangle', 0.12, 180); },
+  shot()  { noise(0.08, 0.25); tone(180, 0.1, 'square', 0.1, 90); },
+  boom()  { noise(0.4, 0.5); tone(90, 0.4, 'sawtooth', 0.25, 40); },
+  slash() { tone(900, 0.08, 'sawtooth', 0.08, 300); },
+  thud()  { tone(120, 0.06, 'triangle', 0.08, 70); },
+  spawn() { tone(420, 0.1, 'sine', 0.12, 620); },
+};
+let lastThud = 0;
+
+/* ================= СОСТОЯНИЕ ================= */
+let particles = [];
+let rods = [];
+let boxes = [];
+let statics = [];
+let effects = [];
+
+const GROUND_Y = 0, WALL_L = -2400, WALL_R = 2400;
+let gravityOn = true;
+const GRAVITY = 0.22, DAMPING = 0.992, SUBSTEPS = 5, ROD_ITER = 9;
+
+let activeTool = 'spawn-person';
+
+/* ================= ЦВЕТА ================= */
+const C_BALL = '#ff5a5a', C_BOX = '#b07b4f', C_BULLET = '#3a3a3a', C_BLADE = '#cdd8dc', C_GRENADE = '#4a6b3a';
+const SKIN = '#f0c49a', SKIN_DARK = '#d9a97e', HAIR = '#5a3d2b', SHIRT = '#4a90d9', SHIRT_DARK = '#3675b5', PANTS = '#34495e', PANTS_DARK = '#27364a';
+
+/* ================= ФРУКТЫ ================= */
+const FRUITS = [
+  { id: 'watermelon', name: 'Арбуз',     emoji: '🍉', r: 18, bounce: 0.40 },
+  { id: 'apple',      name: 'Яблоко',    emoji: '🍎', r: 12, bounce: 0.45 },
+  { id: 'banana',     name: 'Банан',     emoji: '🍌', r: 14, bounce: 0.40 },
+  { id: 'orange',     name: 'Апельсин',  emoji: '🍊', r: 12, bounce: 0.50 },
+  { id: 'pear',       name: 'Груша',     emoji: '🍐', r: 13, bounce: 0.45 },
+  { id: 'strawberry', name: 'Клубника',  emoji: '🍓', r: 12, bounce: 0.35 },
+  { id: 'lemon',      name: 'Лимон',     emoji: '🍋', r: 13, bounce: 0.50 },
+  { id: 'grape',      name: 'Виноград',  emoji: '🍇', r: 12, bounce: 0.40 },
+  { id: 'peach',      name: 'Персик',    emoji: '🍑', r: 12, bounce: 0.45 },
+  { id: 'kiwi',       name: 'Киви',      emoji: '🥝', r: 12, bounce: 0.35 },
+  { id: 'pineapple',  name: 'Ананас',    emoji: '🍍', r: 14, bounce: 0.35 },
+  { id: 'cherry',     name: 'Вишня',     emoji: '🍒', r: 9,  bounce: 0.50 },
+];
+const FRUIT_BY_ID = {};
+for (const f of FRUITS) FRUIT_BY_ID[f.id] = f;
+
+/* ================= ФАБРИКИ ================= */
+function makeParticle(x, y, r, kind, color) {
+  return {
+    x, y, px: x, py: y, r,
+    invMass: 1 / (r * r),
+    kind, color,
+    bounce: 0.4,
+    angle: 0, spin: 0,
+    dead: false, ttl: Infinity, fuse: Infinity,
+    fruit: null,
+  };
+}
+
+function makeRod(a, b, stiffness, color) {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const rod = { a, b, len, stiffness: stiffness || 1, color: color || '#4caf50' };
+  rods.push(rod);
+  return rod;
+}
+
+/* ---- Человек (тряпичная кукла) ---- */
+function spawnPerson(wx, wy) {
+  const j = () => (Math.random() - 0.5) * 6;
+  const head   = makeParticle(wx, wy - 30, 13, 'head', SKIN);
+  const torso  = makeParticle(wx, wy - 6, 12, 'torso', SHIRT);
+  const uaL = makeParticle(wx - 16, wy - 14, 4.5, 'limb', SHIRT);
+  const faL = makeParticle(wx - 26, wy - 2, 4, 'limb', SHIRT);
+  const uaR = makeParticle(wx + 16, wy - 14, 4.5, 'limb', SHIRT);
+  const faR = makeParticle(wx + 26, wy - 2, 4, 'limb', SHIRT);
+  const thL = makeParticle(wx - 6, wy + 11, 5, 'limb', PANTS);
+  const shL = makeParticle(wx - 6, wy + 24, 4.5, 'limb', PANTS);
+  const thR = makeParticle(wx + 6, wy + 11, 5, 'limb', PANTS);
+  const shR = makeParticle(wx + 6, wy + 24, 4.5, 'limb', PANTS);
+  const parts = [head, torso, uaL, faL, uaR, faR, thL, shL, thR, shR];
+  for (const p of parts) { p.x += j(); particles.push(p); }
+  head.upRef = torso;
+  makeRod(head, torso, 0.95, SKIN);
+  makeRod(torso, uaL, 0.95, SHIRT); makeRod(uaL, faL, 0.95, SHIRT);
+  makeRod(torso, uaR, 0.95, SHIRT); makeRod(uaR, faR, 0.95, SHIRT);
+  makeRod(torso, thL, 0.95, PANTS); makeRod(thL, shL, 0.95, PANTS);
+  makeRod(torso, thR, 0.95, PANTS); makeRod(thR, shR, 0.95, PANTS);
+  sfx.spawn();
+}
+
+/* ---- Сложный мелон-человек (полный скелет) ---- */
+function spawnMelonMan(wx, wy) {
+  const j = () => (Math.random() - 0.5) * 5;
+  const MG = '#3fa34d', ML = '#57b356', MD = '#2f8f3a';   // голова/корпус, конечности, край (руки/ступни)
+  const head   = makeParticle(wx, wy - 34, 14, 'melonhead', MG);
+  const neck   = makeParticle(wx, wy - 20, 4,  'limb', MG);
+  const chest  = makeParticle(wx, wy - 8,  13, 'torso', MG);
+  const pelvis = makeParticle(wx, wy + 6,  11, 'limb', ML);
+  const uaL = makeParticle(wx - 17, wy - 14, 5, 'limb', ML);
+  const faL = makeParticle(wx - 28, wy - 4,  4.5, 'limb', ML);
+  const haL = makeParticle(wx - 34, wy + 2,  3.5, 'limb', MD);
+  const uaR = makeParticle(wx + 17, wy - 14, 5, 'limb', ML);
+  const faR = makeParticle(wx + 28, wy - 4,  4.5, 'limb', ML);
+  const haR = makeParticle(wx + 34, wy + 2,  3.5, 'limb', MD);
+  const thL = makeParticle(wx - 7, wy + 16, 6, 'limb', ML);
+  const shL = makeParticle(wx - 7, wy + 30, 5, 'limb', ML);
+  const ftL = makeParticle(wx - 7, wy + 40, 4, 'limb', MD);
+  const thR = makeParticle(wx + 7, wy + 16, 6, 'limb', ML);
+  const shR = makeParticle(wx + 7, wy + 30, 5, 'limb', ML);
+  const ftR = makeParticle(wx + 7, wy + 40, 4, 'limb', MD);
+  const parts = [head, neck, chest, pelvis, uaL, faL, haL, uaR, faR, haR, thL, shL, ftL, thR, shR, ftR];
+  for (const p of parts) { p.x += j(); particles.push(p); }
+  head.upRef = neck;
+  makeRod(head, neck, 0.95, MG);
+  makeRod(neck, chest, 0.95, MG);
+  makeRod(chest, pelvis, 0.95, ML);
+  makeRod(chest, uaL, 0.95, ML); makeRod(uaL, faL, 0.95, ML); makeRod(faL, haL, 0.95, MD);
+  makeRod(chest, uaR, 0.95, ML); makeRod(uaR, faR, 0.95, ML); makeRod(faR, haR, 0.95, MD);
+  makeRod(pelvis, thL, 0.95, ML); makeRod(thL, shL, 0.95, ML); makeRod(shL, ftL, 0.95, MD);
+  makeRod(pelvis, thR, 0.95, ML); makeRod(thR, shR, 0.95, ML); makeRod(shR, ftR, 0.95, MD);
+  sfx.spawn();
+}
+
+/* ---- Мега-мелон (самый сложный, 20 частей) ---- */
+function spawnMegaMelon(wx, wy) {
+  const j = () => (Math.random() - 0.5) * 4;
+  const MG = '#2f9e44', MD = '#237a35', MDD = '#1f6b2e';
+  // позвоночник: голова → шея → грудь → живот → таз
+  const head    = makeParticle(wx, wy - 46, 16, 'melonhead', MG);
+  const leaf    = makeParticle(wx + 10, wy - 62, 3.5, 'leaf', '#3fb950');
+  const neck    = makeParticle(wx, wy - 30, 4.5, 'limb', MG);
+  const chest   = makeParticle(wx, wy - 16, 13, 'torso', MG);
+  const abdomen = makeParticle(wx, wy - 2, 11, 'limb', MD);
+  const pelvis  = makeParticle(wx, wy + 10, 10, 'limb', MD);
+  // руки: плечо → предплечье → кисть
+  const shL = makeParticle(wx - 20, wy - 24, 5, 'limb', MD);
+  const uaL = makeParticle(wx - 31, wy - 17, 4.5, 'limb', MD);
+  const foL = makeParticle(wx - 39, wy - 8, 4, 'limb', MD);
+  const haL = makeParticle(wx - 44, wy - 2, 3.5, 'limb', MDD);
+  const shR = makeParticle(wx + 20, wy - 24, 5, 'limb', MD);
+  const uaR = makeParticle(wx + 31, wy - 17, 4.5, 'limb', MD);
+  const foR = makeParticle(wx + 39, wy - 8, 4, 'limb', MD);
+  const haR = makeParticle(wx + 44, wy - 2, 3.5, 'limb', MDD);
+  // ноги: бедро → голень → ступня
+  const thL = makeParticle(wx - 8, wy + 21, 6, 'limb', MD);
+  const shnL = makeParticle(wx - 8, wy + 36, 5, 'limb', MD);
+  const ftL = makeParticle(wx - 8, wy + 46, 4.5, 'limb', MDD);
+  const thR = makeParticle(wx + 8, wy + 21, 6, 'limb', MD);
+  const shnR = makeParticle(wx + 8, wy + 36, 5, 'limb', MD);
+  const ftR = makeParticle(wx + 8, wy + 46, 4.5, 'limb', MDD);
+  const parts = [head, leaf, neck, chest, abdomen, pelvis, shL, uaL, foL, haL, shR, uaR, foR, haR, thL, shnL, ftL, thR, shnR, ftR];
+  for (const p of parts) { p.x += j(); p.y += j(); particles.push(p); }
+  head.upRef = neck;
+  makeRod(head, leaf, 0.9, '#3fb950');
+  makeRod(head, neck, 0.95, MG);
+  makeRod(neck, chest, 0.95, MG);
+  makeRod(chest, abdomen, 0.95, MD);
+  makeRod(abdomen, pelvis, 0.95, MD);
+  makeRod(chest, shL, 0.95, MD); makeRod(shL, uaL, 0.95, MD); makeRod(uaL, foL, 0.95, MD); makeRod(foL, haL, 0.95, MDD);
+  makeRod(chest, shR, 0.95, MD); makeRod(shR, uaR, 0.95, MD); makeRod(uaR, foR, 0.95, MD); makeRod(foR, haR, 0.95, MDD);
+  makeRod(pelvis, thL, 0.95, MD); makeRod(thL, shnL, 0.95, MD); makeRod(shnL, ftL, 0.95, MDD);
+  makeRod(pelvis, thR, 0.95, MD); makeRod(thR, shnR, 0.95, MD); makeRod(shnR, ftR, 0.95, MDD);
+  sfx.spawn();
+}
+
+/* ---- Фрукт ---- */
+function spawnFruit(id, wx, wy) {
+  const f = FRUIT_BY_ID[id];
+  if (!f) return;
+  const p = makeParticle(wx, wy, f.r, 'fruit', null);
+  p.fruit = id;
+  p.bounce = f.bounce;
+  particles.push(p);
+  sfx.spawn();
+}
+
+/* ---- Мяч ---- */
+function spawnBall(wx, wy) {
+  const p = makeParticle(wx, wy, 13, 'ball', C_BALL);
+  p.bounce = 0.75;
+  particles.push(p);
+  sfx.spawn();
+}
+
+/* ---- Ящик ---- */
+function spawnBox(wx, wy, w, h) {
+  w = w || 58; h = h || 58;
+  const hw = w / 2, hh = h / 2;
+  const c0 = makeParticle(wx - hw, wy - hh, 6, 'box', C_BOX);
+  const c1 = makeParticle(wx + hw, wy - hh, 6, 'box', C_BOX);
+  const c2 = makeParticle(wx + hw, wy + hh, 6, 'box', C_BOX);
+  const c3 = makeParticle(wx - hw, wy + hh, 6, 'box', C_BOX);
+  for (const c of [c0, c1, c2, c3]) { c.bounce = 0.2; particles.push(c); }
+  const r = [];
+  r.push(makeRod(c0, c1, 1, C_BOX)); r.push(makeRod(c1, c2, 1, C_BOX));
+  r.push(makeRod(c2, c3, 1, C_BOX)); r.push(makeRod(c3, c0, 1, C_BOX));
+  r.push(makeRod(c0, c2, 1, C_BOX)); r.push(makeRod(c1, c3, 1, C_BOX));
+  boxes.push({ corners: [c0, c1, c2, c3], rods: r, w, h });
+  sfx.spawn();
+}
+
+/* ---- Платформа ---- */
+function spawnPlatform(wx, wy) {
+  statics.push({ x: wx - 90, y: wy - 12, w: 180, h: 24 });
+  sfx.spawn();
+}
+
+/* ---- Снаряды ---- */
+function spawnBullet(wx, wy, vx, vy) {
+  const p = makeParticle(wx, wy, 4, 'bullet', C_BULLET);
+  p.px = wx - vx; p.py = wy - vy;
+  p.bounce = 0.1; p.ttl = 2.5;
+  particles.push(p);
+}
+function spawnBlade(wx, wy, vx, vy) {
+  const p = makeParticle(wx, wy, 6, 'blade', C_BLADE);
+  p.px = wx - vx; p.py = wy - vy;
+  p.bounce = 0.1; p.ttl = 2.5;
+  p.angle = Math.atan2(vy, vx); p.spin = 0.5;
+  particles.push(p);
+}
+function spawnGrenade(wx, wy) {
+  const p = makeParticle(wx, wy, 7, 'grenade', C_GRENADE);
+  p.bounce = 0.5; p.fuse = 1.2;
+  particles.push(p);
+}
+
+/* ---- Эффекты ---- */
+function addEffect(type, x, y, color, life, size) {
+  effects.push({ type, x, y, color, life, max: life, size: size || 1 });
+}
+function spark(x, y, color) { addEffect('spark', x, y, color, 0.3, 1); }
+function flash(x, y, color, size) { addEffect('flash', x, y, color, 0.25, size); }
+
+/* ================= ФИЗИКА ================= */
+function integrate() {
+  for (const p of particles) {
+    if (p.dead) continue;
+    let vx = (p.x - p.px) * DAMPING;
+    let vy = (p.y - p.py) * DAMPING;
+    p.px = p.x; p.py = p.y;
+    p.x += vx;
+    p.y += vy + (gravityOn ? GRAVITY : 0);
+    if (p.kind === 'fruit') p.angle += p.spin * 0.3 + vx * 0.02;
+    if (p.ttl !== Infinity) { p.ttl -= 1 / SUBSTEPS; if (p.ttl <= 0) p.dead = true; }
+    if (p.fuse !== Infinity) {
+      p.fuse -= 1 / SUBSTEPS;
+      if (p.fuse <= 0) { p.dead = true; explode(p.x, p.y); }
+    }
+  }
+}
+
+function solveRods(iter) {
+  for (let k = 0; k < iter; k++) {
+    for (const r of rods) {
+      const a = r.a, b = r.b;
+      if (a.dead || b.dead) continue;
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 0.0001) { dx = 1; dy = 0; d = 1; }
+      const diff = (d - r.len) / d * r.stiffness;
+      const wa = a.invMass, wb = b.invMass, ws = wa + wb;
+      if (ws === 0) continue;
+      const ca = wa / ws, cb = wb / ws;
+      a.x += dx * diff * ca; a.y += dy * diff * ca;
+      b.x -= dx * diff * cb; b.y -= dy * diff * cb;
+    }
+  }
+}
+
+function collideCircles() {
+  const n = particles.length;
+  for (let i = 0; i < n; i++) {
+    const a = particles[i];
+    if (a.dead) continue;
+    for (let j = i + 1; j < n; j++) {
+      const b = particles[j];
+      if (b.dead) continue;
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const minD = a.r + b.r;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= minD * minD || d2 === 0) continue;
+      const d = Math.sqrt(d2);
+      const nx = dx / d, ny = dy / d;
+      const overlap = minD - d;
+      const wa = a.invMass, wb = b.invMass, ws = wa + wb;
+      if (ws === 0) continue;
+      a.x -= nx * overlap * (wa / ws); a.y -= ny * overlap * (wa / ws);
+      b.x += nx * overlap * (wb / ws); b.y += ny * overlap * (wb / ws);
+      const rvx = (b.x - b.px) - (a.x - a.px);
+      const rvy = (b.y - b.py) - (a.y - a.py);
+      const vn = rvx * nx + rvy * ny;
+      if (vn < 0) {
+        const e = Math.min(a.bounce, b.bounce);
+        const jimp = -(1 + e) * vn / ws;
+        a.px -= nx * jimp * wa; a.py -= ny * jimp * wa;
+        b.px += nx * jimp * wb; b.py += ny * jimp * wb;
+        if (-vn > 3 && performance.now() - lastThud > 70) { lastThud = performance.now(); sfx.thud(); }
+      }
+    }
+  }
+}
+
+function collideStatic() {
+  for (const p of particles) {
+    if (p.dead) continue;
+    if (p.y + p.r > GROUND_Y) {
+      const vy = p.y - p.py;
+      p.y = GROUND_Y - p.r;
+      p.py = p.y + vy * p.bounce;
+      if (Math.abs(vy) > 3 && p.kind !== 'bullet' && p.kind !== 'blade' && performance.now() - lastThud > 70) { lastThud = performance.now(); sfx.thud(); }
+      if (p.kind === 'bullet' || p.kind === 'blade') { p.dead = true; spark(p.x, p.y - p.r, '#888'); }
+    }
+    if (p.x - p.r < WALL_L) { const vx = p.x - p.px; p.x = WALL_L + p.r; p.px = p.x + vx * p.bounce; if (p.kind==='bullet'||p.kind==='blade') { p.dead = true; spark(p.x, p.y, '#888'); } }
+    if (p.x + p.r > WALL_R) { const vx = p.x - p.px; p.x = WALL_R - p.r; p.px = p.x + vx * p.bounce; if (p.kind==='bullet'||p.kind==='blade') { p.dead = true; spark(p.x, p.y, '#888'); } }
+    for (const s of statics) {
+      const cx = Math.max(s.x, Math.min(p.x, s.x + s.w));
+      const cy = Math.max(s.y, Math.min(p.y, s.y + s.h));
+      let dx = p.x - cx, dy = p.y - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < p.r * p.r) {
+        let d = Math.sqrt(d2);
+        if (d < 0.0001) {
+          const left = p.x - s.x, right = s.x + s.w - p.x, top = p.y - s.y, bot = s.y + s.h - p.y;
+          const m = Math.min(left, right, top, bot);
+          if (m === left) { p.x = s.x - p.r; } else if (m === right) { p.x = s.x + s.w + p.r; }
+          else if (m === top) { p.y = s.y - p.r; } else { p.y = s.y + s.h + p.r; }
+        } else {
+          const nx = dx / d, ny = dy / d;
+          const push = (p.r - d);
+          p.x += nx * push; p.y += ny * push;
+          const vx = p.x - p.px, vy = p.y - p.py;
+          const vn = vx * nx + vy * ny;
+          if (vn < 0) {
+            p.px += nx * vn * (1 + p.bounce);
+            p.py += ny * vn * (1 + p.bounce);
+          }
+        }
+        if (p.kind === 'bullet' || p.kind === 'blade') { p.dead = true; spark(p.x, p.y, '#888'); }
+      }
+    }
+  }
+}
+
+function handleProjectiles() {
+  for (const pr of particles) {
+    if (pr.dead) continue;
+    if (pr.kind !== 'bullet' && pr.kind !== 'blade') continue;
+    for (const o of particles) {
+      if (o === pr || o.dead) continue;
+      if (o.kind === 'bullet' || o.kind === 'blade') continue;
+      const d = Math.hypot(o.x - pr.x, o.y - pr.y);
+      if (d < pr.r + o.r) {
+        const vx = (pr.x - pr.px), vy = (pr.y - pr.py);
+        const sp = Math.hypot(vx, vy);
+        const ux = vx / (sp || 1), uy = vy / (sp || 1);
+        if (pr.kind === 'bullet') {
+          const imp = 14;
+          o.px -= ux * imp; o.py -= uy * imp;
+          spark(pr.x, pr.y, '#ffd166');
+          pr.dead = true;
+        } else {
+          if (o.kind === 'fruit' && o.r >= 12) {
+            split(o, ux, uy);
+            sfx.slash();
+          } else {
+            o.px -= ux * 18; o.py -= uy * 18;
+          }
+          flash(pr.x, pr.y, '#ffffff', 2);
+          pr.dead = true;
+        }
+        break;
+      }
+    }
+  }
+}
+
+function split(p, ux, uy) {
+  const r = p.r, nx = uy, ny = -ux;
+  for (const s of [-1, 1]) {
+    const h = makeParticle(p.x + nx * r * 0.3 * s, p.y + ny * r * 0.3 * s, r * 0.72, 'fruit', null);
+    h.fruit = p.fruit; h.bounce = p.bounce;
+    h.px = h.x - (nx * 6 * s + ux * 3);
+    h.py = h.y - (ny * 6 * s + uy * 3);
+    h.angle = p.angle + s * 1.2;
+    particles.push(h);
+  }
+  p.dead = true;
+}
+
+function explode(x, y) {
+  const R = 170;
+  flash(x, y, '#ff9d3b', 4);
+  flash(x, y, '#ffe066', 3);
+  for (const p of particles) {
+    if (p.dead) continue;
+    const dx = p.x - x, dy = p.y - y;
+    const d = Math.hypot(dx, dy);
+    if (d < R && d > 0.01) {
+      const f = (1 - d / R);
+      const ux = dx / d, uy = dy / d;
+      const imp = 26 * f;
+      p.px -= ux * imp; p.py -= uy * imp;
+    }
+  }
+  sfx.boom();
+}
+
+function cleanup() {
+  particles = particles.filter(p => !p.dead);
+  rods = rods.filter(r => !r.broken && !r.a.dead && !r.b.dead);
+  boxes = boxes.filter(b => b.corners.every(c => !c.dead));
+  if (particles.length > 350) {
+    let removed = 0;
+    particles = particles.filter(p => {
+      if (removed < 40 && (p.kind === 'bullet' || p.kind === 'blade')) { removed++; return false; }
+      return true;
+    });
+  }
+  if (particles.length > 400) particles.splice(0, particles.length - 400);
+}
+
+function step() {
+  for (let s = 0; s < SUBSTEPS; s++) {
+    integrate();
+    solveRods(ROD_ITER);
+    collideCircles();
+    collideStatic();
+    handleProjectiles();
+  }
+  cleanup();
+}
+
+/* ================= ВВОД ================= */
+const keyDown = {};
+window.addEventListener('keydown', (e) => { keyDown[e.key] = true; });
+window.addEventListener('keyup', (e) => { keyDown[e.key] = false; });
+
+canvas.addEventListener('mousedown', (e) => {
+  ensureAudio();
+  if (e.button === 2) { mouse.rdown = true; mouse.panCamX = cam.x; mouse.panCamY = cam.y; mouse.panX = e.clientX; mouse.panY = e.clientY; return; }
+  if (e.button !== 0) return;
+  mouse.down = true;
+  const w = worldFromScreen(e.clientX, e.clientY);
+  mouse.sx = w.x; mouse.sy = w.y;
+  if (activeTool === 'drag') {
+    let best = null, bd = 60;
+    for (const p of particles) {
+      if (p.dead) continue;
+      const d = Math.hypot(p.x - w.x, p.y - w.y);
+      if (d < bd) { bd = d; best = p; }
+    }
+    mouse.grab = best;
+  }
+  if (activeTool.startsWith('spawn-fruit:')) spawnFruit(activeTool.slice(12), w.x, w.y);
+  else if (activeTool === 'spawn-person') spawnPerson(w.x, w.y);
+  else if (activeTool === 'spawn-melonman') spawnMelonMan(w.x, w.y);
+  else if (activeTool === 'spawn-megamelon') spawnMegaMelon(w.x, w.y);
+  else if (activeTool === 'spawn-ball') spawnBall(w.x, w.y);
+  else if (activeTool === 'spawn-box') spawnBox(w.x, w.y);
+  else if (activeTool === 'spawn-platform') spawnPlatform(w.x, w.y);
+  else if (activeTool === 'grenade') spawnGrenade(w.x, w.y);
+  else if (activeTool === 'erase') eraseAt(w.x, w.y);
+});
+window.addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  const w = worldFromScreen(e.clientX, e.clientY);
+  mouse.wx = w.x; mouse.wy = w.y;
+  if (mouse.rdown) { cam.x = mouse.panCamX - (e.clientX - mouse.panX) / cam.zoom; cam.y = mouse.panCamY - (e.clientY - mouse.panY) / cam.zoom; }
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 2) { mouse.rdown = false; return; }
+  if (e.button !== 0) return;
+  if (mouse.down && activeTool === 'gun') fireGun();
+  mouse.down = false; mouse.grab = null;
+});
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const wBefore = worldFromScreen(e.clientX, e.clientY);
+  cam.zoom = Math.max(0.25, Math.min(3.5, cam.zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
+  cam.x = wBefore.x - (e.clientX - W / 2) / cam.zoom;
+  cam.y = wBefore.y - (e.clientY - H / 2) / cam.zoom;
+}, { passive: false });
+
+function fireGun() {
+  const w = worldFromScreen(mouse.x, mouse.y);
+  let dx = mouse.sx - w.x, dy = mouse.sy - w.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 8) { dx = 1; dy = 0; }
+  else { dx /= len; dy /= len; }
+  const power = Math.min(46, 8 + len * 0.35);
+  spawnBullet(mouse.sx, mouse.sy, dx * power, dy * power);
+  sfx.shot();
+  spark(mouse.sx, mouse.sy, '#ffd166');
+}
+
+function eraseAt(wx, wy) {
+  let best = null, bd = 40;
+  for (const p of particles) { if (p.dead) continue; const d = Math.hypot(p.x - wx, p.y - wy); if (d < bd) { bd = d; best = p; } }
+  if (best) { best.dead = true; spark(best.x, best.y, '#9ad'); }
+  else {
+    for (let i = statics.length - 1; i >= 0; i--) {
+      const s = statics[i];
+      if (wx >= s.x && wx <= s.x + s.w && wy >= s.y && wy <= s.y + s.h) { statics.splice(i, 1); return; }
+    }
+  }
+}
+
+let prevMouseW = null;
+function applyDrag() {
+  if (mouse.down && activeTool === 'drag' && mouse.grab && !mouse.grab.dead) {
+    const p = mouse.grab;
+    let mvx = 0, mvy = 0;
+    if (prevMouseW) { mvx = mouse.wx - prevMouseW.x; mvy = mouse.wy - prevMouseW.y; }
+    p.x = mouse.wx; p.y = mouse.wy;
+    p.px = mouse.wx - mvx; p.py = mouse.wy - mvy;
+  }
+  prevMouseW = { x: mouse.wx, y: mouse.wy };
+}
+
+/* ---- Кнопки тулбара ---- */
+document.querySelectorAll('button.t[data-tool]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('button.t[data-tool]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTool = btn.dataset.tool;
+  });
+});
+
+// генерируем кнопки фруктов
+const fruitGroup = document.getElementById('fruitGroup');
+for (const f of FRUITS) {
+  const b = document.createElement('button');
+  b.className = 't onlyEmoji';
+  b.dataset.tool = 'spawn-fruit:' + f.id;
+  b.title = f.name;
+  b.innerHTML = '<span class="em">' + f.emoji + '</span>';
+  b.addEventListener('click', () => {
+    document.querySelectorAll('button.t[data-tool]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    activeTool = b.dataset.tool;
+  });
+  fruitGroup.appendChild(b);
+}
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  particles = []; rods = []; boxes = []; statics = []; effects = [];
+});
+document.getElementById('btnGravity').addEventListener('click', (e) => {
+  gravityOn = !gravityOn;
+  e.currentTarget.innerHTML = '<span class="em">🌍</span>Гравитация: ' + (gravityOn ? 'вкл' : 'выкл');
+});
+document.getElementById('btnSound').addEventListener('click', (e) => {
+  soundOn = !soundOn;
+  e.currentTarget.innerHTML = '<span class="em">' + (soundOn ? '🔊' : '🔇') + '</span>Звук';
+});
+
+/* ================= ОТРИСОВКА ================= */
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#7ec8f0');
+  g.addColorStop(0.55, '#b8e4f8');
+  g.addColorStop(1, '#dff3fd');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawCloud(x, y, s) {
+  ctx.beginPath();
+  ctx.arc(x, y, 46 * s, 0, PI2);
+  ctx.arc(x + 40 * s, y - 14 * s, 38 * s, 0, PI2);
+  ctx.arc(x + 82 * s, y, 44 * s, 0, PI2);
+  ctx.fill();
+}
+
+function drawWorld() {
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.x, -cam.y);
+
+  const sunX = 1600, sunY = -1400;
+  const sg = ctx.createRadialGradient(sunX, sunY, 30, sunX, sunY, 260);
+  sg.addColorStop(0, '#fff6c9');
+  sg.addColorStop(1, 'rgba(255,246,201,0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.arc(sunX, sunY, 260, 0, PI2); ctx.fill();
+  ctx.fillStyle = '#ffe98a';
+  ctx.beginPath(); ctx.arc(sunX, sunY, 70, 0, PI2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  for (const c of [[-1500,-1100,1],[-300,-1500,1.4],[900,-1200,1.1],[1700,-800,1.5],[-900,-1700,0.9]]) {
+    drawCloud(c[0], c[1], c[2]);
+  }
+
+  const gg = ctx.createLinearGradient(0, GROUND_Y - 60, 0, GROUND_Y + 400);
+  gg.addColorStop(0, '#7ed957');
+  gg.addColorStop(0.12, '#5cb944');
+  gg.addColorStop(1, '#3e8f2f');
+  ctx.fillStyle = gg;
+  ctx.fillRect(WALL_L, GROUND_Y, WALL_R - WALL_L, 5000);
+  ctx.fillStyle = '#5cb944';
+  ctx.fillRect(WALL_L, GROUND_Y, WALL_R - WALL_L, 10);
+
+  for (const s of statics) {
+    ctx.fillStyle = '#8a6a4f';
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.fillStyle = '#a98263';
+    ctx.fillRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
+    ctx.strokeStyle = '#6b4f38'; ctx.lineWidth = 2; ctx.strokeRect(s.x, s.y, s.w, s.h);
+  }
+
+  ctx.lineCap = 'round';
+  for (const r of rods) {
+    if (r.a.dead || r.b.dead) continue;
+    ctx.strokeStyle = r.color || '#4caf50';
+    ctx.lineWidth = (r.color === C_BOX ? 4 : 5);
+    ctx.beginPath(); ctx.moveTo(r.a.x, r.a.y); ctx.lineTo(r.b.x, r.b.y); ctx.stroke();
+  }
+
+  for (const b of boxes) {
+    const [c0, c1, c2, c3] = b.corners;
+    if (c0.dead) continue;
+    ctx.fillStyle = '#c79a6b';
+    ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(c3.x, c3.y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#6b4f38'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c2.x, c2.y); ctx.stroke();
+  }
+
+  for (const p of particles) {
+    if (p.dead) continue;
+    if (p.kind === 'box') continue;
+    drawParticle(p);
+  }
+
+  for (const e of effects) drawEffect(e);
+
+  ctx.restore();
+}
+
+/* ---- лицо (глаза + улыбка) ---- */
+function drawFace(r, s, oy) {
+  const f = r * (s || 0.5), y = (oy || 0);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-f * 0.6, y - f * 0.35, f * 0.33, 0, PI2); ctx.fill();
+  ctx.beginPath(); ctx.arc(f * 0.6, y - f * 0.35, f * 0.33, 0, PI2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(-f * 0.6, y - f * 0.35, f * 0.15, 0, PI2); ctx.fill();
+  ctx.beginPath(); ctx.arc(f * 0.6, y - f * 0.35, f * 0.15, 0, PI2); ctx.fill();
+  ctx.strokeStyle = '#222'; ctx.lineWidth = Math.max(1.2, r * 0.07); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, y + f * 0.1, f * 0.5, PI * 0.15, PI * 0.85); ctx.stroke();
+}
+
+/* ---- голова человека ---- */
+function drawHumanHead(r) {
+  ctx.fillStyle = SKIN;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+  ctx.strokeStyle = SKIN_DARK; ctx.lineWidth = 2; ctx.stroke();
+  // волосы — верхняя половина
+  ctx.fillStyle = HAIR;
+  ctx.beginPath(); ctx.arc(0, 0, r, PI * 0.98, PI * 2.02); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(-r * 0.1, -r * 0.85, r * 0.28, 0, PI2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.28, -r * 0.9, r * 0.3, 0, PI2); ctx.fill();
+  drawFace(r, 0.5, r * 0.05);
+}
+
+/* ---- фрукты ---- */
+function drawFruit(id, r) {
+  switch (id) {
+    case 'watermelon': {
+      const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.2, 0, 0, r);
+      g.addColorStop(0, '#54c05c'); g.addColorStop(1, '#2f8f3a');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.clip();
+      ctx.fillStyle = '#2c7a35';
+      for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(k * r * 0.45, 0, r * 0.18, r * 1.05, 0, 0, PI2); ctx.fill(); }
+      ctx.restore();
+      drawFace(r, 0.5, 0);
+      break;
+    }
+    case 'apple': {
+      ctx.fillStyle = '#e33b3b';
+      ctx.beginPath(); ctx.arc(0, r * 0.1, r * 0.92, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#b32626';
+      ctx.beginPath(); ctx.arc(0, r * 0.1, r * 0.92, PI * 0.1, PI * 0.9); ctx.fill();
+      ctx.strokeStyle = '#6b3d1c'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.75); ctx.lineTo(0, -r * 1.15); ctx.stroke();
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.ellipse(r * 0.35, -r * 0.95, r * 0.32, r * 0.16, -0.5, 0, PI2); ctx.fill();
+      drawFace(r * 0.9, 0.45, r * 0.12);
+      break;
+    }
+    case 'banana': {
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = r * 1.2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.55, -1.0, 1.0); ctx.stroke();
+      ctx.fillStyle = '#6b4a1e';
+      ctx.beginPath(); ctx.arc(r * 0.3, -r * 0.5, r * 0.14, 0, PI2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-r * 0.3, r * 0.5, r * 0.14, 0, PI2); ctx.fill();
+      drawFace(r * 0.6, 0.42, r * 0.05);
+      break;
+    }
+    case 'orange': {
+      ctx.fillStyle = '#ff9838';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      for (let k = 0; k < 8; k++) { const a = k * 0.785 + 0.4; ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, r * 0.13, 0, PI2); ctx.fill(); }
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.ellipse(0, -r * 0.95, r * 0.22, r * 0.12, 0, 0, PI2); ctx.fill();
+      drawFace(r, 0.45, 0);
+      break;
+    }
+    case 'pear': {
+      ctx.fillStyle = '#b8d93c';
+      ctx.beginPath(); ctx.arc(0, -r * 0.3, r * 0.5, 0, PI2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, r * 0.25, r * 0.74, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#8fbf2e';
+      ctx.beginPath(); ctx.arc(r * 0.18, r * 0.45, r * 0.5, 0, PI2); ctx.fill();
+      ctx.strokeStyle = '#6b3d1c'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.75); ctx.lineTo(0, -r * 1.1); ctx.stroke();
+      drawFace(r, 0.45, r * 0.2);
+      break;
+    }
+    case 'strawberry': {
+      ctx.fillStyle = '#e63b3b';
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.9);
+      ctx.bezierCurveTo(r * 0.95, -r * 0.5, r * 0.7, r * 0.7, 0, r);
+      ctx.bezierCurveTo(-r * 0.7, r * 0.7, -r * 0.95, -r * 0.5, 0, -r * 0.9);
+      ctx.fill();
+      ctx.fillStyle = '#4caf50';
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.moveTo(k * r * 0.28, -r * 0.85);
+        ctx.lineTo(k * r * 0.45, -r * 1.2);
+        ctx.lineTo((k + 0.7) * r * 0.28, -r * 0.8);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#ffe066';
+      for (let k = 0; k < 10; k++) {
+        const a = k * 0.628;
+        ctx.beginPath(); ctx.ellipse(Math.cos(a) * r * 0.45, Math.sin(a) * r * 0.45 - r * 0.1, r * 0.06, r * 0.09, a, 0, PI2); ctx.fill();
+      }
+      drawFace(r, 0.42, -r * 0.15);
+      break;
+    }
+    case 'lemon': {
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#e8b92c';
+      ctx.beginPath(); ctx.ellipse(0, r * 0.2, r, r * 0.6, 0, 0, PI2); ctx.fill();
+      ctx.beginPath(); ctx.arc(r, 0, r * 0.22, 0, PI2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-r, 0, r * 0.22, 0, PI2); ctx.fill();
+      drawFace(r * 0.7, 0.42, 0);
+      break;
+    }
+    case 'grape': {
+      ctx.fillStyle = '#7b4bb3';
+      const pts = [[0,0],[-r*0.4,-r*0.4],[r*0.4,-r*0.4],[-r*0.5,r*0.25],[r*0.5,r*0.25],[0,r*0.45]];
+      for (let k = 0; k < pts.length; k++) {
+        ctx.beginPath(); ctx.arc(pts[k][0], pts[k][1], r * 0.34, 0, PI2); ctx.fill();
+      }
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.ellipse(0, -r * 0.75, r * 0.18, r * 0.1, 0, 0, PI2); ctx.fill();
+      drawFace(r * 0.5, 0.4, r * 0.05);
+      break;
+    }
+    case 'peach': {
+      ctx.fillStyle = '#ffb37a';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#ff8f66';
+      ctx.beginPath(); ctx.arc(0, r * 0.35, r * 0.8, 0, PI2); ctx.fill();
+      ctx.strokeStyle = '#e0684a'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.7); ctx.quadraticCurveTo(-r * 0.15, 0, 0, r * 0.8); ctx.stroke();
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.ellipse(r * 0.35, -r * 0.9, r * 0.3, r * 0.15, 0.5, 0, PI2); ctx.fill();
+      drawFace(r, 0.45, r * 0.05);
+      break;
+    }
+    case 'kiwi': {
+      ctx.fillStyle = '#9b6b43';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      for (let k = 0; k < 14; k++) { const a = k * 0.448; ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.6, Math.sin(a) * r * 0.6, r * 0.1, 0, PI2); ctx.fill(); }
+      drawFace(r, 0.45, 0);
+      break;
+    }
+    case 'pineapple': {
+      ctx.fillStyle = '#f2a93b';
+      ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.85, 0, 0, PI2); ctx.fill();
+      ctx.strokeStyle = '#c8832a'; ctx.lineWidth = 2;
+      for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(k * r * 0.35, -r * 0.7); ctx.lineTo(k * r * 0.35, r * 0.7); ctx.stroke(); }
+      for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(-r * 0.75, k * r * 0.45); ctx.lineTo(r * 0.75, k * r * 0.45); ctx.stroke(); }
+      ctx.fillStyle = '#4caf50';
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.moveTo(k * r * 0.3, -r * 0.75);
+        ctx.lineTo(k * r * 0.5, -r * 1.25);
+        ctx.lineTo((k + 0.6) * r * 0.3, -r * 0.7);
+        ctx.closePath(); ctx.fill();
+      }
+      drawFace(r * 0.6, 0.42, 0);
+      break;
+    }
+    case 'cherry': {
+      ctx.strokeStyle = '#5c8a2e'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-r * 0.5, -r * 0.4); ctx.quadraticCurveTo(0, -r * 1.3, r * 0.5, -r * 0.4); ctx.stroke();
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.ellipse(0, -r * 1.25, r * 0.22, r * 0.1, 0, 0, PI2); ctx.fill();
+      for (const s of [-1, 1]) {
+        const g = ctx.createRadialGradient(s * r * 0.5 - r * 0.15, -r * 0.15, r * 0.05, s * r * 0.5, 0, r * 0.55);
+        g.addColorStop(0, '#ff6b6b'); g.addColorStop(1, '#c81e1e');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s * r * 0.5, 0, r * 0.55, 0, PI2); ctx.fill();
+      }
+      break;
+    }
+    default: {
+      ctx.fillStyle = '#e33b3b';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, PI2); ctx.fill();
+      drawFace(r, 0.45, 0);
+    }
+  }
+}
+
+function drawParticle(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  if (p.kind === 'bullet') {
+    ctx.rotate(Math.atan2(p.y - p.py, p.x - p.px));
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 3, 0, 0, PI2); ctx.fill();
+    ctx.restore(); return;
+  }
+  if (p.kind === 'blade') {
+    ctx.rotate(Math.atan2(p.y - p.py, p.x - p.px));
+    ctx.fillStyle = '#e8eef0';
+    ctx.beginPath();
+    ctx.moveTo(12, 0); ctx.lineTo(-12, -4); ctx.lineTo(-10, 0); ctx.lineTo(-12, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#aab6bc'; ctx.fillRect(-12, -2, 5, 4);
+    ctx.restore(); return;
+  }
+  if (p.kind === 'grenade') {
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(0, 0, p.r, 0, PI2); ctx.fill();
+    ctx.fillStyle = '#3a5a2c'; ctx.fillRect(-2, -p.r - 3, 4, 4);
+    ctx.strokeStyle = '#2f4a24'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore(); return;
+  }
+  if (p.kind === 'fruit') {
+    ctx.rotate(p.angle || 0);
+    drawFruit(p.fruit, p.r);
+    ctx.restore(); return;
+  }
+  if (p.kind === 'head') {
+    if (p.upRef) ctx.rotate(Math.atan2(p.y - p.upRef.y, p.x - p.upRef.x) + PI / 2);
+    drawHumanHead(p.r);
+    ctx.restore(); return;
+  }
+  if (p.kind === 'melonhead') {
+    if (p.upRef) ctx.rotate(Math.atan2(p.y - p.upRef.y, p.x - p.upRef.x) + PI / 2);
+    drawFruit('watermelon', p.r);
+    ctx.restore(); return;
+  }
+  if (p.kind === 'leaf') {
+    ctx.fillStyle = p.color || '#3fb950';
+    ctx.beginPath(); ctx.ellipse(0, 0, p.r, p.r * 0.45, 0.5, 0, PI2); ctx.fill();
+    ctx.strokeStyle = '#2c7a35'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-p.r, 0); ctx.lineTo(p.r, 0); ctx.stroke();
+    ctx.restore(); return;
+  }
+  if (p.kind === 'ball') {
+    const g = ctx.createRadialGradient(-p.r * 0.3, -p.r * 0.3, p.r * 0.2, 0, 0, p.r);
+    g.addColorStop(0, '#ff8a8a'); g.addColorStop(1, '#e03434');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, p.r, 0, PI2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = p.r * 0.16;
+    ctx.beginPath(); ctx.arc(0, 0, p.r * 0.55, 0, PI2); ctx.stroke();
+    ctx.restore(); return;
+  }
+  if (p.kind === 'torso') {
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(0, 0, p.r, 0, PI2); ctx.fill();
+    ctx.strokeStyle = SHIRT_DARK; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore(); return;
+  }
+  if (p.kind === 'limb') {
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(0, 0, p.r, 0, PI2); ctx.fill();
+    ctx.restore(); return;
+  }
+
+  ctx.fillStyle = p.color;
+  ctx.beginPath(); ctx.arc(0, 0, p.r, 0, PI2); ctx.fill();
+  ctx.restore();
+}
+
+function drawEffect(e) {
+  const a = Math.max(0, e.life / e.max);
+  if (e.type === 'flash') {
+    const g = ctx.createRadialGradient(e.x, e.y, 1, e.x, e.y, 40 * e.size);
+    g.addColorStop(0, e.color);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.globalAlpha = a;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(e.x, e.y, 40 * e.size, 0, PI2); ctx.fill();
+    ctx.globalAlpha = 1;
+  } else if (e.type === 'spark') {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = e.color;
+    ctx.beginPath(); ctx.arc(e.x, e.y, 3, 0, PI2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawAim() {
+  if (!mouse.down || activeTool !== 'gun') return;
+  const w = worldFromScreen(mouse.x, mouse.y);
+  ctx.save();
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle = '#ff5a5a';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(mouse.sx, mouse.sy); ctx.lineTo(w.x, w.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#ff5a5a';
+  ctx.beginPath(); ctx.arc(mouse.sx, mouse.sy, 5, 0, PI2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHUD() {
+  ctx.fillStyle = 'rgba(20,26,32,0.6)';
+  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Объектов: ' + particles.length + ' · Инструмент: ' + activeTool, 14, H - 14);
+}
+
+/* ================= ЦИКЛ ================= */
+function updateEffects(dt) {
+  for (const e of effects) e.life -= dt;
+  effects = effects.filter(e => e.life > 0);
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  const spd = 500 / cam.zoom;
+  if (keyDown['ArrowLeft'] || keyDown['a'] || keyDown['A']) cam.x -= spd * dt;
+  if (keyDown['ArrowRight'] || keyDown['d'] || keyDown['D']) cam.x += spd * dt;
+  if (keyDown['ArrowUp'] || keyDown['w'] || keyDown['W']) cam.y -= spd * dt;
+  if (keyDown['ArrowDown'] || keyDown['s'] || keyDown['S']) cam.y += spd * dt;
+
+  applyDrag();
+  step();
+  updateEffects(dt);
+
+  drawSky();
+  drawWorld();
+  drawAim();
+  drawHUD();
+  requestAnimationFrame(loop);
+}
+
+/* ================= СТАРТ ================= */
+function resize() { W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H; }
+window.addEventListener('resize', resize);
+resize();
+
+// стартовые объекты
+spawnPerson(-160, -40);
+spawnPerson(140, -40);
+spawnMelonMan(0, -40);
+spawnMegaMelon(360, -40);
+spawnFruit('watermelon', -40, -180);
+spawnFruit('apple', 280, -200);
+spawnFruit('banana', -300, -230);
+spawnFruit('orange', 360, -130);
+spawnFruit('strawberry', -420, -160);
+spawnFruit('pineapple', 460, -220);
+spawnBall(-500, -270);
+spawnBox(0, -280, 60, 60);
+spawnBox(200, -300, 52, 52);
+spawnPlatform(-300, -120);
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

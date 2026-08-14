@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мелон Песочница 2D</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #14161c; color: #e8eaf0;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  #toolbar {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px 12px; background: #1e2129; border-bottom: 1px solid #2c313c;
+  }
+  #toolbar .sep { width: 1px; height: 26px; background: #333945; margin: 0 4px; }
+  #toolbar .title { font-weight: 700; color: #7ed957; margin-right: 8px; font-size: 14px; }
+  button {
+    background: #2a2f3a; color: #e8eaf0; border: 1px solid #3a4150;
+    border-radius: 7px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+    transition: background .12s, transform .05s;
+  }
+  button:hover { background: #363d4b; }
+  button:active { transform: translateY(1px); }
+  button.on, #toolbar button.active { background: #7ed957; color: #12200a; border-color: #7ed957; font-weight: 700; }
+  button.danger { background: #5a2a2a; border-color: #7a3a3a; }
+  button.danger:hover { background: #6e3434; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #cvwrap { flex: 1; position: relative; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  #panel {
+    width: 272px; background: #1a1d24; border-left: 1px solid #2c313c;
+    overflow-y: auto; padding: 12px; flex-shrink: 0;
+  }
+  #panel h3 { font-size: 13px; color: #9aa3b5; text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 8px; }
+  #panel h3:first-child { margin-top: 0; }
+  #panel hr { border: none; border-top: 1px solid #2c313c; margin: 14px 0; }
+  .row-label { font-size: 12px; color: #9aa3b5; margin: 10px 0 6px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+  .swatch { width: 26px; height: 26px; border-radius: 6px; border: 2px solid transparent; padding: 0; cursor: pointer; }
+  .swatch.sel { border-color: #fff; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btns button { flex: 1 1 auto; }
+  input[type=range] { width: 100%; accent-color: #7ed957; }
+  #hint {
+    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    background: rgba(10,12,16,.72); color: #c6cdd8; padding: 6px 12px;
+    border-radius: 20px; font-size: 12px; pointer-events: none; white-space: nowrap;
+  }
+  .partname { color: #7ed957; font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .dim { color: #7a8394; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span class="title">🍉 Мелон Песочница</span>
+    <button data-tool="grab" class="active">🖐 Курсор</button>
+    <span class="sep"></span>
+    <button data-tool="spawn:melon">🍉 Арбуз</button>
+    <button data-tool="spawn:ball">⚽ Мяч</button>
+    <button data-tool="spawn:weight">⚖️ Гиря</button>
+    <button data-tool="spawn:box">📦 Ящик</button>
+    <button data-tool="spawn:plank">🪵 Доска</button>
+    <button data-tool="spawn:platform">🟫 Платформа</button>
+    <button data-tool="spawn:bomb">💣 Бомба</button>
+    <span class="sep"></span>
+    <button data-tool="spawn:sword">🗡️ Меч</button>
+    <button data-tool="spawn:gun">🔫 Пистолет</button>
+    <span class="sep"></span>
+    <button data-tool="erase">🧽 Ластик</button>
+  </div>
+  <div id="main">
+    <div id="cvwrap">
+      <canvas id="cv"></canvas>
+      <div id="hint">ЛКМ — тащить/выбрать · ПКМ или E — удар · F — выстрел · A/D — ходить · W/Пробел — прыжок · Колесо — гравитация</div>
+    </div>
+    <div id="panel"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ======================= Данные =======================
+const MATERIALS = {
+  normal: { label: "Обычный", weight: 1.0,  bounce: 0.05, friction: 0.99, stiffness: 1 },
+  rubber: { label: "Резина",  weight: 0.6,  bounce: 0.75, friction: 0.99, stiffness: 1 },
+  steel:  { label: "Сталь",   weight: 2.8,  bounce: 0.02, friction: 0.995, stiffness: 1 },
+  jelly:  { label: "Желе",    weight: 0.5,  bounce: 0.25, friction: 0.94, stiffness: 0.7 },
+  wood:   { label: "Дерево",  weight: 1.3,  bounce: 0.02, friction: 0.98, stiffness: 1 },
+};
+const PALETTE = [
+  "#ffe0bd","#f2c19b","#e0a878","#c68642","#8d5524","#5c3a21",
+  "#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6",
+  "#34495e","#ecf0f1","#16a085","#e84393","#1abc9c","#ff9f43",
+];
+const HATS = [
+  { id: "none",   label: "Нет" },
+  { id: "cap",    label: "Кепка" },
+  { id: "tophat", label: "Цилиндр" },
+  { id: "crown",  label: "Корона" },
+];
+
+// ======================= Канвас =======================
+const canvas = document.getElementById("cv");
+const ctx = canvas.getContext("2d");
+const wrap = document.getElementById("cvwrap");
+const panelEl = document.getElementById("panel");
+let W = 800, H = 600, groundY = H - 70, dpr = 1;
+
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, r.width * dpr);
+  canvas.height = Math.max(1, r.height * dpr);
+  canvas.style.width = r.width + "px";
+  canvas.style.height = r.height + "px";
+  W = r.width; H = r.height;
+  groundY = H - 70;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+// ======================= Состояние =======================
+let particles = [], constraints = [], angleCons = [], ragdolls = [], objects = [], freeParts = [], effects = [];
+let gravity = 0.5, substeps = 3, iterations = 8, groundFriction = 0.6;
+let ENT = 1; const newEnt = () => ENT++;
+let tool = "grab";
+let selectedPart = null, selectedRagdoll = null;
+let mouse = { x: 0, y: 0 };
+let drag = null; // { particle }
+const keys = new Set();
+let jumpQueued = false;
+
+// ======================= Физика =======================
+class Particle {
+  constructor(x, y, mass = 1, pinned = false) {
+    this.x = x; this.y = y; this.px = x; this.py = y;
+    this.mass = mass; this.pinned = pinned;
+    this.radius = 8; this.bounce = 0.1; this.friction = 0.99;
+    this.ax = 0; this.ay = 0;
+    this.ent = 0; this.part = null; this.ragdoll = null; this.obj = null;
+    this.dead = false;
+  }
+  addAccel(fx, fy) { this.ax += fx; this.ay += fy; }
+  integrate() {
+    if (this.pinned) { this.px = this.x; this.py = this.y; this.ax = 0; this.ay = 0; return; }
+    const vx = (this.x - this.px) * this.friction;
+    const vy = (this.y - this.py) * this.friction;
+    this.px = this.x; this.py = this.y;
+    this.x += vx + this.ax;
+    this.y += vy + this.ay + gravity;
+    this.ax = 0; this.ay = 0;
+    const cvx = this.x - this.px, cvy = this.y - this.py;
+    const sp = Math.hypot(cvx, cvy), max = 22;
+    if (sp > max) { const s = max / sp; this.px = this.x - cvx * s; this.py = this.y - cvy * s; }
+  }
+}
+
+class Constraint {
+  constructor(a, b, stiffness = 1) {
+    this.a = a; this.b = b;
+    this.rest = Math.hypot(b.x - a.x, b.y - a.y);
+    this.stiffness = stiffness;
+    this.ragdoll = null; this.dead = false;
+  }
+  solve() {
+    const a = this.a, b = this.b;
+    let dx = b.x - a.x, dy = b.y - a.y;
+    let d = Math.hypot(dx, dy);
+    if (d < 1e-6) d = 1e-6;
+    const diff = (d - this.rest) * this.stiffness / d;
+    const ima = a.pinned ? 0 : 1 / a.mass, imb = b.pinned ? 0 : 1 / b.mass;
+    const s = ima + imb;
+    if (s === 0) return;
+    const oa = diff * (ima / s), ob = diff * (imb / s);
+    a.x += dx * oa; a.y += dy * oa;
+    b.x -= dx * ob; b.y -= dy * ob;
+  }
+}
+class AngleConstraint {
+  constructor(a, pivot, b, stiffness = 0.5) {
+    this.a = a; this.pivot = pivot; this.b = b;
+    this.stiffness = stiffness;
+    this.ragdoll = null; this.dead = false;
+    this.rest = Math.atan2(b.y - pivot.y, b.x - pivot.x) - Math.atan2(a.y - pivot.y, a.x - pivot.x);
+  }
+  solve() {
+    const a = this.a, p = this.pivot, b = this.b;
+    const cur = Math.atan2(b.y - p.y, b.x - p.x) - Math.atan2(a.y - p.y, a.x - p.x);
+    let diff = cur - this.rest;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const rot = diff * this.stiffness * 0.5;
+    this._rot(a, p, rot);
+    this._rot(b, p, -rot);
+  }
+  _rot(pt, pivot, ang) {
+    if (pt.pinned) return;
+    const dx = pt.x - pivot.x, dy = pt.y - pivot.y;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    pt.x = pivot.x + dx * c - dy * s;
+    pt.y = pivot.y + dx * s + dy * c;
+  }
+}
+
+function applyMaterial(part) {
+  const m = MATERIALS[part.material];
+  for (const p of [part.a, part.b]) { if (!p) continue; p.mass = m.weight; p.bounce = m.bounce; p.friction = m.friction; }
+  if (part.constraint) part.constraint.stiffness = m.stiffness;
+}
+function applyThickness(part) {
+  const r = part.thickness / 2;
+  if (part.a) part.a.radius = r;
+  if (part.b) part.b.radius = r;
+}
+
+// ======================= Герой (рагдолл) =======================
+class Ragdoll {
+  constructor(x, y, config = {}, partsCfg = {}) {
+    this.ent = newEnt();
+    this.hat = config.hat !== undefined ? config.hat : "none";
+    this.glasses = !!config.glasses;
+    this.parts = [];
+    this.struct = { armL: [], armR: [], legL: [], legR: [], head: [], stance: [] };
+    this.angleGroups = { legL: [], legR: [] };
+    this.nodes = {};
+    this.dead = false;
+    this.hp = 100; this.maxHp = 100; this.alive = true;
+    this.build(x, y, partsCfg);
+  }
+  build(x, y, cfg) {
+    const P = (lx, ly) => { const p = new Particle(x + lx, y + ly); p.ent = this.ent; particles.push(p); return p; };
+    const head = P(0, -23);
+    const neck = P(0, 0);
+    const hip  = P(0, 36);
+    const shL = P(-13, 3),   shR = P(13, 3);
+    const elbL = P(-13, 22), elbR = P(13, 22);
+    const handL = P(-13, 40), handR = P(13, 40);
+    const hipL = P(0, 36),   hipR = P(0, 36);
+    const kneeL = P(-12, 58), kneeR = P(12, 58);
+    const footL = P(-26, 82), footR = P(26, 82);
+
+    const bone = (id, label, group, a, b, color, material, thickness) => {
+      const c = new Constraint(a, b, 1); c.ragdoll = this; constraints.push(c);
+      const part = { id, label, group, type: "bone", a, b, constraint: c, color, material, thickness, ragdoll: this };
+      this.parts.push(part);
+      a.part = part; a.ragdoll = this; b.part = part; b.ragdoll = this;
+      if (cfg[id]) { part.color = cfg[id].color; part.material = cfg[id].material; part.thickness = cfg[id].thickness; }
+      applyMaterial(part); applyThickness(part);
+      return part;
+    };
+    const headPart = () => {
+      const c = new Constraint(head, neck, 1); c.ragdoll = this; constraints.push(c);
+      const part = { id: "head", label: "Голова", group: "head", type: "head", a: head, b: null, constraint: c, color: "#4caf50", material: "normal", thickness: 30, ragdoll: this };
+      this.parts.push(part);
+      head.part = part; head.ragdoll = this;
+      if (cfg.head) { part.color = cfg.head.color; part.material = cfg.head.material; part.thickness = cfg.head.thickness; }
+      applyMaterial(part); applyThickness(part);
+      return part;
+    };
+    const sc = (a, b, group, stiffness = 1) => { const c = new Constraint(a, b, stiffness); c.ragdoll = this; constraints.push(c); if (group) this.struct[group].push(c); return c; };
+    const ac = (a, pivot, b, stiffness, group) => { const c = new AngleConstraint(a, pivot, b, stiffness); c.ragdoll = this; angleCons.push(c); if (group) this.angleGroups[group].push(c); return c; };
+
+    headPart();
+    bone("torso", "Торс", "torso", neck, hip, "#e74c3c", "normal", 24);
+    bone("upperArmL", "Плечо Л", "armL", shL, elbL, "#f2c19b", "normal", 13);
+    bone("foreArmL", "Предплечье Л", "armL", elbL, handL, "#f2c19b", "normal", 13);
+    bone("upperArmR", "Плечо П", "armR", shR, elbR, "#f2c19b", "normal", 13);
+    bone("foreArmR", "Предплечье П", "armR", elbR, handR, "#f2c19b", "normal", 13);
+    bone("upperLegL", "Бедро Л", "legL", hipL, kneeL, "#3498db", "normal", 16);
+    bone("shinL", "Голень Л", "legL", kneeL, footL, "#3498db", "normal", 16);
+    bone("upperLegR", "Бедро П", "legR", hipR, kneeR, "#3498db", "normal", 16);
+    bone("shinR", "Голень П", "legR", kneeR, footR, "#3498db", "normal", 16);
+
+    sc(shL, shR, "armL"); sc(shR, shL, "armR");
+    sc(shL, neck, "armL"); sc(shR, neck, "armR");
+    sc(shL, hip, "armL");  sc(shR, hip, "armR");
+    sc(hipL, hip, "legL"); sc(hipR, hip, "legR");
+    sc(neck, kneeL, "legL", 0.65); sc(neck, kneeR, "legR", 0.65);
+    sc(hip, footL, "legL", 0.75); sc(hip, footR, "legR", 0.75);
+    sc(neck, footL, "legL", 0.3); sc(neck, footR, "legR", 0.3);
+    sc(head, hip, "head", 0.4);
+    // ступни на ширине плеч
+    sc(footL, footR, "stance", 0.65);
+
+    this.nodes = { head, neck, hip, footL, footR, handL, handR, elbL, elbR };
+  }
+  render() {
+    const dead = !this.alive;
+    for (const part of this.parts) {
+      const col = dead ? "#8b9099" : part.color;
+      if (part.type === "head") drawHead(part.a, part.thickness / 2, col, dead ? "none" : this.hat, dead ? false : this.glasses, dead);
+      else drawCapsule(part.a, part.b, part.thickness, col);
+    }
+  }
+}
+
+function ripGroup(rg, group) {
+  if (group === "head") {
+    const part = rg.parts.find(p => p.id === "head");
+    if (!part) return;
+    part.constraint.dead = true;
+    for (const c of rg.struct.head) c.dead = true;
+    part.a.part = null; part.a.ragdoll = null;
+    freeParts.push({ kind: "head", a: part.a, b: null, color: part.color, thickness: part.thickness });
+    rg.parts = rg.parts.filter(p => p.id !== "head");
+    return;
+  }
+  const defs = {
+    armL: { struct: "armL", ids: ["upperArmL", "foreArmL"] },
+    armR: { struct: "armR", ids: ["upperArmR", "foreArmR"] },
+    legL: { struct: "legL", ids: ["upperLegL", "shinL"] },
+    legR: { struct: "legR", ids: ["upperLegR", "shinR"] },
+  };
+  const d = defs[group];
+  if (!d) return;
+  for (const c of rg.struct[d.struct]) c.dead = true;
+  for (const c of (rg.angleGroups[group] || [])) c.dead = true;
+  if (group === "legL" || group === "legR") { for (const c of rg.struct.stance) c.dead = true; }
+  for (const id of d.ids) {
+    const part = rg.parts.find(p => p.id === id);
+    if (!part) continue;
+    part.constraint.ragdoll = null;
+    freeParts.push({ kind: "bone", a: part.a, b: part.b, color: part.color, thickness: part.thickness });
+    part.a.part = null; part.a.ragdoll = null; part.b.part = null; part.b.ragdoll = null;
+  }
+  rg.parts = rg.parts.filter(p => !d.ids.includes(p.id));
+}
+
+function disassemble(rg) {
+  ripGroup(rg, "head"); ripGroup(rg, "armL"); ripGroup(rg, "armR"); ripGroup(rg, "legL"); ripGroup(rg, "legR");
+  if (selectedPart && !rg.parts.includes(selectedPart)) selectedPart = null;
+  renderPanel();
+}
+function randomizeHero(rg) {
+  for (const p of rg.parts) p.color = PALETTE[(Math.random() * PALETTE.length) | 0];
+  renderPanel();
+}
+function duplicateHero(src) {
+  const cfg = { hat: src.hat, glasses: src.glasses };
+  const partsCfg = {};
+  for (const p of src.parts) partsCfg[p.id] = { color: p.color, material: p.material, thickness: p.thickness };
+  const rg = new Ragdoll(src.nodes.neck.x + 50, src.nodes.neck.y, cfg, partsCfg);
+  ragdolls.push(rg);
+  selectedRagdoll = rg; selectedPart = null;
+  renderPanel();
+}
+function addHero() {
+  const x = 120 + Math.random() * Math.max(60, W - 240);
+  const rg = new Ragdoll(x, groundY - 92, {}, {});
+  ragdolls.push(rg);
+  selectedRagdoll = rg; selectedPart = null;
+  renderPanel();
+}
+function removeRagdoll(rg) {
+  rg.dead = true;
+  for (const p of particles) if (p.ragdoll === rg) p.dead = true;
+  for (const c of constraints) if (c.ragdoll === rg) c.dead = true;
+  for (const c of angleCons) if (c.ragdoll === rg) c.dead = true;
+  if (selectedRagdoll === rg) { selectedRagdoll = null; selectedPart = null; }
+  renderPanel();
+}
+function removeObject(o) {
+  o.dead = true;
+  for (const p of o.particles) p.dead = true;
+  for (const c of o.constraints) c.dead = true;
+}
+function damageRagdoll(rg, amount) {
+  if (!rg.alive) return;
+  rg.hp -= amount;
+  if (rg.hp <= 0) { rg.hp = 0; die(rg); }
+}
+function die(rg) {
+  rg.alive = false;
+  for (const o of objects) if ((o.type === "sword" || o.type === "gun") && o.meta.equipped && o.meta.hero === rg) unequip(o);
+  effects.push({ type: "ring", x: rg.nodes.neck.x, y: rg.nodes.neck.y, r: 8, max: 46, life: 14 });
+  for (let i = 0; i < 10; i++) effects.push({ type: "spark", x: rg.nodes.neck.x, y: rg.nodes.neck.y, vx: (Math.random() - .5) * 7, vy: -Math.random() * 5 - 1, life: 20 + Math.random() * 12, color: "#9aa0a8" });
+  if (selectedRagdoll === rg) { selectedRagdoll = null; selectedPart = null; }
+  renderPanel();
+}
+function swordDamage(o) {
+  const tip = o.particles[1];
+  const v = Math.hypot(tip.x - tip.px, tip.y - tip.py);
+  if (o.meta.cool > 0) { o.meta.cool--; return; }
+  if (v < 7) return;
+  for (const rg of ragdolls) {
+    if (!rg.alive || rg === o.meta.hero) continue;
+    for (const part of rg.parts) {
+      const pts = part.type === "head" ? [part.a] : [part.a, part.b];
+      for (const p of pts) {
+        if (Math.hypot(p.x - tip.x, p.y - tip.y) < p.radius + tip.radius + 5) {
+          damageRagdoll(rg, 15);
+          o.meta.cool = 18;
+          effects.push({ type: "spark", x: p.x, y: p.y, vx: 0, vy: 0, life: 8, color: "#ff6b6b" });
+          return;
+        }
+      }
+    }
+  }
+}
+
+// ======================= Объекты =======================
+function spawnBall(x, y, o) {
+  const ent = newEnt();
+  const p = new Particle(x, y, o.mass); p.radius = o.radius; p.bounce = o.bounce; p.ent = ent;
+  const obj = { type: o.type, particles: [p], constraints: [], meta: { color: o.color }, dead: false };
+  p.obj = obj; particles.push(p); objects.push(obj);
+}
+function spawnBox(x, y, w, h, o = {}) {
+  const ent = newEnt(); const pinned = !!o.pinned;
+  const hw = w / 2, hh = h / 2;
+  const a = new Particle(x - hw, y - hh, 1, pinned), b = new Particle(x + hw, y - hh, 1, pinned);
+  const c = new Particle(x + hw, y + hh, 1, pinned), d = new Particle(x - hw, y + hh, 1, pinned);
+  for (const q of [a, b, c, d]) { q.ent = ent; q.bounce = 0.05; q.radius = 6; }
+  const cons = [new Constraint(a, b), new Constraint(b, c), new Constraint(c, d), new Constraint(d, a), new Constraint(a, c), new Constraint(b, d)];
+  const obj = { type: o.type || "box", particles: [a, b, c, d], constraints: cons, meta: { color: o.color || "#c98a4b", pinned }, dead: false };
+  for (const q of [a, b, c, d]) q.obj = obj;
+  particles.push(a, b, c, d); constraints.push(...cons); objects.push(obj);
+}
+function spawnBomb(x, y) {
+  const ent = newEnt();
+  const p = new Particle(x, y, 1.2); p.radius = 13; p.bounce = 0.2; p.ent = ent;
+  const obj = { type: "bomb", particles: [p], constraints: [], meta: { timer: 140, color: "#2b2b33" }, dead: false };
+  p.obj = obj; particles.push(p); objects.push(obj);
+}
+function spawnAt(type, x, y) {
+  if (type === "melon") spawnBall(x, y, { radius: 20, mass: 1, bounce: 0.6, color: "#3fae5a", type: "melon" });
+  else if (type === "ball") spawnBall(x, y, { radius: 17, mass: 0.8, bounce: 0.7, color: "#e74c3c", type: "ball" });
+  else if (type === "weight") spawnBall(x, y, { radius: 16, mass: 4, bounce: 0.05, color: "#5a5f6b", type: "weight" });
+  else if (type === "box") spawnBox(x, y, 44, 44);
+  else if (type === "plank") spawnBox(x, y, 110, 14, { color: "#c98a4b", type: "plank" });
+  else if (type === "platform") spawnBox(x, y, 120, 16, { pinned: true, color: "#8b95a5", type: "platform" });
+  else if (type === "bomb") spawnBomb(x, y);
+  else if (type === "sword") spawnSword(x, y);
+  else if (type === "gun") spawnGun(x, y);
+}
+
+// ======================= Оружие =======================
+function spawnSword(x, y) {
+  const ent = newEnt();
+  const grip = new Particle(x, y, 1.2); grip.radius = 4; grip.ent = ent;
+  const tip = new Particle(x + 38, y, 0.8); tip.radius = 5; tip.ent = ent;
+  const bar = new Constraint(grip, tip, 1);
+  const obj = { type: "sword", particles: [grip, tip], constraints: [bar], meta: { equipped: false, ent }, dead: false };
+  grip.obj = obj; tip.obj = obj;
+  particles.push(grip, tip); constraints.push(bar); objects.push(obj);
+}
+function spawnGun(x, y) {
+  const ent = newEnt();
+  const grip = new Particle(x, y, 1.0); grip.radius = 4; grip.ent = ent;
+  const tip = new Particle(x + 24, y, 0.7); tip.radius = 4; tip.ent = ent;
+  const bar = new Constraint(grip, tip, 1);
+  const obj = { type: "gun", particles: [grip, tip], constraints: [bar], meta: { equipped: false, ent }, dead: false };
+  grip.obj = obj; tip.obj = obj;
+  particles.push(grip, tip); constraints.push(bar); objects.push(obj);
+}
+function equip(o, rg, hand, elbow) {
+  const grip = o.particles[0], tip = o.particles[1];
+  const c1 = new Constraint(hand, grip, 1); c1.rest = 0;
+  constraints.push(c1); o.constraints.push(c1);
+  o.meta.equipped = true; o.meta.hero = rg; o.meta.hand = hand; o.meta.c1 = c1;
+  grip.ent = rg.ent; tip.ent = rg.ent;
+  if (o.type === "gun") {
+    const wl = Math.hypot(tip.x - grip.x, tip.y - grip.y);
+    const aim = new Particle(hand.x + wl, hand.y, 1, true); aim.ent = rg.ent;
+    const c2 = new Constraint(tip, aim, 1); c2.rest = 0;
+    particles.push(aim); constraints.push(c2); o.constraints.push(c2);
+    o.meta.aim = aim; o.meta.c2 = c2;
+  } else {
+    const c2 = new Constraint(elbow, tip, 0.6);
+    c2.rest = Math.hypot(hand.x - elbow.x, hand.y - elbow.y) + Math.hypot(tip.x - grip.x, tip.y - grip.y);
+    constraints.push(c2); o.constraints.push(c2);
+    o.meta.c2 = c2;
+  }
+}
+function unequip(o) {
+  if (!o.meta.equipped) return;
+  if (o.meta.c1) o.meta.c1.dead = true;
+  if (o.meta.c2) o.meta.c2.dead = true;
+  if (o.meta.aim) { o.meta.aim.dead = true; o.meta.aim = null; }
+  o.meta.c1 = o.meta.c2 = null;
+  o.particles[0].ent = o.meta.ent; o.particles[1].ent = o.meta.ent;
+  o.meta.equipped = false; o.meta.hero = null; o.meta.hand = null;
+}
+function updateGunAim() {
+  for (const o of objects) {
+    if (o.type !== "gun" || !o.meta.equipped || !o.meta.aim) continue;
+    const hand = o.meta.hand, grip = o.particles[0], tip = o.particles[1];
+    const wl = Math.hypot(tip.x - grip.x, tip.y - grip.y);
+    const dx = mouse.x - hand.x, dy = mouse.y - hand.y;
+    const d = Math.hypot(dx, dy) || 1;
+    o.meta.aim.x = hand.x + dx / d * wl;
+    o.meta.aim.y = hand.y + dy / d * wl;
+  }
+}
+function tryAutoEquip() {
+  for (const o of objects) {
+    if (o.type !== "sword" && o.type !== "gun") continue;
+    if (o.meta.equipped) continue;
+    const grip = o.particles[0];
+    for (const rg of ragdolls) {
+      for (const h of ["handL", "handR"]) {
+        const hand = rg.nodes[h];
+        if (!hand || hand.ragdoll !== rg) continue;
+        const dx = hand.x - grip.x, dy = hand.y - grip.y;
+        if (dx * dx + dy * dy < 26 * 26) { equip(o, rg, hand, rg.nodes[h === "handL" ? "elbL" : "elbR"]); return; }
+      }
+    }
+  }
+}
+function punchAt(x, y, power, R) {
+  for (const p of particles) {
+    const dx = p.x - x, dy = p.y - y, d = Math.hypot(dx, dy);
+    if (d < R && d > 0.01) { const f = power * (1 - d / R); p.px = p.x - dx / d * f; p.py = p.y - dy / d * f; }
+  }
+}
+function fireGun(o) {
+  const grip = o.particles[0], muzzle = o.particles[1];
+  const dx = mouse.x - muzzle.x, dy = mouse.y - muzzle.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const ux = dx / d, uy = dy / d;
+  let hx = muzzle.x + ux * 900, hy = muzzle.y + uy * 900, hitX = null, hitY = null, hitParticle = null;
+  outer:
+  for (let t = 4; t < 900; t += 6) {
+    const x = muzzle.x + ux * t, y = muzzle.y + uy * t;
+    if (x < 0 || x > W || y < 0 || y > groundY) { hx = x; hy = y; break; }
+    for (const p of particles) {
+      if (p.ent === muzzle.ent) continue;
+      const rr = p.radius + 5;
+      if ((p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) < rr * rr) { hx = x; hy = y; hitX = p.x; hitY = p.y; hitParticle = p; break outer; }
+    }
+    for (const q of objects) {
+      if (q.type !== "box" && q.type !== "plank" && q.type !== "platform") continue;
+      const a = q.particles[0], b = q.particles[1], c = q.particles[2], e = q.particles[3];
+      const minx = Math.min(a.x, b.x, c.x, e.x) - 4, maxx = Math.max(a.x, b.x, c.x, e.x) + 4;
+      const miny = Math.min(a.y, b.y, c.y, e.y) - 4, maxy = Math.max(a.y, b.y, c.y, e.y) + 4;
+      if (x >= minx && x <= maxx && y >= miny && y <= maxy) { hx = x; hy = y; hitX = x; hitY = y; break outer; }
+    }
+  }
+  effects.push({ type: "line", x1: muzzle.x, y1: muzzle.y, x2: hx, y2: hy, life: 5 });
+  effects.push({ type: "flash", x: muzzle.x, y: muzzle.y, r: 13, life: 4 });
+  if (hitX !== null) {
+    punchAt(hitX, hitY, 13, 52);
+    if (hitParticle && hitParticle.ragdoll && hitParticle.ragdoll.alive) damageRagdoll(hitParticle.ragdoll, 25);
+    effects.push({ type: "ring", x: hitX, y: hitY, r: 4, max: 22, life: 8 });
+    for (let i = 0; i < 6; i++) effects.push({ type: "spark", x: hitX, y: hitY, vx: (Math.random() - .5) * 8, vy: (Math.random() - .5) * 8 - 2, life: 12, color: "#ffcf5c" });
+  }
+}
+function fireGuns() {
+  const guns = objects.filter(o => o.type === "gun" && o.meta.equipped);
+  if (!guns.length) return;
+  let g = null;
+  if (selectedRagdoll) g = guns.find(x => x.meta.hero === selectedRagdoll);
+  if (!g) g = guns[0];
+  fireGun(g);
+}
+
+// ======================= Шаг физики =======================
+function collideBounds(p) {
+  const gy = groundY - p.radius;
+  if (p.y > gy) { const vy = p.y - p.py; p.y = gy; p.py = p.y + vy * p.bounce; p.px = p.x - (p.x - p.px) * groundFriction; }
+  if (p.y < p.radius) { const vy = p.y - p.py; p.y = p.radius; p.py = p.y + vy * p.bounce; }
+  if (p.x < p.radius) { const vx = p.x - p.px; p.x = p.radius; p.px = p.x + vx * p.bounce; }
+  if (p.x > W - p.radius) { const vx = p.x - p.px; p.x = W - p.radius; p.px = p.x + vx * p.bounce; }
+}
+function collidePairs() {
+  for (let i = 0; i < particles.length; i++) {
+    const a = particles[i];
+    for (let j = i + 1; j < particles.length; j++) {
+      const b = particles[j];
+      if (a.ent && a.ent === b.ent) continue;
+      const r = a.radius + b.radius;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= r * r || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, overlap = r - d;
+      const ima = a.pinned ? 0 : 1 / a.mass, imb = b.pinned ? 0 : 1 / b.mass;
+      const s = ima + imb;
+      if (s === 0) continue;
+      a.x -= nx * overlap * (ima / s); a.y -= ny * overlap * (ima / s);
+      b.x += nx * overlap * (imb / s); b.y += ny * overlap * (imb / s);
+      const rvx = (b.x - b.px) - (a.x - a.px), rvy = (b.y - b.py) - (a.y - a.py);
+      const vn = rvx * nx + rvy * ny;
+      if (vn < 0) {
+        const e = Math.min(a.bounce, b.bounce), j = -(1 + e) * vn / s;
+        a.px -= nx * j * ima; a.py -= ny * j * ima;
+        b.px += nx * j * imb; b.py += ny * j * imb;
+      }
+    }
+  }
+}
+function stepPhysics() {
+  for (const p of particles) p.integrate();
+  for (let it = 0; it < iterations; it++) {
+    for (const c of constraints) c.solve();
+    for (const c of angleCons) c.solve();
+  }
+  for (const p of particles) collideBounds(p);
+  collidePairs();
+}
+
+// ======================= Эффекты / взрывы =======================
+function explode(obj) {
+  const p = obj.particles[0];
+  effects.push({ type: "flash", x: p.x, y: p.y, r: 90, life: 8 });
+  effects.push({ type: "ring", x: p.x, y: p.y, r: 10, max: 110, life: 16 });
+  for (let i = 0; i < 18; i++) effects.push({ type: "spark", x: p.x, y: p.y, vx: (Math.random() - .5) * 10, vy: -Math.random() * 8 - 2, life: 18 + Math.random() * 16, color: "#ff9f43" });
+  const R = 130, power = 13;
+  for (const q of particles) {
+    const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+    if (d < R && d > 0.01) { const f = power * (1 - d / R); q.px = q.x - dx / d * f; q.py = q.y - dy / d * f; }
+  }
+  for (const rg of ragdolls) {
+    if (!rg.alive) continue;
+    let hit = false;
+    for (const part of rg.parts) {
+      const pts = part.type === "head" ? [part.a] : [part.a, part.b];
+      for (const q of pts) if (Math.hypot(q.x - p.x, q.y - p.y) < R) { hit = true; break; }
+      if (hit) break;
+    }
+    if (hit) damageRagdoll(rg, 40);
+  }
+  obj.dead = true; p.dead = true;
+}
+function updateEffects() {
+  for (const e of effects) {
+    e.life--;
+    if (e.type === "ring") e.r += (e.max - e.r) * 0.2;
+    if (e.type === "spark") { e.x += e.vx; e.y += e.vy; e.vy += 0.4; }
+  }
+  effects = effects.filter(e => e.life > 0);
+}
+
+// ======================= Ввод =======================
+function toLocal(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+canvas.addEventListener("mousedown", e => {
+  if (e.button !== 0) return;
+  const p = toLocal(e); mouse = p;
+  if (tool === "grab") grabStart(p.x, p.y);
+  else if (tool.startsWith("spawn:")) spawnAt(tool.slice(6), p.x, p.y);
+  else if (tool === "erase") eraseAt(p.x, p.y);
+});
+canvas.addEventListener("mousemove", e => { const p = toLocal(e); mouse = p; if (drag) { drag.mouseParticle.x = p.x; drag.mouseParticle.y = p.y; } });
+window.addEventListener("mouseup", e => { if (e.button === 0) grabEnd(); });
+canvas.addEventListener("contextmenu", e => { e.preventDefault(); const p = toLocal(e); mouse = p; punch(p.x, p.y); });
+
+function pick(x, y, r = 30) {
+  let best = null, bd = r * r;
+  for (const p of particles) {
+    const dx = p.x - x, dy = p.y - y, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+function grabStart(x, y) {
+  const p = pick(x, y);
+  if (p) {
+    if (p.obj && (p.obj.type === "sword" || p.obj.type === "gun") && p.obj.meta.equipped) unequip(p.obj);
+    drag = { particle: p, wasPinned: p.pinned };
+    p.pinned = true;
+    if (p.part) { selectedPart = p.part; selectedRagdoll = p.part.ragdoll; }
+    else { selectedPart = null; }
+    renderPanel();
+  } else {
+    selectedPart = null;
+    renderPanel();
+  }
+}
+function grabEnd() {
+  if (drag) { drag.particle.pinned = drag.wasPinned; drag = null; }
+}
+function eraseAt(x, y) {
+  const p = pick(x, y, 40);
+  if (!p) return;
+  if (p.obj) removeObject(p.obj);
+  else if (p.ragdoll) removeRagdoll(p.ragdoll);
+  else p.dead = true;
+  renderPanel();
+}
+function punch(x, y) {
+  punchAt(x, y, 30, 70);
+  for (const rg of ragdolls) {
+    if (!rg.alive) continue;
+    outer2:
+    for (const part of rg.parts) {
+      const pts = part.type === "head" ? [part.a] : [part.a, part.b];
+      for (const p of pts) if (Math.hypot(p.x - x, p.y - y) < 70) { damageRagdoll(rg, 8); break outer2; }
+    }
+  }
+  effects.push({ type: "ring", x, y, r: 10, max: 70, life: 14 });
+}
+window.addEventListener("keydown", e => {
+  if (e.code === "KeyE") { punch(mouse.x, mouse.y); return; }
+  if (e.code === "KeyF") { fireGuns(); return; }
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { jumpQueued = true; e.preventDefault(); }
+  const map = { Digit1: "grab", Digit2: "spawn:melon", Digit3: "spawn:ball", Digit4: "spawn:weight", Digit5: "spawn:box", Digit6: "spawn:plank", Digit7: "spawn:platform", Digit8: "spawn:bomb", Digit9: "erase" };
+  if (map[e.code]) setTool(map[e.code]);
+  keys.add(e.code);
+});
+window.addEventListener("keyup", e => keys.delete(e.code));
+canvas.addEventListener("wheel", e => { e.preventDefault(); gravity = gravity > 0 ? 0 : 0.5; renderPanel(); }, { passive: false });
+window.addEventListener("contextmenu", e => e.preventDefault());
+
+function handleMovement() {
+  const hero = (selectedRagdoll && selectedRagdoll.alive) ? selectedRagdoll : (ragdolls.find(r => r.alive) || null);
+  if (!hero) return;
+  const dir = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+  if (dir) {
+    for (const n of [hero.nodes.hip, hero.nodes.neck, hero.nodes.footL, hero.nodes.footR]) {
+      if (n && n.ragdoll === hero) n.addAccel(dir * (n === hero.nodes.hip || n === hero.nodes.neck ? 1.1 : 0.5), 0);
+    }
+  }
+  if (jumpQueued) {
+    jumpQueued = false;
+    if (onGround(hero)) {
+      const jp = 10;
+      for (const n of [hero.nodes.hip, hero.nodes.footL, hero.nodes.footR]) { if (n && n.ragdoll === hero) { n.py = n.y + jp; } }
+    }
+  }
+}
+function onGround(hero) {
+  for (const n of [hero.nodes.footL, hero.nodes.footR, hero.nodes.hip]) {
+    if (n && Math.abs((groundY - n.radius) - n.y) < 8) return true;
+  }
+  return false;
+}
+
+// ======================= Рендер =======================
+function drawCapsule(a, b, thickness, color) {
+  if (a.dead || b.dead) return;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.28)"; ctx.lineWidth = thickness + 4;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = thickness;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+}
+function drawCircleWithOutline(x, y, r, color) {
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath(); ctx.arc(x, y, r + 2, 0, 7); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+}
+function drawHead(p, r, color, hat, glasses, dead) {
+  drawCircleWithOutline(p.x, p.y, r, color);
+  if (dead) {
+    ctx.strokeStyle = "#1b1b22"; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.lineCap = "round";
+    const ex = r * 0.42, ey = -r * 0.08, s = r * 0.17;
+    for (const sx of [p.x - ex, p.x + ex]) {
+      ctx.beginPath(); ctx.moveTo(sx - s, p.y + ey - s); ctx.lineTo(sx + s, p.y + ey + s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + s, p.y + ey - s); ctx.lineTo(sx - s, p.y + ey + s); ctx.stroke();
+    }
+    return;
+  }
+  const ex = r * 0.42, ey = -r * 0.08;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(p.x - ex, p.y + ey, r * 0.28, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(p.x + ex, p.y + ey, r * 0.28, 0, 7); ctx.fill();
+  ctx.fillStyle = "#1b1b22";
+  ctx.beginPath(); ctx.arc(p.x - ex + r * 0.1, p.y + ey, r * 0.13, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(p.x + ex + r * 0.1, p.y + ey, r * 0.13, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#1b1b22"; ctx.lineWidth = Math.max(1.5, r * 0.1);
+  ctx.beginPath(); ctx.arc(p.x, p.y + r * 0.32, r * 0.3, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (glasses) {
+    ctx.strokeStyle = "#2c2c34"; ctx.lineWidth = Math.max(1.5, r * 0.09);
+    ctx.beginPath(); ctx.arc(p.x - ex, p.y + ey, r * 0.42, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x + ex, p.y + ey, r * 0.42, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x - ex + r * 0.42, p.y + ey); ctx.lineTo(p.x + ex - r * 0.42, p.y + ey); ctx.stroke();
+  }
+  const yTop = p.y - r;
+  if (hat === "cap") {
+    ctx.fillStyle = "#e74c3c";
+    ctx.beginPath(); ctx.ellipse(p.x, yTop - r * 0.15, r * 1.15, r * 0.55, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = "#c0392b"; ctx.fillRect(p.x - r * 1.15, yTop - r * 0.3, r * 2.3, r * 0.28);
+  } else if (hat === "tophat") {
+    ctx.fillStyle = "#2c2c34";
+    ctx.fillRect(p.x - r * 0.7, yTop - r * 1.4, r * 1.4, r * 1.3);
+    ctx.fillRect(p.x - r * 1.05, yTop - r * 0.25, r * 2.1, r * 0.28);
+  } else if (hat === "crown") {
+    ctx.fillStyle = "#f1c40f";
+    ctx.beginPath();
+    ctx.moveTo(p.x - r * 0.8, yTop - r * 0.1); ctx.lineTo(p.x - r * 0.8, yTop - r * 0.9);
+    ctx.lineTo(p.x - r * 0.4, yTop - r * 0.35); ctx.lineTo(p.x, yTop - r * 1.0);
+    ctx.lineTo(p.x + r * 0.4, yTop - r * 0.35); ctx.lineTo(p.x + r * 0.8, yTop - r * 0.9);
+    ctx.lineTo(p.x + r * 0.8, yTop - r * 0.1); ctx.closePath(); ctx.fill();
+  }
+}
+function drawMelon(x, y, r) {
+  drawCircleWithOutline(x, y, r, "#4caf50");
+  ctx.strokeStyle = "#2e7d32"; ctx.lineWidth = 2;
+  for (let i = -2; i <= 2; i++) {
+    const sx = x + i * r * 0.4;
+    ctx.beginPath();
+    ctx.ellipse(sx, y, r * 0.25, r, 0, 0, 7); ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.beginPath(); ctx.ellipse(x - r * 0.35, y - r * 0.4, r * 0.3, r * 0.2, -0.5, 0, 7); ctx.fill();
+}
+function drawQuad(a, b, c, d, color, type) {
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath(); ctx.moveTo(a.x + 2, a.y + 3); ctx.lineTo(b.x + 2, b.y + 3); ctx.lineTo(c.x + 2, c.y + 3); ctx.lineTo(d.x + 2, d.y + 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 2; ctx.stroke();
+  if (type === "plank") { ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke(); }
+}
+function renderObject(o) {
+  if (o.type === "ball" || o.type === "weight") drawCircleWithOutline(o.particles[0].x, o.particles[0].y, o.particles[0].radius, o.meta.color);
+  else if (o.type === "melon") drawMelon(o.particles[0].x, o.particles[0].y, o.particles[0].radius);
+  else if (o.type === "box" || o.type === "plank" || o.type === "platform") drawQuad(o.particles[0], o.particles[1], o.particles[2], o.particles[3], o.meta.color, o.type);
+  else if (o.type === "bomb") {
+    const p = o.particles[0];
+    drawCircleWithOutline(p.x, p.y, p.radius, "#2b2b33");
+    ctx.strokeStyle = "#c08a3e"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p.x + 2, p.y - p.radius); ctx.lineTo(p.x + 5, p.y - p.radius - 7); ctx.stroke();
+    if (o.meta.timer < 40 && (o.meta.timer % 6 < 3)) {
+      ctx.fillStyle = "#ffcf5c";
+      ctx.beginPath(); ctx.arc(p.x + 5, p.y - p.radius - 7, 4, 0, 7); ctx.fill();
+    }
+  }
+  else if (o.type === "sword") drawSword(o);
+  else if (o.type === "gun") drawGun(o);
+}
+function drawSword(o) {
+  const grip = o.particles[0], tip = o.particles[1];
+  const ang = Math.atan2(tip.y - grip.y, tip.x - grip.x);
+  ctx.strokeStyle = "#b8c2cf"; ctx.lineWidth = 6; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  ctx.strokeStyle = "#eef2f7"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(grip.x + Math.cos(ang) * 10, grip.y + Math.sin(ang) * 10); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  const gx = Math.cos(ang + Math.PI / 2) * 7, gy = Math.sin(ang + Math.PI / 2) * 7;
+  ctx.strokeStyle = "#c98a3e"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(grip.x - gx, grip.y - gy); ctx.lineTo(grip.x + gx, grip.y + gy); ctx.stroke();
+  ctx.fillStyle = "#c98a3e";
+  ctx.beginPath(); ctx.arc(grip.x - Math.cos(ang) * 5, grip.y - Math.sin(ang) * 5, 4, 0, 7); ctx.fill();
+}
+function drawGun(o) {
+  const grip = o.particles[0], tip = o.particles[1];
+  const ang = Math.atan2(tip.y - grip.y, tip.x - grip.x);
+  ctx.strokeStyle = "#3a3f4a"; ctx.lineWidth = 8; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  const hx = Math.cos(ang + Math.PI / 2) * 11, hy = Math.sin(ang + Math.PI / 2) * 11;
+  ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(grip.x + hx, grip.y + hy); ctx.stroke();
+  ctx.fillStyle = "#1c1f26";
+  ctx.beginPath(); ctx.arc(tip.x, tip.y, 4, 0, 7); ctx.fill();
+}
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 0, 0, groundY);
+  g.addColorStop(0, "#8ed6ff"); g.addColorStop(1, "#e8f7ff");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, groundY);
+  ctx.fillStyle = "rgba(255,244,180,0.9)";
+  ctx.beginPath(); ctx.arc(W - 90, 80, 42, 0, 7); ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  const cloud = (cx, cy, s) => { ctx.beginPath(); ctx.ellipse(cx, cy, 46 * s, 16 * s, 0, 0, 7); ctx.ellipse(cx + 24 * s, cy - 10 * s, 30 * s, 14 * s, 0, 0, 7); ctx.ellipse(cx - 26 * s, cy - 6 * s, 26 * s, 12 * s, 0, 0, 7); ctx.fill(); };
+  cloud(150, 90, 1); cloud(W - 240, 130, 0.8); cloud(360, 60, 0.6);
+}
+function drawGround() {
+  ctx.fillStyle = "#5b4636"; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = "#4caf50"; ctx.fillRect(0, groundY, W, 15);
+  ctx.fillStyle = "#66bb6a"; ctx.fillRect(0, groundY, W, 5);
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  for (let x = 10; x < W; x += 34) { ctx.fillRect(x, groundY + 22 + (x % 3) * 7, 2, 3); }
+}
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawGround();
+  for (const o of objects) renderObject(o);
+  for (const f of freeParts) { if (f.kind === "bone") drawCapsule(f.a, f.b, f.thickness, f.color); else drawCircleWithOutline(f.a.x, f.a.y, f.thickness / 2, f.color); }
+  for (const rg of ragdolls) rg.render();
+  if (selectedPart && selectedPart.ragdoll && selectedPart.ragdoll.parts.includes(selectedPart)) {
+    ctx.strokeStyle = "#7ed957"; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+    const pts = selectedPart.type === "head" ? [selectedPart.a] : [selectedPart.a, selectedPart.b];
+    for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 9, 0, 7); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+  for (const rg of ragdolls) {
+    if (!rg.alive) continue;
+    const head = rg.nodes.head && rg.nodes.head.ragdoll === rg ? rg.nodes.head : rg.nodes.neck;
+    const r = head.radius || 15;
+    const topY = head.y - r;
+    const w = 46, x = head.x - w / 2, y = topY - 14;
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(x, y, w, 6);
+    const frac = Math.max(0, rg.hp / rg.maxHp);
+    ctx.fillStyle = frac > 0.5 ? "#4caf50" : frac > 0.25 ? "#f1c40f" : "#e74c3c";
+    ctx.fillRect(x + 1, y + 1, (w - 2) * frac, 4);
+  }
+  const hero = (selectedRagdoll && selectedRagdoll.alive) ? selectedRagdoll : (ragdolls.find(r => r.alive) || null);
+  if (hero) {
+    const head = hero.nodes.head && hero.nodes.head.ragdoll === hero ? hero.nodes.head : hero.nodes.neck;
+    const r = head.radius || 15;
+    const topY = head.y - r;
+    ctx.fillStyle = "#ffd43b";
+    ctx.beginPath(); ctx.moveTo(head.x, topY - 30); ctx.lineTo(head.x - 9, topY - 43); ctx.lineTo(head.x + 9, topY - 43); ctx.closePath(); ctx.fill();
+  }
+  for (const e of effects) {
+    if (e.type === "ring") { ctx.strokeStyle = "rgba(255,255,255," + (e.life / 14) + ")"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 7); ctx.stroke(); }
+    else if (e.type === "flash") { const a = e.life / 8; ctx.fillStyle = "rgba(255,200,80," + (a * 0.6) + ")"; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 7); ctx.fill(); }
+    else if (e.type === "line") { ctx.strokeStyle = "rgba(255,220,120," + (e.life / 5) + ")"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(e.x1, e.y1); ctx.lineTo(e.x2, e.y2); ctx.stroke(); }
+    else if (e.type === "spark") { ctx.fillStyle = e.color || "#ffcf5c"; ctx.fillRect(e.x - 2, e.y - 2, 4, 4); }
+  }
+}
+
+// ======================= Панель =======================
+function renderPanel() {
+  let html = "";
+  if (selectedPart && selectedPart.ragdoll && selectedPart.ragdoll.parts.includes(selectedPart)) {
+    const part = selectedPart;
+    html += `<div class="partname">${part.label}</div><div class="dim">деталь Мелона</div>`;
+    html += `<div class="row-label">Цвет</div><div class="swatches">`;
+    for (const c of PALETTE) html += `<button class="swatch${c === part.color ? " sel" : ""}" data-action="color" data-color="${c}" style="background:${c}"></button>`;
+    html += `</div>`;
+    html += `<div class="row-label">Материал</div><div class="btns">`;
+    for (const k in MATERIALS) html += `<button data-action="material" data-material="${k}" class="${part.material === k ? "on" : ""}">${MATERIALS[k].label}</button>`;
+    html += `</div>`;
+    html += `<div class="row-label">Толщина: ${part.thickness}</div><input type="range" data-prop="thickness" min="${part.type === "head" ? 18 : 6}" max="${part.type === "head" ? 56 : 40}" value="${part.thickness}">`;
+    if (part.group !== "torso") html += `<div class="row-label"></div><button class="danger" data-action="rip">✂️ Оторвать деталь</button>`;
+    html += `<hr>`;
+  }
+  const hero = selectedRagdoll || ragdolls[0];
+  if (hero) {
+    html += `<h3>Мелон</h3>`;
+    html += `<div class="row-label">${hero.alive ? `❤️ Здоровье: ${Math.ceil(hero.hp)} / ${hero.maxHp}` : `💀 Мёртв`}</div>`;
+    if (hero.alive) html += `<div class="btns"><button data-action="heal">❤️ Лечить</button></div>`;
+    html += `<div class="row-label">Шляпа</div><div class="btns">`;
+    for (const h of HATS) html += `<button data-action="hat" data-hat="${h.id}" class="${hero.hat === h.id ? "on" : ""}">${h.label}</button>`;
+    html += `</div>`;
+    html += `<div class="row-label">Очки</div><button data-action="glasses" class="${hero.glasses ? "on" : ""}">${hero.glasses ? "Да" : "Нет"}</button>`;
+    html += `<div class="row-label">Действия</div><div class="btns">`;
+    html += `<button data-action="dup">⧉ Дубль</button>`;
+    html += `<button data-action="randomize">🎲 Цвета</button>`;
+    html += `<button data-action="disassemble">💥 Разобрать</button>`;
+    html += `<button class="danger" data-action="deleteHero">🗑 Удалить</button>`;
+    html += `</div>`;
+    html += `<hr>`;
+  }
+  html += `<h3>Мир</h3><div class="btns">`;
+  html += `<button data-action="addHero">➕ Мелон</button>`;
+  html += `<button data-action="gravity" class="${gravity > 0 ? "on" : ""}">🌍 Гравитация</button>`;
+  html += `<button data-action="reset">↺ Сброс</button>`;
+  html += `</div>`;
+  html += `<div class="row-label dim" style="margin-top:14px">Клик по детали — менять цвет/материал/толщину. Поднеси меч или пистолет к руке — прикрепится. F — выстрел.</div>`;
+  panelEl.innerHTML = html;
+}
+panelEl.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const a = b.dataset.action;
+  const hero = () => selectedRagdoll || ragdolls[0];
+  if (a === "color" && selectedPart) { selectedPart.color = b.dataset.color; renderPanel(); }
+  else if (a === "material" && selectedPart) { selectedPart.material = b.dataset.material; applyMaterial(selectedPart); renderPanel(); }
+  else if (a === "rip" && selectedPart) { ripGroup(selectedPart.ragdoll, selectedPart.group); if (!selectedPart.ragdoll.parts.includes(selectedPart)) selectedPart = null; renderPanel(); }
+  else if (a === "hat" && hero()) { hero().hat = b.dataset.hat; renderPanel(); }
+  else if (a === "glasses" && hero()) { hero().glasses = !hero().glasses; renderPanel(); }
+  else if (a === "dup" && hero()) duplicateHero(hero());
+  else if (a === "randomize" && hero()) randomizeHero(hero());
+  else if (a === "disassemble" && hero()) disassemble(hero());
+  else if (a === "deleteHero" && hero()) removeRagdoll(hero());
+  else if (a === "heal" && hero()) { hero().hp = hero().maxHp; renderPanel(); }
+  else if (a === "addHero") addHero();
+  else if (a === "gravity") { gravity = gravity > 0 ? 0 : 0.5; renderPanel(); }
+  else if (a === "reset") resetWorld();
+});
+panelEl.addEventListener("input", e => {
+  if (e.target.dataset.prop === "thickness" && selectedPart) {
+    selectedPart.thickness = +e.target.value;
+    applyThickness(selectedPart);
+    renderPanel();
+  }
+});
+
+// ======================= Инструменты =======================
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll("#toolbar button[data-tool]").forEach(b => b.classList.toggle("active", b.dataset.tool === t));
+}
+document.querySelectorAll("#toolbar button[data-tool]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+
+// ======================= Сброс =======================
+function resetWorld() {
+  for (const p of particles) p.dead = true;
+  for (const c of constraints) c.dead = true;
+  for (const o of objects) o.dead = true;
+  for (const rg of ragdolls) rg.dead = true;
+  particles = []; constraints = []; angleCons = []; objects = []; ragdolls = []; freeParts = []; effects = [];
+  selectedPart = null; selectedRagdoll = null; drag = null;
+  addHero();
+}
+
+// ======================= Цикл =======================
+function update() {
+  if (drag) {
+    const p = drag.particle;
+    if (p.dead) { drag = null; }
+    else {
+      const dx = mouse.x - p.x, dy = mouse.y - p.y, d = Math.hypot(dx, dy);
+      if (d > 1) { const step = Math.min(d, 26); p.x += dx / d * step; p.y += dy / d * step; }
+    }
+  }
+  handleMovement();
+  tryAutoEquip();
+  updateGunAim();
+  for (const o of objects) if (o.type === "sword") swordDamage(o);
+  for (const o of objects) if (o.type === "bomb") { o.meta.timer--; if (o.meta.timer <= 0) explode(o); }
+  for (let s = 0; s < substeps; s++) stepPhysics();
+  updateEffects();
+  particles = particles.filter(p => !p.dead);
+  constraints = constraints.filter(c => !c.dead && !c.a.dead && !c.b.dead);
+  angleCons = angleCons.filter(c => !c.dead && !c.a.dead && !c.pivot.dead && !c.b.dead);
+  objects = objects.filter(o => !o.dead);
+  ragdolls = ragdolls.filter(r => !r.dead);
+  freeParts = freeParts.filter(f => (f.a ? !f.a.dead : true) && (f.b ? !f.b.dead : true));
+}
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ======================= Старт =======================
+resize();
+addHero();
+loop();
+</script>
+</body>
+</html>

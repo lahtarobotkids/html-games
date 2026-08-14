@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Арбузная песочница 2D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #14141f 0%, #232336 100%);
+    color: #e8e8f0;
+    padding: 14px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .topbar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    width: 100%;
+    max-width: 880px;
+  }
+
+  h1 { font-size: 1.7rem; letter-spacing: 1px; }
+  .subtitle { color: #9a9ab8; font-size: 0.9rem; }
+
+  .tools {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .tools button {
+    background: #34344f;
+    color: #e8e8f0;
+    border: 1px solid #55558a;
+    border-radius: 9px;
+    padding: 8px 13px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.08s;
+  }
+
+  .tools button:hover { background: #42425f; }
+  .tools button:active { transform: scale(0.95); }
+  .tools button.active {
+    background: #f4a261;
+    color: #1e1e2e;
+    border-color: #ffb877;
+    box-shadow: 0 0 12px rgba(244,162,97,0.4);
+  }
+  .tools button.danger { color: #ff7b72; }
+
+  .scoreline { font-size: 1rem; color: #9a9ab8; }
+  .scoreline b { color: #ff7b72; font-size: 1.2rem; }
+
+  #game {
+    width: min(96vw, 880px);
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #aee3ff;
+    border: 3px solid #44446e;
+    border-radius: 12px;
+    cursor: grab;
+    touch-action: none;
+    box-shadow: 0 12px 50px rgba(0,0,0,0.5);
+  }
+
+  .hint {
+    margin-top: 10px;
+    color: #9a9ab8;
+    font-size: 0.9rem;
+    min-height: 1.3em;
+    text-align: center;
+  }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 1.3rem; }
+    .tools button { padding: 7px 10px; font-size: 0.85rem; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>🍉 Арбузная песочница 2D</h1>
+    <div class="subtitle">Помучай арбуз: режь, стреляй, взрывай — всё в пикселях</div>
+    <div class="tools">
+      <button data-tool="grab" class="active">✋ Тянуть</button>
+      <button data-tool="slice">🔪 Резать</button>
+      <button data-tool="gun">🔫 Пушка</button>
+      <button data-tool="hammer">🔨 Молот</button>
+      <button data-tool="bomb">💣 Бомба</button>
+      <button data-action="spawn">🍉 + Арбуз</button>
+      <button data-action="reset" class="danger">🗑️ Сброс</button>
+      <button data-action="sound">🔊 Звук</button>
+    </div>
+    <div class="scoreline">Урон: <b id="score">0</b></div>
+  </div>
+
+  <canvas id="game"></canvas>
+  <div class="hint" id="hint">✋ Зажми арбуз и тяни — бросай, кидай!</div>
+
+<script>
+(() => {
+  const W = 400, H = 240;
+  const GROUND = H - 14;
+  const GRAV = 0.32;
+  const canvas = document.getElementById('game');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // ---------- Состояние ----------
+  let bodies = [];     // арбузы, куски, бомбы, пули
+  let particles = [];  // сок / дым / искры
+  let activeTool = 'grab';
+  let score = 0;
+  let shake = 0;
+  let soundOn = true;
+  let uid = 0;
+  let mousePos = { x: W/2, y: H/2 };
+
+  const stains = document.createElement('canvas');
+  stains.width = W; stains.height = H;
+  const sctx = stains.getContext('2d');
+
+  const scoreEl = document.getElementById('score');
+  const hintEl = document.getElementById('hint');
+
+  // ---------- Звук ----------
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let audio = null;
+  function ensureAudio() {
+    if (!audio) { try { audio = new AC(); } catch(e) { return; } }
+    if (audio.state === 'suspended') audio.resume();
+  }
+  function beep(freq, dur, type='square', vol=0.12, slideTo=0) {
+    if (!soundOn || !audio) return;
+    try {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, audio.currentTime);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), audio.currentTime + dur);
+      g.gain.setValueAtTime(vol, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+      o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + dur);
+    } catch(e) {}
+  }
+  function noiseBurst(dur=0.18, vol=0.25) {
+    if (!soundOn || !audio) return;
+    try {
+      const len = Math.floor(audio.sampleRate * dur);
+      const buf = audio.createBuffer(1, len, audio.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1 - i/len);
+      const src = audio.createBufferSource(); src.buffer = buf;
+      const g = audio.createGain(); g.gain.value = vol;
+      src.connect(g); g.connect(audio.destination); src.start();
+    } catch(e) {}
+  }
+  function sfx(name) {
+    if (name === 'slice')  { noiseBurst(0.08, 0.18); beep(900, 0.08, 'sawtooth', 0.05, 300); }
+    if (name === 'shoot')  { beep(500, 0.06, 'square', 0.08, 150); }
+    if (name === 'hit')    { beep(160, 0.08, 'triangle', 0.15, 90); }
+    if (name === 'thud')   { beep(120, 0.12, 'triangle', 0.2, 60); }
+    if (name === 'boom')   { noiseBurst(0.35, 0.4); beep(90, 0.3, 'sine', 0.25, 40); }
+    if (name === 'spawn')  { beep(300, 0.15, 'sine', 0.1, 500); }
+  }
+
+  // ---------- Геометрия ----------
+  function polyCentroid(verts) {
+    let A=0, cx=0, cy=0;
+    for (let i=0;i<verts.length;i++) {
+      const p=verts[i], q=verts[(i+1)%verts.length];
+      const cross = p.x*q.y - q.x*p.y;
+      A += cross; cx += (p.x+q.x)*cross; cy += (p.y+q.y)*cross;
+    }
+    A *= 0.5;
+    if (Math.abs(A) < 1e-6) {
+      let sx=0, sy=0; verts.forEach(v=>{sx+=v.x; sy+=v.y;});
+      return { x: sx/verts.length, y: sy/verts.length };
+    }
+    return { x: cx/(6*A), y: cy/(6*A) };
+  }
+  function polyRadius(verts, c) {
+    let m=0; verts.forEach(v=>{ const dx=v.x-c.x, dy=v.y-c.y; m=Math.max(m, dx*dx+dy*dy); });
+    return Math.sqrt(m);
+  }
+  function polyArea(verts) {
+    let A=0;
+    for (let i=0;i<verts.length;i++) { const p=verts[i], q=verts[(i+1)%verts.length]; A += p.x*q.y - q.x*p.y; }
+    return Math.abs(A)*0.5;
+  }
+  function shrinkPoly(verts, t) {
+    const c = polyCentroid(verts);
+    return verts.map(v => {
+      const dx=v.x-c.x, dy=v.y-c.y, l=Math.hypot(dx,dy)||1;
+      return { x: v.x - dx/l*t, y: v.y - dy/l*t };
+    });
+  }
+  function pointInPoly(p, poly) {
+    let inside=false;
+    for (let i=0,j=poly.length-1;i<poly.length;j=i++) {
+      const pi=poly[i], pj=poly[j];
+      if (((pi.y>p.y)!==(pj.y>p.y)) && (p.x < (pj.x-pi.x)*(p.y-pi.y)/(pj.y-pi.y)+pi.x)) inside=!inside;
+    }
+    return inside;
+  }
+  function clipPoly(poly, a, b, keep) {
+    const out=[], N=poly.length;
+    const dx=b.x-a.x, dy=b.y-a.y;
+    const side = p => dx*(p.y-a.y) - dy*(p.x-a.x);
+    for (let i=0;i<N;i++) {
+      const cur=poly[i], nxt=poly[(i+1)%N];
+      const sc=side(cur), sn=side(nxt);
+      const curIn = keep ? sc>=0 : sc<=0;
+      const nxtIn = keep ? sn>=0 : sn<=0;
+      if (curIn) out.push(cur);
+      if (curIn !== nxtIn) {
+        const t = sc/(sc-sn);
+        out.push({ x: cur.x + t*(nxt.x-cur.x), y: cur.y + t*(nxt.y-cur.y) });
+      }
+    }
+    return out;
+  }
+  function segDist(p, a, b) {
+    const dx=b.x-a.x, dy=b.y-a.y, l2=dx*dx+dy*dy;
+    if (l2===0) return Math.hypot(p.x-a.x, p.y-a.y);
+    let t=((p.x-a.x)*dx+(p.y-a.y)*dy)/l2; t=Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x-(a.x+t*dx), p.y-(a.y+t*dy));
+  }
+
+  // ---------- Создание тел ----------
+  function makeMelon(x, y, r=26) {
+    const N=24, verts=[];
+    for (let i=0;i<N;i++) { const a=i/N*Math.PI*2; verts.push({ x: Math.cos(a)*r, y: Math.sin(a)*r }); }
+    const seeds=[];
+    const seedAng=[0.55, 1.55, 2.55, 3.7, 4.7, 5.8];
+    for (let i=0;i<6;i++) { const a=seedAng[i]; seeds.push({ x: Math.cos(a)*r*0.5, y: Math.sin(a)*r*0.42 }); }
+    return {
+      type:'melon', verts, flesh: shrinkPoly(verts, r*0.18),
+      pos:{x, y}, vel:{ x:(Math.random()-0.5)*2, y:0 },
+      angle:0, angVel:0, radius:r, seeds, damage:0, faceT:0, id:++uid
+    };
+  }
+
+  function makeBomb(x, y) {
+    return { type:'bomb', verts:[], flesh:[], pos:{x, y: Math.min(y, GROUND-6)}, vel:{x:0,y:0},
+      angle:0, angVel:0, radius:6, seeds:[], damage:0, faceT:0, fuse:70, id:++uid };
+  }
+
+  function makeBullet(from, to) {
+    const dx=to.x-from.x, dy=to.y-from.y, l=Math.hypot(dx,dy)||1, sp=13;
+    return { type:'bullet', verts:[], flesh:[], pos:{...from}, vel:{x:dx/l*sp, y:dy/l*sp},
+      angle:0, angVel:0, radius:2, seeds:[], damage:0, faceT:0, id:++uid, life:120 };
+  }
+
+  function sliceBody(body, a, b) {
+    const cos=Math.cos(-body.angle), sin=Math.sin(-body.angle);
+    const toLocal = p => { const dx=p.x-body.pos.x, dy=p.y-body.pos.y; return { x: dx*cos - dy*sin, y: dx*sin + dy*cos }; };
+    const la=toLocal(a), lb=toLocal(b);
+    const pA=clipPoly(body.verts, la, lb, true);
+    const pB=clipPoly(body.verts, la, lb, false);
+    if (pA.length<3 || pB.length<3) return [body];
+    const res=[];
+    for (const verts of [pA, pB]) {
+      const c=polyCentroid(verts);
+      const v2=verts.map(v=>({ x:v.x-c.x, y:v.y-c.y }));
+      const r=polyRadius(v2, {x:0,y:0});
+      const wp={ x: body.pos.x + c.x*cos - c.y*sin, y: body.pos.y + c.x*sin + c.y*cos };
+      const flesh = polyArea(v2) > 80 ? shrinkPoly(v2, 3) : v2;
+      res.push({ type:'piece', verts:v2, flesh, pos:wp,
+        vel:{x:body.vel.x, y:body.vel.y}, angle:body.angle, angVel:body.angVel,
+        radius:r, seeds:body.seeds, damage:body.damage, faceT:0, id:++uid });
+    }
+    const nx=-(lb.y-la.y), ny=(lb.x-la.x), nl=Math.hypot(nx,ny)||1;
+    const wn={ x:(nx/nl)*cos - (ny/nl)*sin, y:(nx/nl)*sin + (ny/nl)*cos };
+    res[0].vel.x += wn.x*1.6; res[0].vel.y += wn.y*1.6;
+    res[1].vel.x -= wn.x*1.6; res[1].vel.y -= wn.y*1.6;
+    res[0].angVel += (Math.random()-0.5)*0.3;
+    res[1].angVel += (Math.random()-0.5)*0.3;
+    return res;
+  }
+
+  // ---------- Частицы ----------
+  function spawnJuice(x, y, n) {
+    for (let i=0;i<n;i++) {
+      const a=Math.random()*Math.PI*2, sp=1+Math.random()*3.5;
+      particles.push({ kind:'juice', x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1,
+        life:20+Math.random()*25, maxLife:45, size:2+Math.random()*2,
+        color:['#ff5d5d','#ff3b3b','#e03333','#ff7a7a'][Math.floor(Math.random()*4)] });
+    }
+  }
+  function spawnSmoke(x, y, n) {
+    for (let i=0;i<n;i++) {
+      const a=Math.random()*Math.PI*2, sp=0.5+Math.random()*1.5;
+      particles.push({ kind:'smoke', x:x+(Math.random()-0.5)*10, y:y+(Math.random()-0.5)*10,
+        vx:Math.cos(a)*sp, vy:-Math.random()*1.2, life:15+Math.random()*20, maxLife:35,
+        size:3+Math.random()*4, color:['#777','#999','#ff9d5c','#555'][Math.floor(Math.random()*4)] });
+    }
+  }
+  function splat(x, y) {
+    sctx.fillStyle = 'rgba(150,35,35,0.5)';
+    for (let i=0;i<4;i++) {
+      sctx.fillRect(x + (Math.random()-0.5)*8, GROUND-1 + (Math.random()-0.5)*2, 2+Math.random()*3, 1+Math.random()*2);
+    }
+  }
+
+  // ---------- Действия инструментов ----------
+  function pickBody(p) {
+    for (let i=bodies.length-1;i>=0;i--) {
+      const b=bodies[i];
+      if (b.type==='melon' || b.type==='piece' || b.type==='bomb') {
+        if (Math.hypot(p.x-b.pos.x, p.y-b.pos.y) <= b.radius+4) return b;
+      }
+    }
+    return null;
+  }
+
+  function doSlice(a, b) {
+    let sliced=false;
+    const toRemove=[], toAdd=[];
+    for (let i=0;i<bodies.length;i++) {
+      const body=bodies[i];
+      if (body.type!=='melon' && body.type!=='piece') continue;
+      if (segDist(body.pos, a, b) > body.radius) continue;
+      const parts = sliceBody(body, a, b);
+      if (parts.length===1) continue;
+      toRemove.push(i);
+      for (const p of parts) {
+        if (polyArea(p.verts) < 60) spawnJuice(p.pos.x, p.pos.y, 8);
+        else toAdd.push(p);
+      }
+      sliced=true;
+    }
+    if (sliced) {
+      for (let i=toRemove.length-1;i>=0;i--) bodies.splice(toRemove[i],1);
+      bodies.push(...toAdd);
+      score+=5; updateScore();
+      sfx('slice');
+      spawnJuice((a.x+b.x)/2, (a.y+b.y)/2, 6);
+    }
+  }
+
+  function shoot(target) {
+    const from={ x: W/2, y: GROUND-4 };
+    bodies.push(makeBullet(from, target));
+    spawnSmoke(from.x, from.y, 3);
+    shake = Math.max(shake, 2);
+    sfx('shoot');
+  }
+
+  function hammer(p) {
+    const b = pickBody(p);
+    if (b) {
+      b.vel.y += 7; b.vel.x += (Math.random()-0.5)*2;
+      b.angVel += (Math.random()-0.5)*0.6;
+      b.damage++; b.faceT=12;
+      spawnJuice(b.pos.x, b.pos.y, 8);
+      score+=2; updateScore();
+      shake = Math.max(shake, 6);
+      sfx('thud');
+    } else {
+      sfx('hit');
+    }
+  }
+
+  function placeBomb(p) {
+    bodies.push(makeBomb(p.x, p.y));
+    sfx('spawn');
+  }
+
+  function explode(pos) {
+    shake=16;
+    sfx('boom');
+    spawnSmoke(pos.x, pos.y, 18);
+    spawnJuice(pos.x, pos.y, 20);
+    for (let i=0;i<bodies.length;i++) {
+      const b=bodies[i];
+      if (b.type!=='melon' && b.type!=='piece' && b.type!=='bomb') continue;
+      const d=Math.hypot(b.pos.x-pos.x, b.pos.y-pos.y);
+      if (d < 110) {
+        const f=(110-d)/110, ang=Math.atan2(b.pos.y-pos.y, b.pos.x-pos.x);
+        b.vel.x += Math.cos(ang)*8*f;
+        b.vel.y += Math.sin(ang)*8*f - 4*f;
+        b.angVel += (Math.random()-0.5)*0.5*f;
+        if (b.type==='bomb') { b.fuse = Math.min(b.fuse, 3); }
+        else { b.damage++; b.faceT=10; }
+        score += Math.round(3*f)+1;
+      }
+    }
+    updateScore();
+  }
+
+  function spawnMelon() {
+    const r = 22 + Math.random()*10;
+    bodies.push(makeMelon(30+Math.random()*(W-60), -r, r));
+    sfx('spawn');
+  }
+
+  function reset() {
+    bodies=[]; particles=[];
+    sctx.clearRect(0,0,W,H);
+    score=0; updateScore();
+    for (let i=0;i<2;i++) {
+      const r=26;
+      bodies.push(makeMelon(100+i*200, GROUND-r, r));
+    }
+  }
+
+  function updateScore() { scoreEl.textContent = score; }
+
+  // ---------- Инструменты UI ----------
+  const HINTS = {
+    grab:  '✋ Зажми арбуз и тяни — бросай, кидай!',
+    slice: '🔪 Проведи линией по арбузу, чтобы разрезать',
+    gun:   '🔫 Кликни — выстрел из пушки в точку',
+    hammer:'🔨 Кликни по арбузу — удар молотом!',
+    bomb:  '💣 Кликни — поставить бомбу (взорвётся через секунду)'
+  };
+  const CURSORS = { grab:'grab', slice:'crosshair', gun:'crosshair', hammer:'crosshair', bomb:'crosshair' };
+
+  function setTool(t) {
+    activeTool = t;
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool===t));
+    canvas.style.cursor = CURSORS[t];
+    hintEl.textContent = HINTS[t];
+  }
+  document.querySelectorAll('[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => setTool(btn.dataset.tool));
+  });
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ensureAudio();
+      const a = btn.dataset.action;
+      if (a==='spawn') spawnMelon();
+      else if (a==='reset') reset();
+      else if (a==='sound') { soundOn=!soundOn; btn.textContent = soundOn ? '🔊 Звук' : '🔇 Звук'; }
+    });
+  });
+
+  // ---------- Ввод ----------
+  function worldPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x:(e.clientX-rect.left)*(W/rect.width), y:(e.clientY-rect.top)*(H/rect.height) };
+  }
+  let dragging=false, dragBody=null, dragOff={x:0,y:0};
+  let sliceStart=null, sliceCur=null;
+
+  canvas.addEventListener('pointerdown', e => {
+    ensureAudio();
+    const p = worldPos(e);
+    if (activeTool==='grab') {
+      const b = pickBody(p);
+      if (b) {
+        dragging=true; dragBody=b;
+        dragOff={ x:p.x-b.pos.x, y:p.y-b.pos.y };
+        canvas.style.cursor='grabbing';
+        try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+      }
+    } else if (activeTool==='slice') {
+      sliceStart=p; sliceCur=p;
+      try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+    } else if (activeTool==='gun') {
+      shoot(p);
+    } else if (activeTool==='hammer') {
+      hammer(p);
+    } else if (activeTool==='bomb') {
+      placeBomb(p);
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    mousePos = worldPos(e);
+    const p = mousePos;
+    if (dragging && dragBody) {
+      const nx=p.x-dragOff.x, ny=p.y-dragOff.y;
+      dragBody.vel={ x:(nx-dragBody.pos.x)*0.9, y:(ny-dragBody.pos.y)*0.9 };
+      dragBody.pos={ x:nx, y:ny };
+      dragBody.angVel *= 0.9;
+    }
+    if (sliceStart) sliceCur = p;
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    if (dragging) { dragging=false; dragBody=null; canvas.style.cursor=CURSORS[activeTool]; }
+    if (sliceStart) {
+      if (Math.hypot(sliceCur.x-sliceStart.x, sliceCur.y-sliceStart.y) > 6) doSlice(sliceStart, sliceCur);
+      sliceStart=null; sliceCur=null;
+    }
+  });
+
+  // ---------- Обновление ----------
+  function update() {
+    const explosions=[];
+    for (let i=bodies.length-1;i>=0;i--) {
+      const b=bodies[i];
+      if (b.type==='bomb') {
+        b.fuse--;
+        b.vel.y += GRAV;
+        b.pos.x += b.vel.x; b.pos.y += b.vel.y;
+        if (b.pos.y + b.radius > GROUND) { b.pos.y = GROUND-b.radius; b.vel.y*=-0.3; b.vel.x*=0.85; }
+        if (b.fuse <= 0) { bodies.splice(i,1); explosions.push(b.pos); }
+        continue;
+      }
+      if (b.type==='bullet') {
+        b.life--;
+        b.pos.x += b.vel.x; b.pos.y += b.vel.y;
+        let hit=false;
+        for (let j=bodies.length-1;j>=0;j--) {
+          const t=bodies[j];
+          if (t===b) continue;
+          if (t.type!=='melon' && t.type!=='piece') continue;
+          if (Math.hypot(b.pos.x-t.pos.x, b.pos.y-t.pos.y) < b.radius + t.radius) {
+            t.vel.x += b.vel.x*0.06; t.vel.y += b.vel.y*0.06;
+            t.damage++; t.faceT=12;
+            spawnJuice(b.pos.x, b.pos.y, 10);
+            score+=3; updateScore();
+            shake = Math.max(shake, 4);
+            sfx('hit');
+            hit=true; break;
+          }
+        }
+        if (hit || b.life<=0 || b.pos.x<0 || b.pos.x>W || b.pos.y<0 || b.pos.y>H) bodies.splice(i,1);
+        continue;
+      }
+      // melon / piece
+      b.vel.y += GRAV;
+      b.pos.x += b.vel.x; b.pos.y += b.vel.y;
+      b.angle += b.angVel;
+      if (b.faceT>0) b.faceT--;
+      if (b.pos.y + b.radius > GROUND) {
+        b.pos.y = GROUND - b.radius;
+        if (Math.abs(b.vel.y) > 0.6) { spawnJuice(b.pos.x, GROUND, 2); }
+        b.vel.y *= -0.35;
+        b.vel.x *= 0.9;
+        b.angVel *= 0.9;
+        if (Math.abs(b.vel.y) < 0.5) b.vel.y = 0;
+      }
+      if (b.pos.x - b.radius < 0) { b.pos.x=b.radius; b.vel.x*=-0.4; }
+      if (b.pos.x + b.radius > W) { b.pos.x=W-b.radius; b.vel.x*=-0.4; }
+      if (Math.abs(b.vel.x) < 0.02 && b.pos.y+b.radius >= GROUND-0.5 && Math.abs(b.angVel)<0.005) {
+        b.vel.x=0; b.angVel=0;
+      }
+    }
+
+    for (const pos of explosions) explode(pos);
+
+    for (let i=particles.length-1;i>=0;i--) {
+      const p=particles[i];
+      p.life--;
+      if (p.kind==='smoke') { p.vy -= 0.01; }
+      else { p.vy += GRAV*0.7; }
+      p.x += p.vx; p.y += p.vy;
+      if (p.kind==='juice' && p.y >= GROUND) { splat(p.x, p.y); particles.splice(i,1); continue; }
+      if (p.life<=0) { particles.splice(i,1); continue; }
+    }
+
+    // Лимит тел: превращаем мелкие куски в сок
+    if (bodies.length > 220) {
+      for (let i=bodies.length-1;i>=0 && bodies.length>220;i--) {
+        const b=bodies[i];
+        if (b.type==='piece' && polyArea(b.verts) < 300) {
+          spawnJuice(b.pos.x, b.pos.y, 6);
+          bodies.splice(i,1);
+        }
+      }
+    }
+    if (particles.length > 600) particles.splice(0, particles.length-600);
+
+    if (shake>0) shake *= 0.88; if (shake<0.2) shake=0;
+  }
+
+  // ---------- Отрисовка ----------
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0,0,0,GROUND);
+    g.addColorStop(0, '#8fd3ff'); g.addColorStop(1, '#dff4ff');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,GROUND);
+    // солнце
+    ctx.fillStyle='#ffe66d'; ctx.fillRect(W-46, 16, 22, 22);
+    ctx.fillStyle='#fff3b0'; ctx.fillRect(W-42, 20, 14, 14);
+    // облака
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.fillRect(40,26,40,10); ctx.fillRect(52,20,26,8);
+    ctx.fillRect(190,44,48,10); ctx.fillRect(204,38,30,8);
+    // земля
+    ctx.fillStyle='#62c16a'; ctx.fillRect(0,GROUND,W,6);
+    ctx.fillStyle='#9a6a3f'; ctx.fillRect(0,GROUND+6,W,H-GROUND-6);
+    ctx.fillStyle='#7a5230'; ctx.fillRect(0,GROUND+6,W,3);
+  }
+
+  function drawMelonShape(b) {
+    const r=b.radius;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
+    ctx.fillStyle='#3fa84f'; ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.fillStyle='#2c8a3a';
+    ctx.fillRect(-0.78*r, -r, 0.34*r, 2*r);
+    ctx.fillRect(-0.17*r, -r, 0.34*r, 2*r);
+    ctx.fillRect(0.44*r, -r, 0.34*r, 2*r);
+    ctx.restore();
+    // мякоть
+    ctx.beginPath(); ctx.arc(0,0,r*0.82,0,Math.PI*2);
+    ctx.fillStyle='#ff6b6b'; ctx.fill();
+    // семечки
+    ctx.fillStyle='#2b1f1f';
+    for (const s of b.seeds) ctx.fillRect(s.x-1, s.y-2, 2, 3);
+    // трещины
+    if (b.damage>=1) {
+      ctx.strokeStyle='#1d7a33'; ctx.lineWidth=1;
+      const n = Math.min(3, b.damage);
+      for (let i=0;i<n;i++) {
+        const a=(i/n)*Math.PI*2+0.3, x=Math.cos(a)*r*0.9, y=Math.sin(a)*r*0.9;
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x*0.55,y*0.55); ctx.lineTo(x*0.3+3,y*0.3); ctx.stroke();
+      }
+    }
+    drawFace(b);
+  }
+
+  function drawPieceShape(b) {
+    ctx.beginPath();
+    ctx.moveTo(b.verts[0].x, b.verts[0].y);
+    for (let i=1;i<b.verts.length;i++) ctx.lineTo(b.verts[i].x, b.verts[i].y);
+    ctx.closePath();
+    ctx.fillStyle='#3fa84f'; ctx.fill();
+    // мякоть
+    ctx.beginPath();
+    ctx.moveTo(b.flesh[0].x, b.flesh[0].y);
+    for (let i=1;i<b.flesh.length;i++) ctx.lineTo(b.flesh[i].x, b.flesh[i].y);
+    ctx.closePath();
+    ctx.fillStyle='#ff6b6b'; ctx.fill();
+    // семечки
+    ctx.fillStyle='#2b1f1f';
+    for (const s of b.seeds) {
+      if (pointInPoly(s, b.flesh)) ctx.fillRect(s.x-1, s.y-2, 2, 3);
+    }
+  }
+
+  function drawFace(b) {
+    const d=b.damage, hurt=b.faceT>0, ex=8, ey=-4;
+    ctx.fillStyle='#20161a';
+    if (hurt) {
+      ctx.fillRect(-ex-3, ey-1, 6, 2);
+      ctx.fillRect(ex-3, ey-1, 6, 2);
+      ctx.fillRect(-4, 4, 8, 2);
+      return;
+    }
+    if (d===0) {
+      ctx.fillRect(-ex-2, ey-2, 4, 4);
+      ctx.fillRect(ex-2, ey-2, 4, 4);
+      ctx.fillRect(-4, 3, 8, 3);
+      ctx.fillRect(-6, 3, 2, 3);
+      ctx.fillRect(4, 3, 2, 3);
+    } else if (d<3) {
+      ctx.fillRect(-ex-1, ey-1, 3, 3);
+      ctx.fillRect(ex-2, ey-1, 3, 3);
+      ctx.fillRect(-2, 4, 4, 2);
+    } else {
+      ctx.fillRect(-ex-3, ey-2, 5, 5);
+      ctx.fillRect(ex-2, ey-2, 5, 5);
+      ctx.fillRect(-5, 3, 10, 6);
+      ctx.fillStyle='#ff9d9d'; ctx.fillRect(-3, 5, 6, 3);
+      ctx.fillStyle='#20161a';
+    }
+  }
+
+  function drawBomb(b) {
+    ctx.fillStyle='#333';
+    ctx.fillRect(-4,-6,8,12);
+    ctx.fillStyle='#111'; ctx.fillRect(-3,-12,6,6);
+    ctx.fillStyle='#ffd23f'; ctx.fillRect(-1,-16,2,4);
+    if (Math.floor(b.fuse/6)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(-1,-16,2,2); }
+  }
+
+  function draw() {
+    ctx.save();
+    if (shake>0) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+    drawBackground();
+    ctx.drawImage(stains, 0, 0);
+    for (const b of bodies) {
+      if (b.type==='bullet') {
+        ctx.fillStyle='#ffd23f'; ctx.fillRect(b.pos.x-2, b.pos.y-2, 4, 4);
+        continue;
+      }
+      ctx.save();
+      ctx.translate(b.pos.x, b.pos.y);
+      ctx.rotate(b.angle);
+      if (b.type==='melon') drawMelonShape(b);
+      else if (b.type==='piece') drawPieceShape(b);
+      else if (b.type==='bomb') drawBomb(b);
+      ctx.restore();
+    }
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+      ctx.globalAlpha = 1;
+    }
+    // пушка
+    if (activeTool==='gun') {
+      const ang=Math.atan2(mousePos.y-GROUND, mousePos.x-W/2);
+      ctx.save();
+      ctx.translate(W/2, GROUND);
+      ctx.rotate(ang);
+      ctx.fillStyle='#4a4a5c'; ctx.fillRect(-3,-6,6,16);
+      ctx.fillStyle='#2e2e3e'; ctx.fillRect(-2,8,4,8);
+      ctx.restore();
+    }
+    // линия разреза
+    if (sliceStart && sliceCur) {
+      ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=1;
+      ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.moveTo(sliceStart.x, sliceStart.y); ctx.lineTo(sliceCur.x, sliceCur.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // прицел
+    if (activeTool==='gun' || activeTool==='hammer') {
+      ctx.strokeStyle='rgba(0,0,0,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(mousePos.x-5, mousePos.y); ctx.lineTo(mousePos.x+5, mousePos.y);
+      ctx.moveTo(mousePos.x, mousePos.y-5); ctx.lineTo(mousePos.x, mousePos.y+5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------- Цикл ----------
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Отладка (для тестов) ----------
+  window.__melon = {
+    spawnMelon, doSlice, shoot, placeBomb, hammer, reset,
+    getScore: () => score,
+    getCount: () => bodies.length,
+    state: () => bodies.map(b => b.type + ':' + Math.round(b.pos.x) + ',' + Math.round(b.pos.y))
+  };
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

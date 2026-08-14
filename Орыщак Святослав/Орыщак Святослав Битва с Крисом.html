@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Битва с Крисом</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            background-color: #1a1a2e;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            background-color: #2d2d44;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        #battle-scene {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            width: 800px;
+            height: 400px;
+            background-color: #1a1a2e;
+            position: relative;
+            border: 4px solid #0f0f1a;
+            margin-bottom: 20px;
+        }
+
+        /* Враги и Герои */
+        .character {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        .char-sprite {
+            width: 100px;
+            height: 120px;
+            image-rendering: pixelated;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* Рисуем Криса пикселями (как на картинке) через CSS */
+        #kris-sprite {
+            background-color: transparent;
+            position: relative;
+            /* Афро */
+            box-shadow: 
+                -30px -80px 0 -40px #3e2723, 0px -80px 0 -40px #3e2723, 30px -80px 0 -40px #3e2723,
+                -40px -60px 0 -35px #3e2723, -20px -60px 0 -35px #3e2723, 20px -60px 0 -35px #3e2723, 40px -60px 0 -35px #3e2723,
+                -35px -40px 0 -30px #3e2723, -10px -40px 0 -30px #3e2723, 10px -40px 0 -30px #3e2723, 35px -40px 0 -30px #3e2723;
+        }
+        #kris-sprite::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            /* Лицо (жёлтое) */
+            background: #ffd700;
+            clip-path: polygon(30% 30%, 70% 30%, 70% 60%, 50% 80%, 30% 60%);
+        }
+        #kris-sprite::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            /* Волосы сверху */
+            background: #3e2723;
+            clip-path: polygon(25% 30%, 75% 30%, 65% 10%, 35% 10%);
+        }
+        /* Рубашка */
+        .kris-body {
+            width: 80px;
+            height: 80px;
+            background-color: #a5d6a7;
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+            position: absolute;
+            bottom: 40px;
+            left: 10px;
+            border-top: 10px solid #7cb342;
+        }
+        /* Руки и ноги (упрощенно для пиксель-арта) */
+        .kris-limb {
+            position: absolute;
+            background: #ffd700;
+            width: 15px; height: 50px;
+            bottom: -20px;
+        }
+        .kris-limb.left { left: 5px; }
+        .kris-limb.right { right: 5px; background: #b0bec5; } /* Рукава */
+
+        /* Враг (Куб) */
+        #enemy-sprite {
+            width: 80px;
+            height: 80px;
+            background-color: #ff5252;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #ff5252;
+        }
+
+        .hp-bar {
+            width: 100px;
+            height: 10px;
+            background: #333;
+            margin-top: 10px;
+            border: 2px solid #555;
+        }
+        .hp-fill {
+            height: 100%;
+            background: #4caf50;
+            width: 100%;
+        }
+        .hp-text {
+            font-size: 10px;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        /* Поле битвы (Стены и сердечко) */
+        #battlefield {
+            position: absolute;
+            top: 100px;
+            left: 250px;
+            width: 300px;
+            height: 200px;
+            border: 4px solid white;
+            display: none; /* Скрыто по умолчанию */
+            background: rgba(0,0,0,0.3);
+        }
+        .wall { position: absolute; background: #ccc; }
+        .wall.top { width: 100%; height: 10px; top: 0; }
+        .wall.bottom { width: 100%; height: 10px; bottom: 0; }
+        .wall.left { width: 10px; height: 100%; left: 0; }
+        .wall.right { width: 10px; height: 100%; right: 0; }
+
+        #heart {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #ff4081;
+            transform: rotate(45deg);
+            top: 90px;
+            left: 140px;
+            transition: all 0.05s;
+        }
+        #heart::before, #heart::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #ff4081;
+            border-radius: 50%;
+        }
+        #heart::before { left: -10px; }
+        #heart::after { top: -10px; }
+
+        .attack-shape {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #ffeb3b;
+            transform: rotate(45deg);
+            pointer-events: none;
+        }
+
+        /* Шкала пощады */
+        #mercy-container {
+            position: absolute;
+            right: 50px;
+            top: 150px;
+            width: 30px;
+            height: 150px;
+            background: #333;
+            border: 2px solid #fff;
+            border-radius: 15px;
+        }
+        #mercy-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to top, #ffeb3b, #ff9800);
+            border-radius: 15px;
+        }
+        .mercy-label {
+            position: absolute;
+            right: 10px;
+            top: 130px;
+            font-size: 8px;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+
+        /* Кнопки внизу */
+        #action-panel {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            background: #444;
+            border: 4px solid #666;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .action-btn.active {
+            border: 4px solid #ffeb3b;
+            background: #5a5a7a;
+            transform: scale(1.05);
+        }
+        .action-btn:active { transform: scale(0.95); }
+
+        #message-box {
+            margin-top: 20px;
+            text-align: center;
+            height: 20px;
+            font-size: 12px;
+            color: #ffeb3b;
+        }
+        
+        /* Режим врага */
+        .enemy-turn-mode { 
+            background: rgba(255, 0, 0, 0.2); 
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="battle-scene">
+        <!-- Крис (Слева) -->
+        <div class="character">
+            <div id="kris-sprite" class="char-sprite">
+                <div class="kris-body">
+                    <div class="kris-limb left"></div>
+                    <div class="kris-limb right"></div>
+                </div>
+            </div>
+            <div class="hp-bar"><div id="kris-hp" class="hp-fill"></div></div>
+            <div class="hp-text">Крис <span id="kris-hp-text">160</span> HP</div>
+        </div>
+
+        <!-- Враг (Справа) -->
+        <div class="character">
+            <div id="enemy-sprite" class="char-sprite"></div>
+            <div class="hp-bar"><div id="enemy-hp" class="hp-fill" style="width: 100%;"></div></div>
+            <div class="hp-text">Враг <span id="enemy-hp-text">300</span> HP</div>
+        </div>
+
+        <!-- Шкала Пощады -->
+        <div id="mercy-container">
+            <div id="mercy-fill"></div>
+        </div>
+        <div class="mercy-label">ПОЩАДА</div>
+
+        <!-- Поле для уворачивания -->
+        <div id="battlefield">
+            <div class="wall top"></div>
+            <div class="wall bottom"></div>
+            <div class="wall left"></div>
+            <div class="wall right"></div>
+            <div id="heart"></div>
+        </div>
+    </div>
+
+    <!-- Панель кнопок -->
+    <div id="action-panel">
+        <div class="action-btn" data-action="attack">АТАКА</div>
+        <div class="action-btn" data-action="act">ДЕЙСТВИЕ</div>
+        <div class="action-btn" data-action="items">ПРЕДМЕТЫ</div>
+        <div class="action-btn" data-action="mercy">ПОЩАДА</div>
+        <div class="action-btn" data-action="defend">ЗАЩИТА</div>
+    </div>
+
+    <div id="message-box">Нажми Enter, чтобы выбрать действие</div>
+</div>
+
+<script>
+    // --- Игровые переменные ---
+    const state = {
+        krisHP: 160,
+        krisMaxHP: 160,
+        enemyHP: 300,
+        enemyMaxHP: 300,
+        mercy: 0, // 0-100
+        isDefending: false,
+        isEnemyTurn: false,
+        gameOver: false,
+        
+        // Поле
+        heartX: 140,
+        heartY: 90,
+        heartSpeed: 10,
+        attacks: [],
+        attackTimer: null,
+        enemyTurnDuration: 5000, // 5 сек
+        turnInterval: null,
+        
+        // Меню
+        selectedIndex: 0,
+        actions: ['attack', 'act', 'items', 'mercy', 'defend']
+    };
+
+    // --- DOM элементы ---
+    const krisHPBar = document.getElementById('kris-hp');
+    const krisHPText = document.getElementById('kris-hp-text');
+    const enemyHPBar = document.getElementById('enemy-hp');
+    const enemyHPText = document.getElementById('enemy-hp-text');
+    const mercyFill = document.getElementById('mercy-fill');
+    const battlefield = document.getElementById('battlefield');
+    const heart = document.getElementById('heart');
+    const btns = document.querySelectorAll('.action-btn');
+    const msgBox = document.getElementById('message-box');
+    const battleScene = document.getElementById('battle-scene');
+
+    // --- Обновление UI ---
+    function updateUI() {
+        // HP
+        krisHPBar.style.width = Math.max(0, (state.krisHP / state.krisMaxHP) * 100) + '%';
+        krisHPText.innerText = Math.max(0, state.krisHP);
+        
+        enemyHPBar.style.width = Math.max(0, (state.enemyHP / state.enemyMaxHP) * 100) + '%';
+        enemyHPText.innerText = Math.max(0, state.enemyHP);
+        
+        // Пощада
+        mercyFill.style.height = Math.min(100, state.mercy) + '%';
+
+        // Активная кнопка
+        btns.forEach((btn, i) => {
+            btn.classList.toggle('active', i === state.selectedIndex);
+        });
+    }
+
+    // --- Механики боя ---
+    function handleAction(action) {
+        if (state.isEnemyTurn || state.gameOver) return;
+
+        switch(action) {
+            case 'attack':
+                state.enemyHP -= 100;
+                msgBox.innerText = "Крис атакует! -100 HP врагу!";
+                break;
+            case 'act':
+                state.mercy += 25;
+                msgBox.innerText = "Крис флиртует! +25% Пощады.";
+                break;
+            case 'items':
+                state.krisHP = Math.min(state.krisMaxHP, state.krisHP + 40);
+                msgBox.innerText = "Крис использует предмет! +40 HP.";
+                break;
+            case 'mercy':
+                if (state.mercy >= 100) {
+                    state.gameOver = true;
+                    msgBox.innerText = "ТЫ ПОБЕДИЛ! Крис пощадил врага!";
+                    finishGame(true);
+                    return;
+                } else {
+                    state.mercy += 5;
+                    msgBox.innerText = "Пощада не работает! +5% Пощады.";
+                }
+                break;
+            case 'defend':
+                state.isDefending = true;
+                msgBox.innerText = "Крис встал в защиту!";
+                break;
+        }
+        
+        updateUI();
+        
+        // Проверка на убийство врага атакой
+        if (state.enemyHP <= 0) {
+            state.enemyHP = 0;
+            state.gameOver = true;
+            msgBox.innerText = "ТЫ ПОБЕДИЛ! Враг повержен!";
+            finishGame(true);
+            return;
+        }
+
+        // Переход хода к врагу
+        startEnemyTurn();
+    }
+
+    // --- Ход врага ---
+    function startEnemyTurn() {
+        state.isEnemyTurn = true;
+        state.isDefending = false;
+        battleScene.classList.add('enemy-turn-mode');
+        battlefield.style.display = 'block';
+        heart.style.display = 'block';
+        msgBox.innerText = "Уворачивайся! (Стрелочки)";
+        
+        // Очистка старых атак
+        state.attacks.forEach(a => a.remove());
+        state.attacks = [];
+        
+        // Спавн ромбиков каждые 500мс
+        state.attackTimer = setInterval(spawnAttack, 500);
+        
+        // Конец хода через 5 секунд
+        state.turnInterval = setTimeout(() => {
+            endEnemyTurn();
+        }, state.enemyTurnDuration);
+    }
+
+    function endEnemyTurn() {
+        clearInterval(state.attackTimer);
+        clearTimeout(state.turnInterval);
+        state.isEnemyTurn = false;
+        battleScene.classList.remove('enemy-turn-mode');
+        battlefield.style.display = 'none';
+        heart.style.display = 'none';
+        
+        // Удалить оставшиеся атаки
+        state.attacks.forEach(a => a.remove());
+        state.attacks = [];
+
+        // Проверка если Крис умер во время хода врага
+        if (state.krisHP <= 0) {
+            msgBox.innerText = "ТЫ ПРОИГРАЛ! Крис погиб!";
+            state.gameOver = true;
+            finishGame(false);
+            return;
+        }
+
+        msgBox.innerText = "Ход Криса! Выбери действие.";
+        updateUI();
+    }
+
+    // --- Спавн и коллизия ---
+    function spawnAttack() {
+        const fieldRect = battlefield.getBoundingClientRect();
+        // Случайные координаты внутри поля (учитывая рамки)
+        const margin = 25; // отступ от стен
+        let x = Math.random() * (300 - margin * 2) + margin;
+        let y = Math.random() * (200 - margin * 2) + margin;
+
+        const elem = document.createElement('div');
+        elem.className = 'attack-shape';
+        elem.style.left = x + 'px';
+        elem.style.top = y + 'px';
+        elem.style.background = Math.random() > 0.5 ? '#ffeb3b' : '#ff9800'; // разноцветные ромбы
+        
+        battlefield.appendChild(elem);
+        state.attacks.push(elem);
+        
+        // Проверяем сразу при спавне (чтобы не было неуязвимости)
+        checkCollision(elem);
+    }
+
+    // Движение сердечка
+    document.addEventListener('keydown', (e) => {
+        if (!state.isEnemyTurn || state.gameOver) return;
+        
+        const step = state.heartSpeed;
+        const fieldWidth = 300;
+        const fieldHeight = 200;
+        const heartSize = 20;
+        const wallMargin = 15; // Отступ от стен
+
+        switch(e.key) {
+            case 'ArrowUp': 
+                state.heartY = Math.max(wallMargin, state.heartY - step); 
+                e.preventDefault(); break;
+            case 'ArrowDown': 
+                state.heartY = Math.min(fieldHeight - heartSize - wallMargin, state.heartY + step); 
+                e.preventDefault(); break;
+            case 'ArrowLeft': 
+                state.heartX = Math.max(wallMargin, state.heartX - step); 
+                e.preventDefault(); break;
+            case 'ArrowRight': 
+                state.heartX = Math.min(fieldWidth - heartSize - wallMargin, state.heartX + step); 
+                e.preventDefault(); break;
+            default: return;
+        }
+        
+        heart.style.left = state.heartX + 'px';
+        heart.style.top = state.heartY + 'px';
+        
+        // Проверка коллизий со всеми текущими атаками при движении
+        state.attacks.forEach(attack => checkCollision(attack));
+    });
+
+    function checkCollision(attackElem) {
+        if (!state.isEnemyTurn) return;
+        
+        const hX = state.heartX + 10; // Центр сердечка
+        const hY = state.heartY + 10;
+        
+        // Получаем позицию атаки относительно поля
+        const aX = parseInt(attackElem.style.left) + 10;
+        const aY = parseInt(attackElem.style.top) + 10;
+        
+        // Простая коллизия квадратов
+        const dist = Math.sqrt(Math.pow(hX - aX, 2) + Math.pow(hY - aY, 2));
+        
+        if (dist < 20) { // Попадание!
+            if (!state.isDefending) {
+                state.krisHP -= 10;
+                updateUI();
+                msgBox.innerText = "Ой! Крис получил урон! -10 HP";
+                
+                if (state.krisHP <= 0) {
+                    state.krisHP = 0;
+                    endEnemyTurn(); // Принудительно завершаем ход врага, так как игра кончилась
+                }
+            } else {
+                msgBox.innerText = "Защита! Урон заблокирован!";
+            }
+            
+            // Удаляем атаку, которая коснулась
+            attackElem.remove();
+            const idx = state.attacks.indexOf(attackElem);
+            if (idx > -1) state.attacks.splice(idx, 1);
+        }
+    }
+
+    // --- Управление меню (Стрелки + Enter) ---
+    document.addEventListener('keydown', (e) => {
+        if (state.isEnemyTurn || state.gameOver) return;
+        
+        if (e.key === 'ArrowLeft') {
+            state.selectedIndex = Math.max(0, state.selectedIndex - 1);
+            updateUI();
+            e.preventDefault();
+        } else if (e.key === 'ArrowRight') {
+            state.selectedIndex = Math.min(state.actions.length - 1, state.selectedIndex + 1);
+            updateUI();
+            e.preventDefault();
+        } else if (e.key === 'Enter') {
+            handleAction(state.actions[state.selectedIndex]);
+            e.preventDefault();
+        }
+    });
+
+    // Клик по кнопкам мыши тоже работает
+    btns.forEach((btn, index) => {
+        btn.addEventListener('click', () => {
+            state.selectedIndex = index;
+            updateUI();
+            handleAction(state.actions[index]);
+        });
+    });
+
+    // --- Завершение ---
+    function finishGame(win) {
+        clearInterval(state.attackTimer);
+        clearTimeout(state.turnInterval);
+        battlefield.style.display = 'none';
+        heart.style.display = 'none';
+        state.isEnemyTurn = false;
+        msgBox.innerText = win ? "ПОБЕДА! Нажми F5 для рестарта" : "ПОРАЖЕНИЕ! Нажми F5 для рестарта";
+    }
+
+    // Старт
+    updateUI();
+    msgBox.innerText = "Ход Криса! Выбери действие!";
+
+</script>
+</body>
+</html>

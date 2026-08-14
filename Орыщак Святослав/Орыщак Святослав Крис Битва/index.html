@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Крис — Битва</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; background:#000; overflow:hidden; }
+  body { display:flex; align-items:center; justify-content:center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+'use strict';
+/* ============================== Canvas ============================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 960, H = 640;
+canvas.width = W; canvas.height = H;
+ctx.imageSmoothingEnabled = false;
+
+function resize(){
+  const s = Math.min(window.innerWidth/W, window.innerHeight/H);
+  canvas.style.width = Math.floor(W*s)+'px';
+  canvas.style.height = Math.floor(H*s)+'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ============================== Constants =========================== */
+const GROUND = 470;
+const CHRIS_X = 200, ENEMY_X = 760;
+const CHRIS_SCALE = 4, ENEMY_SCALE = 5;
+
+/* ============================== Sprites ============================= */
+// Крис: рыжие/тёмно-красные волосы, жёлтое лицо, оливковые глаза,
+// лаймово-зелёная футболка, жёлтый ремень, красные штаны.
+const CHRIS = [
+"........HHHHHHHH........",
+".......HHHHHHHHHH.......",
+"......HHHHHHHHHHHH......",
+"......HHHHHHHHHHHH......",
+".....HHHHHHHHHHHHHH.....",
+".....HHHHEEEHHHEEHHH....",
+".....HHHHEEEHHHEEHHH....",
+".....HHHHSSSSSSSSHHH....",
+".....HHHSSSSSSSSSSHH....",
+".....HHHSSSSSSSSSSHH....",
+".....HHSSSSMMMMSSSSHH...",
+"......HHHHHHHHHHHHH.....",
+".....HHH..HHHHHH..HHH...",
+"....GGGGGGGGGGGGGGGG....",
+"....GGGGGGGGGGGGGGGG....",
+"...GGGGGGGGGGGGGGGGGG...",
+"...GGGSSGGGGGGGGSSGGG...",
+"...GGGSSGGGGGGGGSSGGG...",
+"...GGGGGGGGGGGGGGGGGG...",
+"...GGGGGGGGGGGGGGGGGG...",
+"...BBBBBBBBBBBBBBBBBB...",
+"...PPPPPPPP..PPPPPPPP...",
+"...PPPPPPPP..PPPPPPPP...",
+"....PPPPP......PPPPP....",
+"....PPPPP......PPPPP....",
+"....DDDDD......DDDDD....",
+];
+const CHRIS_PAL = { H:'#b02828', S:'#f2c400', E:'#5c6b22', M:'#7a1a1a', G:'#b6e51d', B:'#f2c400', P:'#7a1a1a', D:'#3a1020' };
+
+// Враг: фиолетовый монстр с рогами, глазами и зубастой пастью.
+const ENEMY = [
+"..H..........H..",
+"..HH........HH..",
+"..HHH......HHH..",
+".PPPPPPPPPPPPPP.",
+".PPPPPWWPPWWPPPP.",
+".PPPPPWWPPWWPPPP.",
+".PPPPPBBPPBBPPPP.",
+".PPPPPPPPPPPPPP.",
+"..PPPPPPPPPPPP..",
+"...PPPPPPPPPP...",
+"..PPPPPPPPPPPP..",
+".PPPPPPPPPPPPPP.",
+".PPWWWWWWWWWWPP.",
+".PPWBBWWBBWWBPP.",
+".PPPPPPPPPPPPPP.",
+"..PPPPPPPPPPPP..",
+"...PPPP..PPPP...",
+"...PPPP..PPPP...",
+"...DDDD..DDDD...",
+];
+const ENEMY_PAL = { H:'#3a1a3a', P:'#7a3fd0', W:'#ffffff', B:'#120a1c', D:'#2a1030' };
+
+function normalizeSprite(sprite){
+  const w = Math.max(...sprite.map(r=>r.length));
+  return sprite.map(r=>{
+    const pad = w - r.length;
+    const left = Math.floor(pad/2);
+    return '.'.repeat(left) + r + '.'.repeat(pad-left);
+  });
+}
+const CHRIS_N = normalizeSprite(CHRIS);
+const ENEMY_N = normalizeSprite(ENEMY);
+
+function drawSprite(sprite, cx, bottomY, scale, pal, flash){
+  const w = sprite[0].length, h = sprite.length;
+  const x0 = Math.round(cx - w*scale/2);
+  const y0 = Math.round(bottomY - h*scale);
+  const outline = '#120a1c';
+  // outline pass
+  ctx.fillStyle = outline;
+  for (let r=0;r<h;r++){
+    const row = sprite[r];
+    for (let c=0;c<w;c++){
+      const ch = row[c];
+      if (ch==='.'||ch===' ') continue;
+      ctx.fillRect(x0 + c*scale - 1, y0 + r*scale - 1, scale+2, scale+2);
+    }
+  }
+  // color pass
+  for (let r=0;r<h;r++){
+    const row = sprite[r];
+    for (let c=0;c<w;c++){
+      const ch = row[c];
+      if (ch==='.'||ch===' ') continue;
+      const col = flash ? '#ffffff' : pal[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(x0 + c*scale, y0 + r*scale, scale, scale);
+    }
+  }
+}
+
+/* ============================== Game state ========================== */
+const PLAYER_MAX = 160, ENEMY_MAX = 300;
+
+let state = 'player';       // 'player' | 'enemy' | 'win' | 'lose'
+let winType = null;         // 'spare' | 'defeat'
+let playerHP = PLAYER_MAX;
+let enemyHP = ENEMY_MAX;
+let mercy = 0;              // 0..100
+let defending = false;
+let selected = 0;
+
+let enemyTurnTime = 5.0;
+let heart = { x:480, y:290, size:10, invuln:0 };
+let diamonds = [];
+let diamondSpawnTimer = 0;
+
+const FIELD = { x:480, y:290, size:340, wall:12 };
+
+let floats = [];   // floating texts
+let particles = [];// flirt hearts
+let attackAnim = 0;   // 1 -> 0
+let enemyFlash = 0;
+let shake = 0;
+let time = 0;
+let banner = { text:'', t:0 };
+
+const BUTTONS = [
+  { key:'attack', label:'АТАКА',   sub:'-100 врагу',  col:'#e04545' },
+  { key:'action', label:'ДЕЙСТВИЕ', sub:'флирт +25%',  col:'#e078c0' },
+  { key:'item',   label:'ПРЕДМЕТЫ', sub:'+40 HP',      col:'#40c060' },
+  { key:'spare',  label:'ПОЩАДА',  sub:'+5% / пощада', col:'#f0c000' },
+  { key:'defend', label:'ЗАЩИТА',  sub:'нет урона',    col:'#4090e0' },
+];
+
+/* ============================== Input ============================== */
+const keys = {};
+function clearArrowKeys(){
+  delete keys['arrowleft']; delete keys['arrowright'];
+  delete keys['arrowup'];   delete keys['arrowdown'];
+}
+function normKey(k){
+  if (k==='ArrowLeft') return 'arrowleft';
+  if (k==='ArrowRight') return 'arrowright';
+  if (k==='ArrowUp') return 'arrowup';
+  if (k==='ArrowDown') return 'arrowdown';
+  if (k===' ') return 'space';
+  return k.toLowerCase();
+}
+window.addEventListener('keydown', e=>{
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+  const key = normKey(e.key);
+  if (!keys[key]) handlePress(key);
+  keys[key] = true;
+});
+window.addEventListener('keyup', e=>{
+  keys[normKey(e.key)] = false;
+});
+function handlePress(key){
+  if (state==='player'){
+    if (key==='arrowleft')  selected = (selected+4)%5;
+    if (key==='arrowright') selected = (selected+1)%5;
+    if (key==='enter'||key==='space') activateButton(selected);
+  } else if (state==='win'||state==='lose'){
+    if (key==='enter'||key==='space'||key==='r') restart();
+  }
+}
+
+canvas.addEventListener('click', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX-rect.left) * (W/rect.width);
+  const my = (e.clientY-rect.top) * (H/rect.height);
+  if (state==='player'){
+    const size=120, gap=24, total=5*size+4*gap, x0=(W-total)/2, y0=H-size-18;
+    for (let i=0;i<5;i++){
+      const x = x0 + i*(size+gap);
+      if (mx>=x && mx<=x+size && my>=y0 && my<=y0+size){ activateButton(i); return; }
+    }
+  } else if (state==='win'||state==='lose'){
+    restart();
+  }
+});
+
+/* ============================== Audio (simple beeps) ================ */
+let audioCtx = null;
+function beep(freq, dur, type='square', vol=0.07){
+  try {
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+dur);
+    o.stop(audioCtx.currentTime+dur);
+  } catch(e){}
+}
+
+/* ============================== Actions ============================= */
+function addFloat(text, x, y, color){
+  floats.push({ text, x, y, color, life:1.0 });
+}
+
+function activateButton(i){
+  const b = BUTTONS[i];
+  if (b.key==='attack'){
+    enemyHP = Math.max(0, enemyHP - 100);
+    addFloat('-100', ENEMY_X, 250, '#ff7070');
+    attackAnim = 1;
+    enemyFlash = 0.35;
+    shake = 6;
+    beep(180, 0.18, 'square');
+    if (enemyHP<=0){ startWin('defeat'); return; }
+  } else if (b.key==='action'){
+    mercy = Math.min(100, mercy + 25);
+    addFloat('+25% пощада', 666, 130, '#ff9ee0');
+    spawnFlirtHearts();
+    beep(660, 0.25, 'sine');
+  } else if (b.key==='item'){
+    const before = playerHP;
+    playerHP = Math.min(PLAYER_MAX, playerHP + 40);
+    addFloat('+'+(playerHP-before)+' HP', CHRIS_X, 250, '#60ff80');
+    beep(520, 0.2, 'triangle');
+  } else if (b.key==='spare'){
+    if (mercy>=100){
+      startWin('spare'); return;
+    } else {
+      mercy = Math.min(100, mercy + 5);
+      addFloat('+5% пощада', 666, 130, '#ffd060');
+      beep(330, 0.2, 'sine');
+    }
+  } else if (b.key==='defend'){
+    defending = true;
+    addFloat('ЗАЩИТА!', CHRIS_X, 250, '#60a0ff');
+    beep(240, 0.25, 'square');
+  }
+  if (state==='player') startEnemyTurn();
+}
+
+function startWin(type){
+  state = 'win'; winType = type;
+  defending = false;
+  clearArrowKeys();
+  if (type==='spare'){
+    beep(523,0.15,'sine'); setTimeout(()=>beep(659,0.15,'sine'),150);
+    setTimeout(()=>beep(784,0.3,'sine'),300);
+  } else {
+    beep(392,0.15,'sine'); setTimeout(()=>beep(523,0.15,'sine'),150);
+    setTimeout(()=>beep(659,0.4,'sine'),300);
+  }
+}
+
+function startEnemyTurn(){
+  state = 'enemy';
+  enemyTurnTime = 5.0;
+  heart.x = FIELD.x; heart.y = FIELD.y;
+  heart.invuln = 0;
+  diamonds = [];
+  for (let i=0;i<3;i++) spawnDiamond();
+  diamondSpawnTimer = 1.0;
+  banner = { text:'ХОД ВРАГА', t:1.0 };
+  clearArrowKeys();
+}
+
+function endEnemyTurn(){
+  state = 'player';
+  defending = false;
+  banner = { text:'ХОД КРИСА', t:1.0 };
+  clearArrowKeys();
+}
+
+function spawnDiamond(){
+  const half = FIELD.size/2 - FIELD.wall - 9;
+  const x0 = FIELD.x-half, x1 = FIELD.x+half;
+  const y0 = FIELD.y-half, y1 = FIELD.y+half;
+  const sp = 130;
+  const side = Math.floor(Math.random()*4);
+  let x,y,vx,vy;
+  if (side===0){ x = rand(x0,x1); y = y0; vy = sp;  vx = rand(-sp,sp); }
+  else if (side===1){ x = rand(x0,x1); y = y1; vy = -sp; vx = rand(-sp,sp); }
+  else if (side===2){ x = x0; y = rand(y0,y1); vx = sp;  vy = rand(-sp,sp); }
+  else { x = x1; y = rand(y0,y1); vx = -sp; vy = rand(-sp,sp); }
+  diamonds.push({ x, y, vx, vy, r:9 });
+}
+function rand(a,b){ return a + Math.random()*(b-a); }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+function spawnFlirtHearts(){
+  for (let i=0;i<9;i++){
+    particles.push({
+      x: CHRIS_X + rand(-10,10), y: GROUND-90 + rand(-20,20),
+      vx: rand(120,220), vy: rand(-60,-10),
+      life: rand(0.7,1.2), max: 1.2, color: i%2? '#ff6ec0' : '#ff9ee0'
+    });
+  }
+}
+
+function restart(){
+  playerHP = PLAYER_MAX; enemyHP = ENEMY_MAX;
+  mercy = 0; defending = false; selected = 0;
+  state = 'player'; winType = null;
+  floats = []; particles = []; diamonds = [];
+  attackAnim = 0; enemyFlash = 0; shake = 0;
+  banner = { text:'ХОД КРИСА', t:1.2 };
+  clearArrowKeys();
+}
+
+/* ============================== Update ============================== */
+function update(dt){
+  time += dt;
+
+  // timers / effects
+  for (const f of floats){ f.y -= 24*dt; f.life -= dt; }
+  floats = floats.filter(f=>f.life>0);
+
+  for (const p of particles){
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 60*dt; p.life -= dt;
+  }
+  particles = particles.filter(p=>p.life>0);
+
+  if (attackAnim>0) attackAnim = Math.max(0, attackAnim - dt/0.32);
+  if (enemyFlash>0) enemyFlash = Math.max(0, enemyFlash - dt);
+  if (shake>0) shake = Math.max(0, shake - dt*30);
+  if (banner.t>0) banner.t -= dt;
+
+  if (state==='enemy'){
+    // heart movement
+    const spd = 260;
+    if (keys['arrowleft'])  heart.x -= spd*dt;
+    if (keys['arrowright']) heart.x += spd*dt;
+    if (keys['arrowup'])    heart.y -= spd*dt;
+    if (keys['arrowdown'])  heart.y += spd*dt;
+    const halfH = FIELD.size/2 - FIELD.wall - heart.size;
+    heart.x = clamp(heart.x, FIELD.x-halfH, FIELD.x+halfH);
+    heart.y = clamp(heart.y, FIELD.y-halfH, FIELD.y+halfH);
+    heart.invuln = Math.max(0, heart.invuln - dt);
+
+    // spawn diamonds
+    diamondSpawnTimer -= dt;
+    if (diamondSpawnTimer<=0){
+      if (diamonds.length<7) spawnDiamond();
+      diamondSpawnTimer = 0.85;
+    }
+
+    // move + bounce diamonds
+    const halfD = FIELD.size/2 - FIELD.wall;
+    for (const d of diamonds){
+      d.x += d.vx*dt; d.y += d.vy*dt;
+      if (d.x < FIELD.x-halfD+d.r){ d.x = FIELD.x-halfD+d.r; d.vx = Math.abs(d.vx); }
+      if (d.x > FIELD.x+halfD-d.r){ d.x = FIELD.x+halfD-d.r; d.vx = -Math.abs(d.vx); }
+      if (d.y < FIELD.y-halfD+d.r){ d.y = FIELD.y-halfD+d.r; d.vy = Math.abs(d.vy); }
+      if (d.y > FIELD.y+halfD-d.r){ d.y = FIELD.y+halfD-d.r; d.vy = -Math.abs(d.vy); }
+
+      // collide with heart
+      const dx = heart.x-d.x, dy = heart.y-d.y;
+      const dist = Math.hypot(dx,dy);
+      const hitR = heart.size + d.r;
+      if (dist < hitR && heart.invuln<=0){
+        let nx, ny;
+        if (dist < 0.001){ nx=1; ny=0; } else { nx=dx/dist; ny=dy/dist; }
+        d.x = heart.x - nx*hitR; d.y = heart.y - ny*hitR;
+        d.vx = -nx*130; d.vy = -ny*130;
+        if (!defending){
+          playerHP = Math.max(0, playerHP-10);
+          addFloat('-10', heart.x, heart.y-16, '#ff5050');
+          heart.invuln = 0.8;
+          shake = 6;
+          beep(150, 0.12, 'sawtooth');
+          if (playerHP<=0){
+            state='lose'; clearArrowKeys();
+            beep(200,0.3,'sawtooth'); setTimeout(()=>beep(120,0.5,'sawtooth'),250);
+          }
+        } else {
+          addFloat('БЛОК', heart.x, heart.y-16, '#60a0ff');
+          heart.invuln = 0.4;
+        }
+      }
+    }
+
+    // enemy turn timer
+    enemyTurnTime -= dt;
+    if (enemyTurnTime<=0) endEnemyTurn();
+  }
+}
+
+/* ============================== Render ============================== */
+function render(){
+  ctx.save();
+  if (shake>0){
+    ctx.translate(rand(-shake,shake), rand(-shake,shake));
+  }
+
+  // background
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#1a0e24');
+  g.addColorStop(1,'#2a1440');
+  ctx.fillStyle = g;
+  ctx.fillRect(-10,-10,W+20,H+20);
+
+  // ground
+  ctx.fillStyle = '#120a1c';
+  ctx.fillRect(-10, GROUND, W+20, H-GROUND+10);
+  ctx.fillStyle = '#3a2050';
+  ctx.fillRect(-10, GROUND-2, W+20, 4);
+  // floor texture dots
+  ctx.fillStyle = '#241238';
+  for (let i=0;i<24;i++){
+    const tx = (i*137)%W, ty = GROUND + 20 + (i*53)%(H-GROUND-30);
+    ctx.fillRect(tx, ty, 3, 3);
+  }
+
+  // ---- characters ----
+  const bob = Math.sin(time*3)*3;
+  const lunge = Math.sin((1-attackAnim)*Math.PI)*45;
+  drawSprite(CHRIS_N, CHRIS_X + lunge, GROUND + bob, CHRIS_SCALE, CHRIS_PAL, false);
+  drawSprite(ENEMY_N, ENEMY_X, GROUND + Math.sin(time*2+1)*2, ENEMY_SCALE, ENEMY_PAL, enemyFlash>0);
+
+  // defend shield indicator over Chris
+  if (defending && state==='enemy'){
+    drawShieldIcon(CHRIS_X + 34, GROUND-100, '#60a0ff', 2.2);
+  }
+
+  // attack slash
+  if (attackAnim>0){
+    const t = 1 - attackAnim;
+    const sx = CHRIS_X + t*(ENEMY_X-CHRIS_X);
+    ctx.save();
+    ctx.translate(sx, GROUND-110);
+    ctx.rotate(-0.6 + t*1.2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillRect(-2, -34, 4, 68);
+    ctx.fillStyle = 'rgba(255,220,120,0.7)';
+    ctx.fillRect(-5, -28, 10, 56);
+    ctx.restore();
+  }
+
+  // ---- UI bars ----
+  drawHPBar(24, 76, 210, 22, playerHP, PLAYER_MAX);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 15px monospace'; ctx.textAlign='left';
+  ctx.fillText('КРИС', 24, 68);
+  drawHPBar(W-234, 76, 210, 22, enemyHP, ENEMY_MAX);
+  ctx.textAlign='right';
+  ctx.fillText('ВРАГ', W-24, 68);
+
+  drawMercyBar();
+
+  // ---- title / hint ----
+  ctx.textAlign='center';
+  ctx.fillStyle = '#e8d8f8';
+  ctx.font = 'bold 26px monospace';
+  ctx.fillText('КРИС — БИТВА', W/2, 32);
+  ctx.fillStyle = '#8f7ba8';
+  ctx.font = '13px monospace';
+  ctx.fillText(
+    state==='player' ? '← → — выбрать кнопку · ENTER/ПРОБЕЛ — действие · можно кликать мышкой' :
+    state==='enemy' ? '← → ↑ ↓ — управлять сердечком, уворачивайся от ромбиков!' : '',
+    W/2, 52
+  );
+
+  // ---- minigame field (enemy turn) ----
+  if (state==='enemy'){
+    drawField();
+  }
+
+  // ---- buttons (player turn) ----
+  if (state==='player'){
+    drawButtons();
+  }
+
+  // ---- particles (flirt hearts) ----
+  for (const p of particles){
+    drawHeart(p.x, p.y, p.color, 2, (p.life/p.max));
+  }
+
+  // ---- floating texts ----
+  for (const f of floats){
+    ctx.globalAlpha = clamp(f.life, 0, 1);
+    ctx.fillStyle = f.color;
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign='center';
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- banner ----
+  if (banner.t>0){
+    ctx.globalAlpha = clamp(banner.t, 0, 1);
+    ctx.fillStyle = '#ffd060';
+    ctx.font = 'bold 34px monospace';
+    ctx.textAlign='center';
+    ctx.fillText(banner.text, W/2, H/2 - 60);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- win / lose overlay ----
+  if (state==='win' || state==='lose'){
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(-10,-10,W+20,H+20);
+    ctx.textAlign='center';
+    ctx.fillStyle = state==='win' ? '#80ff80' : '#ff6060';
+    ctx.font = 'bold 52px monospace';
+    ctx.fillText(state==='win' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ', W/2, H/2-30);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px monospace';
+    let msg = state==='win'
+      ? (winType==='spare' ? 'Крис пощадил врага 💛' : 'Враг повержен!')
+      : 'Крис пал в бою...';
+    ctx.fillText(msg, W/2, H/2+20);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px monospace';
+    ctx.fillText('Нажми R / ENTER или кликни, чтобы сыграть снова', W/2, H/2+70);
+  }
+
+  ctx.restore();
+}
+
+function drawHPBar(x, y, w, h, cur, max){
+  const pct = clamp(cur/max, 0, 1);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#4a3060';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  const col = pct>0.5 ? '#40d060' : pct>0.25 ? '#f0c000' : '#f04040';
+  ctx.fillStyle = col;
+  ctx.fillRect(x+3, y+3, (w-6)*pct, h-6);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign='left';
+  ctx.fillText(cur+' / '+max, x+6, y+16);
+}
+
+function drawMercyBar(){
+  const x = 664, y = 116, w = 24, h = 210;
+  // label
+  ctx.fillStyle = '#e060b0';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign='center';
+  ctx.fillText('ПОЩАДА', x+w/2, y-6);
+  ctx.fillText(mercy+'%', x+w/2, y+h+18);
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x, y, w, h);
+  const pct = clamp(mercy/100, 0, 1);
+  const full = mercy>=100;
+  // glow when full
+  if (full){
+    ctx.strokeStyle = '#ffd060';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x-3, y-3, w+6, h+6);
+  }
+  ctx.fillStyle = full ? '#ff70d0' : '#e060b0';
+  const fh = Math.round((h-6)*pct);
+  ctx.fillRect(x+3, y+h-3-fh, w-6, fh);
+  ctx.strokeStyle = '#4a3060';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  // tick at 100%
+  ctx.fillStyle = '#ffffff55';
+  ctx.fillRect(x, y, w, 2);
+}
+
+function drawField(){
+  const fx = FIELD.x, fy = FIELD.y, half = FIELD.size/2, wl = FIELD.wall;
+
+  // dark backdrop dim
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(-10,-10,W+20,H+20);
+
+  // four walls
+  ctx.fillStyle = '#3a2050';
+  ctx.fillRect(fx-half, fy-half, FIELD.size, wl);
+  ctx.fillRect(fx-half, fy+half-wl, FIELD.size, wl);
+  ctx.fillRect(fx-half, fy-half, wl, FIELD.size);
+  ctx.fillRect(fx+half-wl, fy-half, wl, FIELD.size);
+  // wall inner highlight
+  ctx.fillStyle = '#5a3a78';
+  ctx.fillRect(fx-half, fy-half+wl, FIELD.size, 2);
+  ctx.fillRect(fx-half+wl, fy-half, 2, FIELD.size);
+
+  // inner arena
+  ctx.fillStyle = '#0d0716';
+  ctx.fillRect(fx-half+wl, fy-half+wl, FIELD.size-2*wl, FIELD.size-2*wl);
+  // subtle grid
+  ctx.strokeStyle = '#1c1030';
+  ctx.lineWidth = 1;
+  for (let i=1;i<5;i++){
+    const gx = fx-half+wl + i*(FIELD.size-2*wl)/5;
+    const gy = fy-half+wl + i*(FIELD.size-2*wl)/5;
+    ctx.beginPath(); ctx.moveTo(gx, fy-half+wl); ctx.lineTo(gx, fy+half-wl); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(fx-half+wl, gy); ctx.lineTo(fx+half-wl, gy); ctx.stroke();
+  }
+
+  // timer
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign='center';
+  ctx.fillText('ХОД ВРАГА: ' + Math.max(0,enemyTurnTime).toFixed(1) + 'с', fx, fy-half-12);
+  if (defending){
+    ctx.fillStyle = '#60a0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('ЗАЩИТА АКТИВНА — урона нет', fx, fy+half+18);
+  }
+
+  // diamonds (ромбики)
+  for (const d of diamonds){
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(Math.PI/4);
+    ctx.fillStyle = '#e040ff';
+    ctx.fillRect(-d.r, -d.r, d.r*2, d.r*2);
+    ctx.strokeStyle = '#ff90ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-d.r+1, -d.r+1, d.r*2-2, d.r*2-2);
+    ctx.fillStyle = '#ffffff88';
+    ctx.fillRect(-d.r+3, -d.r+3, 3, 3);
+    ctx.restore();
+  }
+
+  // heart
+  drawHeart(heart.x, heart.y, heart.invuln>0 ? '#ffffff' : '#ff5070', 3);
+}
+
+function drawHeart(cx, cy, color, s, alpha){
+  ctx.save();
+  if (alpha!==undefined) ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  const pat = [
+    '.XX.XX.',
+    'XXXXXXX',
+    'XXXXXXX',
+    '.XXXXX.',
+    '..XXX..',
+    '...X...',
+  ];
+  const w = pat[0].length, h = pat.length;
+  for (let r=0;r<h;r++){
+    for (let c=0;c<w;c++){
+      if (pat[r][c]==='X'){
+        ctx.fillRect(Math.round(cx - w*s/2 + c*s), Math.round(cy - h*s/2 + r*s), s, s);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawButtons(){
+  const size=120, gap=24, total=5*size+4*gap, x0=(W-total)/2, y0=H-size-18;
+  for (let i=0;i<5;i++){
+    const x = x0 + i*(size+gap);
+    const sel = i===selected;
+    ctx.fillStyle = sel ? '#3a2a50' : '#241838';
+    ctx.fillRect(x, y0, size, size);
+    ctx.strokeStyle = sel ? '#ffd060' : '#4a3060';
+    ctx.lineWidth = sel ? 4 : 2;
+    ctx.strokeRect(x+ (sel?2:1), y0+(sel?2:1), size-(sel?4:2), size-(sel?4:2));
+    if (sel){
+      ctx.fillStyle = '#ffd060';
+      ctx.fillRect(x+8, y0-3, size-16, 4); // top marker
+    }
+    // icon
+    drawButtonIcon(i, x+size/2, y0+36, BUTTONS[i].col);
+    // label
+    ctx.fillStyle = sel ? '#fff' : '#cbb8e0';
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign='center';
+    ctx.fillText(BUTTONS[i].label, x+size/2, y0+80);
+    ctx.fillStyle = '#a890c8';
+    ctx.font = '11px monospace';
+    ctx.fillText(BUTTONS[i].sub, x+size/2, y0+98);
+  }
+}
+
+function drawButtonIcon(i, cx, cy, col){
+  ctx.save();
+  if (i===0){ // sword (attack)
+    ctx.translate(cx, cy); ctx.rotate(-Math.PI/4);
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(-3, -18, 6, 26);
+    ctx.fillStyle = col; ctx.fillRect(-7, 8, 14, 5);
+    ctx.fillStyle = '#8a5a20'; ctx.fillRect(-2, 13, 4, 10);
+  } else if (i===1){ // heart (flirt)
+    drawHeart(cx, cy, col, 3);
+  } else if (i===2){ // potion (item)
+    ctx.fillStyle = col; ctx.fillRect(cx-8, cy-8, 16, 18);
+    ctx.fillStyle = '#b0e0b0'; ctx.fillRect(cx-8, cy-8, 16, 5);
+    ctx.fillStyle = '#8a5a20'; ctx.fillRect(cx-3, cy-15, 6, 7);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(cx-2, cy-2, 4, 12); ctx.fillRect(cx-6, cy+2, 12, 4);
+  } else if (i===3){ // peace (spare)
+    ctx.strokeStyle = col; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy-13); ctx.lineTo(cx, cy+13); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx-13, cy+13); ctx.stroke();
+  } else { // shield (defend)
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-17);
+    ctx.lineTo(cx+13, cy-11);
+    ctx.lineTo(cx+13, cy+2);
+    ctx.quadraticCurveTo(cx+13, cy+11, cx, cy+17);
+    ctx.quadraticCurveTo(cx-13, cy+11, cx-13, cy+2);
+    ctx.lineTo(cx-13, cy-11);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#cfe0ff';
+    ctx.fillRect(cx-4, cy-8, 3, 12);
+  }
+  ctx.restore();
+}
+
+function drawShieldIcon(cx, cy, col, sc){
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0, -17);
+  ctx.lineTo(13, -11); ctx.lineTo(13, 2);
+  ctx.quadraticCurveTo(13, 11, 0, 17);
+  ctx.quadraticCurveTo(-13, 11, -13, 2); ctx.lineTo(-13, -11);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/* ============================== Main loop =========================== */
+let last = performance.now();
+function loop(now){
+  let dt = Math.min((now-last)/1000, 0.05);
+  last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+restart();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
