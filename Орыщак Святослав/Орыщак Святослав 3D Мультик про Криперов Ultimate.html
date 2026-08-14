@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Мультик про Криперов (Ultimate)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            font-size: 18px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="info">🟩 Криперы идут купаться... 🏊‍♂️</div>
+
+<script>
+    // 1. Сцена, Камера, Рендер
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Небо
+    scene.fog = new THREE.Fog(0x87CEEB, 30, 60); // Туман для глубины
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(-15, 10, 20);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // 2. Освещение
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 1);
+    sunLight.position.set(20, 30, 10);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    scene.add(sunLight);
+
+    // 3. Функция создания 3D Крипера
+    function createCreeper3D(scale = 1) {
+        const group = new THREE.Group();
+        const green1 = 0x2e8b2e;
+        const green2 = 0x3cb371;
+        const green3 = 0x66cc66;
+        const black = 0x000000;
+
+        const createBlock = (x, y, z, w, h, d, color) => {
+            const geo = new THREE.BoxGeometry(w * scale, h * scale, d * scale);
+            const mat = new THREE.MeshLambertMaterial({ color: color });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x * scale, y * scale, z * scale);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            group.add(mesh);
+        };
+
+        // Ноги
+        createBlock(-0.5, -2.5, 0, 1, 1, 1, green2);
+        createBlock(0.5, -2.5, 0, 1, 1, 1, green1);
+
+        // Туловище
+        for(let y = 0; y < 3; y++) {
+            for(let x = -1; x <= 0; x++) {
+                for(let z = -1; z <= 0; z++) {
+                    const color = (x + y + z) % 2 === 0 ? green1 : green2;
+                    createBlock(x + 0.5, -2 + y, z + 0.5, 1, 1, 1, color);
+                }
+            }
+        }
+
+        // Голова
+        createBlock(-0.5, 1.5, 0.5, 1, 1, 1, green1);
+        createBlock(0.5, 1.5, 0.5, 1, 1, 1, green2);
+        createBlock(-0.5, 0.5, 0.5, 1, 1, 1, green3);
+        createBlock(0.5, 0.5, 0.5, 1, 1, 1, green1);
+        createBlock(-0.5, 1.5, -0.5, 1, 1, 1, green1);
+        createBlock(0.5, 1.5, -0.5, 1, 1, 1, green1);
+        createBlock(-0.5, 0.5, -0.5, 1, 1, 1, green2);
+        createBlock(0.5, 0.5, -0.5, 1, 1, 1, green2);
+
+        // Глаза
+        createBlock(0.5, 1.5, 0.5, 0.4, 0.4, 0.1, black);
+        createBlock(0.5, 0.5, 0.5, 0.4, 0.4, 0.1, black);
+        createBlock(-0.5, 1.5, 0.5, 0.4, 0.4, 0.1, black);
+        createBlock(-0.5, 0.5, 0.5, 0.4, 0.4, 0.1, black);
+
+        return group;
+    }
+
+    // 4. Окружение: Земля, Вода, Трава
+    const groundGeo = new THREE.PlaneGeometry(100, 50);
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.z = -10;
+    ground.position.y = -3;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Трава (зеленые блоки на земле)
+    const grassMat = new THREE.MeshLambertMaterial({ color: 0x66cc66 });
+    for(let i = -10; i < 0; i+=1.5) {
+        const grass = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), grassMat);
+        grass.position.set(i, -2.9, -10 + Math.random() * 5 - 2.5);
+        scene.add(grass);
+    }
+
+    // Вода
+    const waterMat = new THREE.MeshLambertMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(8, -2.5, -10);
+    water.receiveShadow = true;
+    scene.add(water);
+
+    // 5. Деревья
+    function createTree(x, z) {
+        const tree = new THREE.Group();
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const leafMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        
+        const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2, 0.5), trunkMat);
+        trunk.position.set(x, -2, z);
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        const leaf1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 1.5), leafMat);
+        leaf1.position.set(x, -0.8, z);
+        leaf1.castShadow = true;
+        tree.add(leaf1);
+
+        const leaf2 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1), leafMat);
+        leaf2.position.set(x, -0.2, z);
+        leaf2.castShadow = true;
+        tree.add(leaf2);
+
+        scene.add(tree);
+    }
+    createTree(-6, -14);
+    createTree(-2, -15);
+    createTree(12, -15);
+
+    // 6. Домик
+    function createHouse() {
+        const houseGroup = new THREE.Group();
+        const wallMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), wallMat);
+        wall.position.set(16, -1, -10);
+        wall.castShadow = true;
+        houseGroup.add(wall);
+        
+        const roofMat = new THREE.MeshLambertMaterial({ color: 0xA0522D });
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5, 2, 4), roofMat);
+        roof.position.set(16, 1.5, -10);
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        houseGroup.add(roof);
+        
+        const doorMat = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.5, 0.1), doorMat);
+        door.position.set(16, -1.5, -8);
+        houseGroup.add(door);
+
+        scene.add(houseGroup);
+    }
+    createHouse();
+
+    // 7. Птицы (летающие V-образные фигуры)
+    const birds = [];
+    function createBird() {
+        const birdGroup = new THREE.Group();
+        const wingMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        
+        // Левое крыло
+        const wing1 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 0.3), wingMat);
+        wing1.position.set(-0.5, 0, 0);
+        wing1.rotation.z = 0.3;
+        birdGroup.add(wing1);
+        
+        // Правое крыло
+        const wing2 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 0.3), wingMat);
+        wing2.position.set(0.5, 0, 0);
+        wing2.rotation.z = -0.3;
+        birdGroup.add(wing2);
+        
+        birdGroup.position.set(-20 + Math.random() * 40, 8 + Math.random() * 10, -20 + Math.random() * 20);
+        birdGroup.scale.set(0.5 + Math.random() * 0.5, 1, 1);
+        scene.add(birdGroup);
+        birds.push({ mesh: birdGroup, speed: 0.05 + Math.random() * 0.05, offset: Math.random() * 100 });
+    }
+    for(let i=0; i<5; i++) createBird();
+
+    // 8. Создаем персонажей
+    const bigCreeper = createCreeper3D(1.5);
+    bigCreeper.position.set(-8, -1.5, -10);
+    scene.add(bigCreeper);
+
+    const smallCreeper = createCreeper3D(0.8);
+    smallCreeper.position.set(-10, -2.4, -10);
+    scene.add(smallCreeper);
+
+    // 9. Анимация
+    let time = 0;
+    let state = 'walking';
+    const infoDiv = document.getElementById('info');
+
+    function animate() {
+        requestAnimationFrame(animate);
+        time += 0.05;
+
+        const speed = 0.06;
+
+        // --- Логика движения криперов ---
+        if (state === 'walking') {
+            bigCreeper.position.x += speed * 1.5;
+            smallCreeper.position.x += speed * 1.5;
+            bigCreeper.rotation.z = Math.sin(time * 4) * 0.03;
+            smallCreeper.rotation.z = Math.sin(time * 4 + 1) * 0.03;
+            infoDiv.innerText = "🟩 Криперы гуляют по лугу...";
+
+            if (bigCreeper.position.x > 3) {
+                state = 'jumping';
+            }
+        } 
+        else if (state === 'jumping') {
+            bigCreeper.position.y += 0.12;
+            smallCreeper.position.y += 0.12;
+            bigCreeper.position.x += speed * 1.5;
+            smallCreeper.position.x += speed * 1.5;
+            infoDiv.innerText = "💨 Прыжок в воду!";
+
+            if (bigCreeper.position.y > 1) {
+                state = 'swimming';
+            }
+        } 
+        else if (state === 'swimming') {
+            bigCreeper.position.y -= 0.04;
+            smallCreeper.position.y -= 0.04;
+            bigCreeper.position.x += speed * 2;
+            smallCreeper.position.x += speed * 2;
+            infoDiv.innerText = "🏊‍♂️ Криперы плавают в речке...";
+
+            if (bigCreeper.position.y < -1.5) {
+                bigCreeper.position.y = -1.5; 
+                smallCreeper.position.y = -2.2;
+                
+                bigCreeper.rotation.x = Math.sin(time * 2) * 0.05;
+                bigCreeper.rotation.z = Math.cos(time * 2) * 0.05;
+                smallCreeper.rotation.x = Math.sin(time * 2 + 1) * 0.05;
+                smallCreeper.rotation.z = Math.cos(time * 2 + 1) * 0.05;
+                
+                if (bigCreeper.position.x > 14) {
+                    state = 'finish';
+                }
+            }
+        } 
+        else if (state === 'finish') {
+            bigCreeper.position.x += speed * 0.5;
+            smallCreeper.position.x += speed * 0.5;
+            infoDiv.innerText = "💥 Криперы шипят и заходят в дом! (БУМ?)";
+            
+            // Эффект шипения и свечения (как перед взрывом)
+            const flash = Math.sin(time * 20) * 0.5 + 0.5; // Пульсация
+            bigCreeper.scale.set(1.5 + flash * 0.05, 1.5 + flash * 0.05, 1.5 + flash * 0.05);
+            smallCreeper.scale.set(0.8 + flash * 0.05, 0.8 + flash * 0.05, 0.8 + flash * 0.05);
+            // Добавляем эффект свечения (заменяем материал на более яркий на время анимации, тут просто тряска для простоты)
+            bigCreeper.position.y = -1.5 + Math.sin(time * 30) * 0.1;
+            smallCreeper.position.y = -2.2 + Math.sin(time * 30) * 0.1;
+
+            if (bigCreeper.position.x > 17) {
+                state = 'done';
+                bigCreeper.visible = false;
+                smallCreeper.visible = false;
+                infoDiv.innerText = "🎉 Конец! Криперы в домике. (Дом уцелел!)";
+            }
+        }
+
+        // --- Движение камеры по кругу (Киноэффект) ---
+        const radius = 28;
+        const camSpeed = 0.003;
+        const angle = time * camSpeed;
+        camera.position.x = Math.sin(angle) * radius;
+        camera.position.z = Math.cos(angle) * radius - 5;
+        camera.lookAt(6, -1, -10);
+
+        // --- Анимация птиц (махание крыльями) ---
+        birds.forEach((bird, index) => {
+            bird.mesh.position.x += bird.speed;
+            if (bird.mesh.position.x > 20) bird.mesh.position.x = -20;
+            // Взмахи крыльев
+            const wing1 = bird.mesh.children[0];
+            const wing2 = bird.mesh.children[1];
+            const flap = Math.sin(time * 8 + bird.offset) * 0.5;
+            wing1.rotation.z = 0.3 + flap;
+            wing2.rotation.z = -0.3 - flap;
+        });
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>

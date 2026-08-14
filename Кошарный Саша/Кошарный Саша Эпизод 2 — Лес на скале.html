@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Эпизод 2 — Лес на скале</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Georgia', serif;
+        }
+        canvas {
+            display: block;
+            border: 2px solid #3a2a1a;
+            box-shadow: 0 0 40px rgba(100, 50, 20, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="c" width="900" height="500"></canvas>
+    <script>
+        (function() {
+            const canvas = document.getElementById('c');
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+
+            // ---------- Состояния ----------
+            let gameTime = 0;
+            let phase = 'intro';          // intro, wave, boss_intro, boss, end
+            let phaseTimer = 0;
+
+            // Ассасин
+            let assassin = {
+                x: 450, y: 370,
+                attackCooldown: 0,
+                attacking: false,
+                attackAnim: 0,
+                breath: 0
+            };
+
+            // Враги и эффекты
+            let enemies = [];
+            let particles = [];
+
+            // Параметры волны (10 ниндзя сразу, ассасин убивает по одному)
+            const TOTAL_NINJAS = 10;
+            let waveActive = false;
+            let boss = null;
+            let bossAppearTimer = 0;
+            let endTimer = 0;
+
+            // ---------- Функции создания ----------
+            function spawnEnemy(side) {
+                let x, y;
+                const margin = 60;
+                if (side === 'left') {
+                    x = -margin;
+                    y = 280 + Math.random() * 100;
+                } else if (side === 'right') {
+                    x = W + margin;
+                    y = 280 + Math.random() * 100;
+                } else if (side === 'top') {
+                    x = 200 + Math.random() * 500;
+                    y = -margin;
+                } else {
+                    x = 200 + Math.random() * 500;
+                    y = H + margin;
+                }
+                return {
+                    x, y,
+                    alive: true,
+                    dying: false,
+                    deathTimer: 0,
+                    velX: 0,
+                    velY: 0,
+                    speed: 130 + Math.random() * 100,
+                    scale: 0.9 + Math.random() * 0.3,
+                    angle: 0
+                };
+            }
+
+            function killSingleEnemy() {
+                // Найти ближайшего живого врага в радиусе атаки
+                let closest = null;
+                let closestDist = Infinity;
+                const attackRange = 135;
+                enemies.forEach(e => {
+                    if (e.alive) {
+                        let dx = e.x - assassin.x;
+                        let dy = e.y - assassin.y;
+                        let d = Math.hypot(dx, dy);
+                        if (d < attackRange && d < closestDist) {
+                            closestDist = d;
+                            closest = e;
+                        }
+                    }
+                });
+                if (closest) {
+                    closest.alive = false;
+                    closest.dying = true;
+                    closest.deathTimer = 0.5;
+                    let dx = closest.x - assassin.x;
+                    let dy = closest.y - assassin.y;
+                    let angle = Math.atan2(dy, dx);
+                    let force = 260;
+                    closest.velX = Math.cos(angle) * force;
+                    closest.velY = Math.sin(angle) * force - 140;
+                    spawnParticles(closest.x, closest.y, 18);
+                    return true;
+                }
+                return false;
+            }
+
+            function spawnParticles(x, y, count = 20) {
+                for (let i = 0; i < count; i++) {
+                    let angle = Math.random() * Math.PI * 2;
+                    let speed = 100 + Math.random() * 300;
+                    particles.push({
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 0.3 + Math.random() * 0.5,
+                        maxLife: 0.3 + Math.random() * 0.5,
+                        color: Math.random() < 0.5 ? '#ff4d4d' : '#ffaa00'
+                    });
+                }
+            }
+
+            // ---------- Обновление ----------
+            function update(dt) {
+                if (dt > 0.1) dt = 0.1;
+                gameTime += dt;
+
+                // Частицы
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let p = particles[i];
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= dt;
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+
+                // Анимации ассасина
+                assassin.breath = Math.sin(gameTime * 4.2) * 0.5;
+                if (assassin.attackCooldown > 0) assassin.attackCooldown -= dt;
+                if (assassin.attacking) {
+                    assassin.attackAnim -= dt;
+                    if (assassin.attackAnim <= 0) assassin.attacking = false;
+                }
+
+                // Движение врагов
+                enemies.forEach(e => {
+                    if (e.alive) {
+                        let dx = assassin.x - e.x;
+                        let dy = assassin.y - e.y;
+                        let dist = Math.hypot(dx, dy);
+                        if (dist > 30) {
+                            e.x += (dx / dist) * e.speed * dt;
+                            e.y += (dy / dist) * e.speed * dt;
+                        }
+                        e.angle = Math.atan2(dy, dx);
+                    } else if (e.dying) {
+                        e.x += e.velX * dt;
+                        e.y += e.velY * dt;
+                        e.velY += 520 * dt;
+                        e.deathTimer -= dt;
+                        if (e.deathTimer <= 0) e.dying = false;
+                    }
+                });
+
+                // Удаляем мёртвых без анимации
+                enemies = enemies.filter(e => e.alive || e.dying);
+
+                // Логика фаз
+                if (phase === 'intro') {
+                    if (gameTime > 2.2) {
+                        phase = 'wave';
+                        startWave();
+                    }
+                } else if (phase === 'wave') {
+                    // Автоатака ассасина, если возможно
+                    if (!assassin.attacking && assassin.attackCooldown <= 0 && enemies.some(e => e.alive)) {
+                        // Проверим, есть ли враг в радиусе
+                        let inRange = enemies.some(e => {
+                            if (e.alive) {
+                                let d = Math.hypot(e.x - assassin.x, e.y - assassin.y);
+                                return d < 135;
+                            }
+                            return false;
+                        });
+                        if (inRange) {
+                            // Запускаем атаку
+                            assassin.attacking = true;
+                            assassin.attackAnim = 0.35;
+                            assassin.attackCooldown = 0.65; // период между ударами
+                            let killed = killSingleEnemy();
+                            if (!killed) {
+                                // если по какой-то причине не убил, сбросим кулдаун
+                                assassin.attackCooldown = 0.1;
+                            }
+                        }
+                    }
+
+                    // Проверка завершения волны
+                    let aliveOrDying = enemies.filter(e => e.alive || e.dying).length;
+                    if (aliveOrDying === 0 && waveActive) {
+                        waveActive = false;
+                        phase = 'boss_intro';
+                        bossAppearTimer = 0;
+                    }
+                } else if (phase === 'boss_intro') {
+                    bossAppearTimer += dt;
+                    if (bossAppearTimer > 1.4) {
+                        boss = {
+                            x: 460, y: 340,
+                            alpha: 0,
+                            scale: 1.0
+                        };
+                        phase = 'boss';
+                        phaseTimer = 0;
+                    }
+                } else if (phase === 'boss') {
+                    if (boss.alpha < 1) boss.alpha = Math.min(1, boss.alpha + dt * 1.8);
+                    if (boss.scale < 1.7) boss.scale = Math.min(1.7, boss.scale + dt * 0.7);
+                    phaseTimer += dt;
+                    if (phaseTimer > 3.8) {
+                        phase = 'end';
+                        endTimer = 0;
+                    }
+                } else if (phase === 'end') {
+                    endTimer += dt;
+                }
+            }
+
+            function startWave() {
+                enemies = [];
+                // Создаём 10 ниндзя с разных сторон
+                const sides = ['left', 'right', 'top', 'left', 'right', 'top', 'left', 'right', 'top', 'left'];
+                for (let i = 0; i < TOTAL_NINJAS; i++) {
+                    enemies.push(spawnEnemy(sides[i]));
+                }
+                waveActive = true;
+            }
+
+            // ---------- Отрисовка ----------
+            function drawBackground() {
+                let grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#0b0b1a');
+                grad.addColorStop(0.6, '#18182b');
+                grad.addColorStop(1, '#0e0e18');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+
+                // Луна
+                ctx.beginPath();
+                ctx.arc(710, 70, 38, 0, Math.PI * 2);
+                ctx.fillStyle = '#fef7d5';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(710, 70, 46, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(254,247,213,0.12)';
+                ctx.fill();
+
+                // Горы
+                ctx.fillStyle = '#1a1a2a';
+                ctx.beginPath();
+                ctx.moveTo(0, 320);
+                ctx.lineTo(110, 200);
+                ctx.lineTo(240, 320);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(620, 320);
+                ctx.lineTo(750, 185);
+                ctx.lineTo(880, 320);
+                ctx.fill();
+
+                // Лес
+                for (let i = 0; i < 15; i++) {
+                    drawTree(i * 64 + 15, 315, 0.75);
+                }
+
+                // Скала (пустая, без персонажа)
+                ctx.fillStyle = '#38384a';
+                ctx.beginPath();
+                ctx.moveTo(25, 380);
+                ctx.lineTo(90, 255);
+                ctx.lineTo(165, 285);
+                ctx.lineTo(185, 380);
+                ctx.fill();
+                ctx.fillStyle = '#4a4a5a';
+                ctx.beginPath();
+                ctx.moveTo(35, 380);
+                ctx.lineTo(95, 265);
+                ctx.lineTo(145, 290);
+                ctx.lineTo(155, 380);
+                ctx.fill();
+
+                // Земля
+                ctx.fillStyle = '#1f1f28';
+                ctx.fillRect(0, 380, W, 120);
+                ctx.fillStyle = '#2e2e3a';
+                for (let i = 0; i < 20; i++) {
+                    let rx = (i * 127 + 40) % W;
+                    let ry = 390 + Math.sin(i * 2.1) * 15;
+                    ctx.beginPath();
+                    ctx.ellipse(rx, ry, 7 + i % 5, 3 + i % 4, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function drawTree(x, y, sc) {
+                ctx.fillStyle = '#221a12';
+                ctx.fillRect(x - 3 * sc, y, 6 * sc, 28 * sc);
+                ctx.fillStyle = '#143014';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 34 * sc);
+                ctx.lineTo(x - 17 * sc, y + 8 * sc);
+                ctx.lineTo(x + 17 * sc, y + 8 * sc);
+                ctx.fill();
+                ctx.fillStyle = '#1f441f';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 44 * sc);
+                ctx.lineTo(x - 13 * sc, y - 8 * sc);
+                ctx.lineTo(x + 13 * sc, y - 8 * sc);
+                ctx.fill();
+            }
+
+            function drawAssassin() {
+                ctx.save();
+                ctx.translate(assassin.x, assassin.y + assassin.breath);
+                ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                ctx.beginPath();
+                ctx.ellipse(0, 30, 15, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#181818';
+                ctx.fillRect(-13, -30, 26, 46);
+                ctx.fillStyle = '#3a1e1e';
+                ctx.fillRect(-13, 6, 26, 6);
+                ctx.fillStyle = '#111';
+                ctx.fillRect(-8, 16, 7, 18);
+                ctx.fillRect(2, 16, 7, 18);
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.arc(0, -42, 13, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#0f0f0f';
+                ctx.beginPath();
+                ctx.arc(0, -42, 15, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#a00';
+                ctx.fillRect(-15, -47, 30, 5);
+                ctx.fillStyle = '#f22';
+                ctx.fillRect(-5, -44, 3, 3);
+                ctx.fillRect(3, -44, 3, 3);
+                ctx.save();
+                ctx.translate(14, -18);
+                let rot = assassin.attacking ? 0.85 : 0.15;
+                ctx.rotate(rot);
+                ctx.strokeStyle = '#c0c0d0';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(28, -4);
+                ctx.stroke();
+                ctx.fillStyle = '#8a8a9a';
+                ctx.fillRect(-2, -3, 8, 6);
+                ctx.restore();
+                ctx.fillStyle = '#181818';
+                ctx.fillRect(-20, -22, 7, 18);
+                if (assassin.attacking) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(14, -18, 30, -0.5, 1.3);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawNinja(n) {
+                if (!n.alive && !n.dying) return;
+                ctx.save();
+                ctx.translate(n.x, n.y);
+                let alpha = n.dying ? Math.max(0, n.deathTimer / 0.5) : 1;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.ellipse(0, 18, 10, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-10, -22, 20, 36);
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(0, -28, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ccc';
+                ctx.fillRect(-7, -32, 14, 9);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-5, -31, 3, 4);
+                ctx.fillRect(2, -31, 3, 4);
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.moveTo(8, -15);
+                ctx.lineTo(20, -22);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawBoss() {
+                if (!boss || boss.alpha <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = boss.alpha;
+                ctx.translate(boss.x, boss.y);
+                let s = boss.scale;
+                ctx.scale(s, s);
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath();
+                ctx.ellipse(0, 38, 24, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1c1c1c';
+                ctx.fillRect(-20, -42, 40, 62);
+                ctx.fillStyle = '#8b0000';
+                ctx.fillRect(-20, -32, 40, 12);
+                ctx.fillRect(-10, 12, 20, 22);
+                ctx.fillStyle = '#3a3a3a';
+                ctx.beginPath();
+                ctx.ellipse(-24, -32, 13, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(24, -32, 13, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.arc(0, -58, 17, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(0, -58, 19, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#8b0000';
+                ctx.beginPath();
+                ctx.moveTo(-15, -72);
+                ctx.lineTo(-24, -94);
+                ctx.lineTo(-11, -74);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(15, -72);
+                ctx.lineTo(24, -94);
+                ctx.lineTo(11, -74);
+                ctx.fill();
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(-9, -62, 6, 6);
+                ctx.fillRect(4, -62, 6, 6);
+                ctx.fillStyle = '#555';
+                ctx.fillRect(18, -48, 30, 8);
+                ctx.fillStyle = '#888';
+                ctx.fillRect(46, -49, 8, 12);
+                ctx.restore();
+            }
+
+            function drawParticles() {
+                particles.forEach(p => {
+                    let alpha = p.life / p.maxLife;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1;
+            }
+
+            function drawEndTitle() {
+                if (phase === 'end') {
+                    let alpha = Math.min(1, endTimer / 1.6);
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = '#c9a063';
+                    ctx.font = 'bold 44px "Georgia", serif';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = '#000';
+                    ctx.shadowBlur = 25;
+                    ctx.fillText('КОНЕЦ 2 СЕРИИ', W / 2, H / 2 - 25);
+                    ctx.font = 'italic 22px "Georgia", serif';
+                    ctx.fillText('«Лес на скале»', W / 2, H / 2 + 30);
+                    ctx.restore();
+                }
+            }
+
+            function drawUI() {
+                if (phase === 'intro' && gameTime < 2.2) {
+                    let alpha = Math.min(1, gameTime / 1.4);
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 32px "Georgia", serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ЭПИЗОД 2', W / 2, H / 2 - 25);
+                    ctx.fillText('Лес на скале', W / 2, H / 2 + 25);
+                    ctx.restore();
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                drawBackground();
+                enemies.forEach(e => drawNinja(e));
+                drawAssassin();
+                drawBoss();
+                drawParticles();
+                drawUI();
+                drawEndTitle();
+            }
+
+            // ---------- Игровой цикл ----------
+            let lastTime = performance.now();
+            function loop(now) {
+                let dt = Math.min(0.1, (now - lastTime) / 1000);
+                if (dt > 0) {
+                    update(dt);
+                    draw();
+                }
+                lastTime = now;
+                requestAnimationFrame(loop);
+            }
+
+            // Старт
+            enemies = [];
+            particles = [];
+            phase = 'intro';
+            gameTime = 0;
+            requestAnimationFrame(loop);
+        })();
+    </script>
+</body>
+</html>

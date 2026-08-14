@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>❄️ Командный бой: Лёд против Тьмы (гранаты видны!)</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        canvas {
+            border: 3px solid #2e4a1e;
+            border-radius: 12px;
+            box-shadow: 0 0 60px rgba(0, 200, 255, 0.8);
+        }
+        .restart-btn {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #1e5f3e, #0d3b1e);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            letter-spacing: 2px;
+            box-shadow: 0 0 30px #2ecc71;
+            transition: 0.3s;
+            z-index: 20;
+        }
+        .restart-btn:hover {
+            background: #2e8b57;
+            box-shadow: 0 0 45px #3cb371;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="cartoonCanvas"></canvas>
+    <button class="restart-btn" onclick="restartCartoon()">🔄 СМОТРЕТЬ ЕЩЁ РАЗ</button>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('cartoonCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 960;
+            canvas.height = 540;
+
+            const fighters = [
+                {
+                    name: 'Саб-Зиро', team: 'left',
+                    x: 150, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: 1,
+                    color: '#3498db', darkColor: '#1e6fa5',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 25,
+                    superCooldown: 0, superCooldownMax: 180,
+                    grenadeCooldown: 0, grenadeCooldownMax: 60,  // Уменьшено для частых бросков
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 200,
+                    hookTarget: null, hookTimer: 0,
+                    hasKatana: true
+                },
+                {
+                    name: 'Фрост', team: 'left',
+                    x: 80, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: 1,
+                    color: '#5dade2', darkColor: '#2e86c1',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 28,
+                    superCooldown: 0, superCooldownMax: 200,
+                    grenadeCooldown: 0, grenadeCooldownMax: 70,
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 999, hookTarget: null, hookTimer: 0,
+                    hasKatana: false
+                },
+                {
+                    name: 'Глейшер', team: 'left',
+                    x: 220, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: 1,
+                    color: '#a0d8ef', darkColor: '#6fa8c0',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 30,
+                    superCooldown: 0, superCooldownMax: 220,
+                    grenadeCooldown: 0, grenadeCooldownMax: 80,
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 999, hookTarget: null, hookTimer: 0,
+                    hasKatana: false
+                },
+                {
+                    name: 'Морти', team: 'right',
+                    x: 700, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: -1,
+                    color: '#8e44ad', darkColor: '#5e2b7a',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 25,
+                    superCooldown: 0, superCooldownMax: 180,
+                    grenadeCooldown: 0, grenadeCooldownMax: 60,
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 999, hookTarget: null, hookTimer: 0,
+                    hasKatana: false
+                },
+                {
+                    name: 'Нуб', team: 'right',
+                    x: 780, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: -1,
+                    color: '#6c3483', darkColor: '#4a235a',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 28,
+                    superCooldown: 0, superCooldownMax: 210,
+                    grenadeCooldown: 0, grenadeCooldownMax: 70,
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 999, hookTarget: null, hookTimer: 0,
+                    hasKatana: false
+                },
+                {
+                    name: 'Рейн', team: 'right',
+                    x: 860, y: 380, vx: 0, vy: 0,
+                    width: 44, height: 74,
+                    health: 100, maxHealth: 100,
+                    facing: -1,
+                    color: '#c0392b', darkColor: '#922b21',
+                    state: 'idle', attackTimer: 0, hitTimer: 0, grounded: true,
+                    frozenTimer: 0,
+                    cooldown: 0, cooldownMax: 30,
+                    superCooldown: 0, superCooldownMax: 230,
+                    grenadeCooldown: 0, grenadeCooldownMax: 80,
+                    grenadeTimer: 0,
+                    hookCooldown: 0, hookCooldownMax: 999, hookTarget: null, hookTimer: 0,
+                    hasKatana: false
+                }
+            ];
+
+            const groundY = 430;
+            const gravity = 0.7;
+            let grenades = [];
+            let particles = [];
+            let hitEffects = [];
+            let cameraShake = 0, shakeIntensity = 0;
+            let animationFrame;
+            let battleEnded = false;
+
+            function restartCartoon() {
+                cancelAnimationFrame(animationFrame);
+                battleEnded = false;
+                grenades = [];
+                for (let f of fighters) {
+                    f.health = f.maxHealth;
+                    f.vx = 0; f.vy = 0;
+                    f.y = 380;
+                    f.state = 'idle'; f.attackTimer = 0; f.hitTimer = 0; f.frozenTimer = 0;
+                    f.cooldown = 0; f.superCooldown = 0;
+                    f.grenadeCooldown = 0; f.grenadeTimer = 0;
+                    f.hookCooldown = 0; f.hookTarget = null; f.hookTimer = 0;
+                }
+                fighters[0].x = 150; fighters[1].x = 80; fighters[2].x = 220;
+                fighters[3].x = 700; fighters[4].x = 780; fighters[5].x = 860;
+                for (let f of fighters) f.facing = f.team === 'left' ? 1 : -1;
+                particles = []; hitEffects = [];
+                cameraShake = 0; shakeIntensity = 0;
+                animationFrame = requestAnimationFrame(gameLoop);
+            }
+
+            function applyDamage(attacker, defender, damage, effectText, freeze = false, isSuper = false) {
+                defender.health -= damage;
+                if (defender.health < 0) defender.health = 0;
+                defender.state = 'hit';
+                defender.hitTimer = 10;
+                defender.vx = attacker.facing * (freeze ? 2 : (isSuper ? 8 : 5));
+                defender.vy = freeze ? -2 : (isSuper ? -7 : -4);
+                if (freeze) defender.frozenTimer = 45;
+                cameraShake = isSuper ? 25 : 10;
+                shakeIntensity = isSuper ? 18 : 7;
+                const impactX = defender.x + defender.width/2;
+                const impactY = defender.y + defender.height/2;
+                for (let i=0; i < (isSuper?50:20); i++) {
+                    particles.push({
+                        x: impactX, y: impactY,
+                        vx: (Math.random()-0.5) * (isSuper?22:12),
+                        vy: (Math.random()-0.8) * (isSuper?16:9) - 3,
+                        life: 25 + Math.random()*20,
+                        color: freeze ? '#a0e0ff' : (isSuper ? '#ff5500' : '#ffaa00'),
+                        size: 2+Math.random()*(isSuper?6:4)
+                    });
+                }
+                hitEffects.push({
+                    x: impactX, y: impactY-20,
+                    text: '-' + damage,
+                    life: 28,
+                    color: freeze ? '#00ccff' : (isSuper ? '#ff3333' : '#ffcc00'),
+                    size: isSuper ? 38 : 28
+                });
+                hitEffects.push({
+                    x: impactX, y: impactY-45,
+                    text: effectText,
+                    life: 22,
+                    color: isSuper ? '#ff8800' : '#ffcc00',
+                    size: isSuper ? 26 : 20
+                });
+            }
+
+            function normalAttack(attacker, defender, isKick) {
+                if (attacker.state === 'hit' || attacker.attackTimer > 0 || attacker.frozenTimer > 0) return false;
+                if (attacker.cooldown > 0) return false;
+                const dist = Math.abs((attacker.x + attacker.width/2) - (defender.x + defender.width/2));
+                if (dist > 80) return false;
+                const damage = isKick ? 12 + Math.floor(Math.random()*8) : 8 + Math.floor(Math.random()*7);
+                const effect = isKick ? 'KICK!' : (attacker.hasKatana ? 'SLASH!' : 'PUNCH!');
+                applyDamage(attacker, defender, damage, effect);
+                attacker.state = isKick ? 'kick' : 'punch';
+                attacker.attackTimer = 16;
+                attacker.cooldown = attacker.cooldownMax;
+                attacker.facing = defender.x > attacker.x ? 1 : -1;
+                return true;
+            }
+
+            function superAttack(attacker, defender) {
+                if (attacker.state === 'hit' || attacker.attackTimer > 0 || attacker.frozenTimer > 0) return false;
+                if (attacker.superCooldown > 0) return false;
+                const dist = Math.abs((attacker.x + attacker.width/2) - (defender.x + defender.width/2));
+                if (dist > 110) return false;
+                const damage = 35 + Math.floor(Math.random()*15);
+                let effectText = 'SUPER!', freeze = false;
+                if (attacker.team === 'left') { effectText = 'ICE BLAST!'; freeze = true; }
+                else { effectText = 'DARK BOMB!'; }
+                applyDamage(attacker, defender, damage, effectText, freeze, true);
+                attacker.state = 'ult';
+                attacker.attackTimer = 28;
+                attacker.superCooldown = attacker.superCooldownMax;
+                attacker.facing = defender.x > attacker.x ? 1 : -1;
+                return true;
+            }
+
+            function throwGrenade(thrower) {
+                if (thrower.grenadeCooldown > 0 || thrower.state === 'hit' || thrower.frozenTimer > 0) return;
+                thrower.grenadeCooldown = thrower.grenadeCooldownMax;
+                thrower.grenadeTimer = 12; // показывает гранату в руке на 12 кадров
+                // Запоминаем позицию для плавного вылета
+                const startX = thrower.x + thrower.width/2 - thrower.facing * 15;
+                const startY = thrower.y + thrower.height/3 - 5;
+                setTimeout(() => {
+                    if (thrower.health > 0) {
+                        const vx = thrower.facing * (7 + Math.random()*5);
+                        const vy = -7 - Math.random()*4;
+                        grenades.push({
+                            x: startX, y: startY,
+                            vx: vx, vy: vy,
+                            timer: 45, team: thrower.team, radius: 7
+                        });
+                    }
+                }, 150);
+            }
+
+            function useHook(attacker) {
+                if (!attacker || attacker.hookCooldown > 0 || attacker.frozenTimer > 0 || attacker.state === 'hit') return;
+                let target = null, minDist = 150;
+                for (let other of fighters) {
+                    if (other.team === attacker.team || other.health <= 0) continue;
+                    const dist = Math.abs((attacker.x+attacker.width/2) - (other.x+other.width/2));
+                    if (dist < minDist) { minDist = dist; target = other; }
+                }
+                if (!target) return;
+                attacker.hookCooldown = attacker.hookCooldownMax;
+                attacker.hookTarget = target;
+                attacker.hookTimer = 12;
+                attacker.state = 'punch';
+                attacker.attackTimer = 16;
+                setTimeout(() => {
+                    if (attacker.hookTarget && attacker.hookTarget.health > 0) {
+                        const dx = attacker.x + attacker.width/2 - (attacker.hookTarget.x + attacker.hookTarget.width/2);
+                        attacker.hookTarget.x += dx * 0.8;
+                        attacker.hookTarget.vx = 0;
+                        attacker.hookTarget.vy = -3;
+                        attacker.hookTarget.state = 'hit';
+                        attacker.hookTarget.hitTimer = 8;
+                        applyDamage(attacker, attacker.hookTarget, 15 + Math.floor(Math.random()*10), 'HOOK!');
+                        attacker.hookTarget = null;
+                    }
+                }, 200);
+            }
+
+            function updateAI(fighter) {
+                if (fighter.frozenTimer > 0 || fighter.state === 'hit' || battleEnded) return;
+                let closest = null, minDist = Infinity;
+                for (let other of fighters) {
+                    if (other.team === fighter.team || other.health <= 0) continue;
+                    const dist = Math.abs((fighter.x + fighter.width/2) - (other.x + other.width/2));
+                    if (dist < minDist) { minDist = dist; closest = other; }
+                }
+                if (!closest) return;
+                const dx = closest.x + closest.width/2 - (fighter.x + fighter.width/2);
+                const absDx = Math.abs(dx);
+                if (absDx > 90) {
+                    fighter.vx = (dx > 0 ? 1 : -1) * 5;
+                    fighter.facing = dx > 0 ? 1 : -1;
+                    fighter.state = 'walk';
+                } else if (absDx < 50) {
+                    fighter.vx = (dx > 0 ? -1 : 1) * 2;
+                } else {
+                    fighter.vx *= 0.9;
+                }
+                if (absDx < 100 && fighter.attackTimer <= 0) {
+                    const r = Math.random();
+                    // Увеличена вероятность гранаты до 15%
+                    if (r < 0.15 && fighter.grenadeCooldown <= 0) throwGrenade(fighter);
+                    else if (r < 0.18 && fighter.superCooldown <= 0) superAttack(fighter, closest);
+                    else if (r < 0.28 && fighter.name === 'Саб-Зиро' && fighter.hookCooldown <= 0) useHook(fighter);
+                    else if (r < 0.55 && fighter.grounded && fighter.cooldown <= 0) normalAttack(fighter, closest, true);
+                    else if (r < 0.8 && fighter.cooldown <= 0) normalAttack(fighter, closest, false);
+                    else if (r < 0.9 && fighter.grounded && fighter.cooldown <= 0) {
+                        fighter.vy = -10;
+                        fighter.grounded = false;
+                        fighter.state = 'jump';
+                        setTimeout(() => {
+                            if (fighter.health > 0 && fighter.attackTimer <= 0) {
+                                const d = Math.abs((fighter.x+fighter.width/2) - (closest.x+closest.width/2));
+                                if (d < 90) {
+                                    applyDamage(fighter, closest, 14 + Math.floor(Math.random()*8), 'JUMP KICK!');
+                                    fighter.state = 'kick';
+                                    fighter.attackTimer = 14;
+                                    fighter.cooldown = fighter.cooldownMax;
+                                }
+                            }
+                        }, 250);
+                    }
+                }
+                if (fighter.cooldown > 0) fighter.cooldown--;
+                if (fighter.superCooldown > 0) fighter.superCooldown--;
+                if (fighter.grenadeCooldown > 0) fighter.grenadeCooldown--;
+                if (fighter.hookCooldown > 0) fighter.hookCooldown--;
+                if (fighter.grenadeTimer > 0) fighter.grenadeTimer--;
+            }
+
+            function updatePhysics(f) {
+                if (f.frozenTimer > 0) { f.frozenTimer--; f.vx = 0; return; }
+                f.vy += gravity;
+                f.y += f.vy;
+                if (f.y + f.height >= groundY) { f.y = groundY - f.height; f.vy = 0; f.grounded = true; }
+                else f.grounded = false;
+                f.x += f.vx;
+                f.vx *= 0.85;
+                if (f.x < 30) f.x = 30;
+                if (f.x + f.width > canvas.width - 30) f.x = canvas.width - 30 - f.width;
+                if (f.attackTimer > 0) { f.attackTimer--; if (f.attackTimer === 0) f.state = 'idle'; }
+                if (f.hitTimer > 0) { f.hitTimer--; if (f.hitTimer === 0 && f.state === 'hit') f.state = 'idle'; }
+            }
+
+            function updateGrenades() {
+                for (let i = grenades.length-1; i >= 0; i--) {
+                    const g = grenades[i];
+                    g.x += g.vx;
+                    g.y += g.vy;
+                    g.vy += 0.4;
+                    g.timer--;
+                    // Рисуем след (частицы) во время полёта
+                    if (g.timer % 3 === 0) {
+                        particles.push({
+                            x: g.x, y: g.y,
+                            vx: (Math.random()-0.5)*2, vy: (Math.random()-0.5)*2,
+                            life: 10, color: '#ffaa00', size: 2
+                        });
+                    }
+                    if (g.timer <= 0 || g.y > groundY) {
+                        for (let f of fighters) {
+                            if (f.team !== g.team && f.health > 0) {
+                                const dx = (f.x + f.width/2) - g.x;
+                                const dy = (f.y + f.height/2) - g.y;
+                                if (Math.sqrt(dx*dx+dy*dy) < 80) {
+                                    applyDamage({facing: dx>0?1:-1, team: g.team}, f, 20 + Math.floor(Math.random()*10), 'BOOM!');
+                                }
+                            }
+                        }
+                        for (let j=0; j<30; j++) {
+                            particles.push({
+                                x: g.x, y: g.y,
+                                vx: (Math.random()-0.5)*18, vy: (Math.random()-1)*12,
+                                life: 25, color: '#ff6600', size: 4+Math.random()*6
+                            });
+                        }
+                        cameraShake = 15; shakeIntensity = 12;
+                        grenades.splice(i,1);
+                    }
+                }
+            }
+
+            function drawBackground() {
+                const gradSky = ctx.createLinearGradient(0,0,0,300);
+                gradSky.addColorStop(0,'#1b4a2e'); gradSky.addColorStop(0.7,'#3a7a4b'); gradSky.addColorStop(1,'#6b9e4a');
+                ctx.fillStyle = gradSky; ctx.fillRect(0,0,canvas.width,280);
+                ctx.fillStyle = '#ffdd77'; ctx.beginPath(); ctx.arc(800,80,45,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#1e4a1e';
+                for (let i=0;i<12;i++) { let tx=i*90-20; ctx.beginPath(); ctx.moveTo(tx,280); ctx.lineTo(tx+40,150); ctx.lineTo(tx+80,280); ctx.fill(); }
+                ctx.fillStyle = '#2d5e2d';
+                for (let i=0;i<8;i++) { let lx=i*130+Math.sin(i)*20; ctx.beginPath(); ctx.ellipse(lx,270,70,35,0,0,Math.PI*2); ctx.fill(); }
+                ctx.fillStyle = '#4a6b2a'; ctx.fillRect(0,groundY+5,canvas.width,canvas.height-groundY-5);
+                ctx.fillStyle = '#3b5e1a';
+                for (let i=0;i<20;i++) { let gx=i*50+10; ctx.beginPath(); ctx.moveTo(gx,groundY+5); ctx.lineTo(gx-10,groundY-15); ctx.lineTo(gx+10,groundY-10); ctx.fill(); }
+                ctx.strokeStyle = '#5a7a2a'; ctx.lineWidth=3;
+                for (let i=0;i<5;i++) { ctx.beginPath(); ctx.moveTo(100+i*180,50); ctx.quadraticCurveTo(120+i*180,150,90+i*180,280); ctx.stroke(); }
+                ctx.fillStyle = '#2d4a1e';
+                for (let i=0;i<6;i++) { ctx.beginPath(); ctx.ellipse(150+i*150,groundY+10,40,20,0,0,Math.PI*2); ctx.fill(); }
+            }
+
+            function drawFighter(f) {
+                ctx.save();
+                const x=f.x, y=f.y, w=f.width, h=f.height;
+                const cx=x+w/2, headR=15;
+                const bodyColor = f.frozenTimer>0 ? '#a0d8ef' : f.color;
+                const darkColor = f.frozenTimer>0 ? '#6fa8c0' : f.darkColor;
+                if (f.hitTimer>0 && Math.floor(f.hitTimer/2)%2===0) ctx.globalAlpha=0.6;
+                ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(cx,groundY+2,w*0.6,5,0,0,Math.PI*2); ctx.fill();
+                const legY=y+h-10; ctx.strokeStyle=bodyColor; ctx.lineWidth=6; ctx.lineCap='round';
+                if (f.state==='kick' && f.attackTimer>10) {
+                    const kickX=cx+f.facing*30, kickY=legY-15;
+                    ctx.beginPath(); ctx.moveTo(cx-f.facing*5,legY); ctx.lineTo(kickX,kickY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+f.facing*5,legY); ctx.lineTo(cx+f.facing*8,legY+8); ctx.stroke();
+                    ctx.fillStyle=darkColor; ctx.beginPath(); ctx.ellipse(kickX,kickY-2,7,4,0,0,Math.PI*2); ctx.fill();
+                } else {
+                    ctx.beginPath(); ctx.moveTo(cx-7,legY); ctx.lineTo(cx-11,legY+8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+7,legY); ctx.lineTo(cx+11,legY+8); ctx.stroke();
+                }
+                const shoulderY=y+30; ctx.lineWidth=6;
+                ctx.beginPath(); ctx.moveTo(cx-6,shoulderY); ctx.lineTo(cx-16,shoulderY+15); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx+6,shoulderY); ctx.lineTo(cx+16,shoulderY+15); ctx.stroke();
+                // Катана для Саб-Зиро
+                if (f.hasKatana) {
+                    const swordBaseX = cx + f.facing * 10;
+                    const swordBaseY = shoulderY;
+                    const swordTipX = swordBaseX + f.facing * 28;
+                    const swordTipY = swordBaseY + 18;
+                    ctx.strokeStyle = '#c0c0c0';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(swordBaseX, swordBaseY);
+                    ctx.lineTo(swordTipX, swordTipY);
+                    ctx.stroke();
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(swordTipX, swordTipY, 3, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                if (f.state==='punch' && f.attackTimer>12) {
+                    const fistX=cx+f.facing*32, fistY=shoulderY+6;
+                    ctx.beginPath(); ctx.moveTo(cx+f.facing*5,shoulderY); ctx.lineTo(fistX,fistY); ctx.stroke();
+                    ctx.fillStyle=f.team==='left'?'#d0f0ff':'#ffddaa'; ctx.beginPath(); ctx.arc(fistX,fistY,8,0,2*Math.PI); ctx.fill();
+                } else if (f.state==='ult' && f.attackTimer>18) {
+                    const ultX=cx+f.facing*28;
+                    ctx.beginPath(); ctx.moveTo(cx,shoulderY-5); ctx.lineTo(ultX,shoulderY-8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx,shoulderY+10); ctx.lineTo(ultX,shoulderY+8); ctx.stroke();
+                    ctx.fillStyle=f.team==='left'?'#a0f0ff':'#ff8800';
+                    ctx.shadowColor=f.team==='left'?'#00ccff':'#ff4400'; ctx.shadowBlur=18;
+                    ctx.beginPath(); ctx.arc(ultX+10,shoulderY,16,0,2*Math.PI); ctx.fill(); ctx.shadowBlur=0;
+                }
+                // Граната в руке (большая и яркая)
+                if (f.grenadeTimer > 0) {
+                    const gx = cx - f.facing * 22;
+                    const gy = shoulderY - 10;
+                    ctx.shadowColor = '#ffaa00';
+                    ctx.shadowBlur = 12;
+                    ctx.fillStyle = '#222';
+                    ctx.beginPath(); ctx.arc(gx, gy, 8, 0, 2*Math.PI); ctx.fill();
+                    ctx.fillStyle = '#cc4400';
+                    ctx.beginPath(); ctx.arc(gx-1, gy-3, 6, 0, 2*Math.PI); ctx.fill();
+                    ctx.fillStyle = '#ff8800';
+                    ctx.beginPath(); ctx.arc(gx-1, gy-5, 3, 0, 2*Math.PI); ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+                ctx.fillStyle=bodyColor; ctx.beginPath(); ctx.roundRect(cx-w*0.38,y+headR*2-5,w*0.76,h-headR*2-10,6); ctx.fill();
+                ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.stroke();
+                ctx.fillStyle=bodyColor; ctx.beginPath(); ctx.arc(cx,y+headR,headR,0,2*Math.PI); ctx.fill();
+                ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.stroke();
+                if (f.team === 'left') {
+                    ctx.fillStyle='#222'; ctx.fillRect(cx-12,y+headR-3,24,10);
+                    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+f.facing*5,y+headR-4,3.5,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(cx+f.facing*6.5,y+headR-4,1.8,0,2*Math.PI); ctx.fill();
+                } else {
+                    ctx.fillStyle='#f0e6d2'; ctx.beginPath(); ctx.arc(cx,y+headR,headR-2,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(cx-4,y+headR-4,3,0,2*Math.PI); ctx.fill();
+                    ctx.beginPath(); ctx.arc(cx+4,y+headR-4,3,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#fff'; for (let i=0;i<4;i++) ctx.fillRect(cx-5+i*3,y+headR+4,2,3);
+                }
+                ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+                ctx.fillStyle = f.team === 'left' ? '#a0f0ff' : '#f5b041';
+                ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+                ctx.fillText(f.name, cx, y - 12);
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+
+            CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+                if (w<2*r) r=w/2; if (h<2*r) r=h/2;
+                this.moveTo(x+r,y); this.lineTo(x+w-r,y); this.quadraticCurveTo(x+w,y,x+w,y+r);
+                this.lineTo(x+w,y+h-r); this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+                this.lineTo(x+r,y+h); this.quadraticCurveTo(x,y+h,x,y+h-r);
+                this.lineTo(x,y+r); this.quadraticCurveTo(x,y,x+r,y); this.closePath(); return this;
+            };
+
+            function drawEffects() {
+                for (let p of particles) {
+                    ctx.globalAlpha=p.life/25; ctx.fillStyle=p.color;
+                    ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,2*Math.PI); ctx.fill();
+                }
+                ctx.globalAlpha=1;
+                for (let ef of hitEffects) {
+                    ctx.globalAlpha=Math.min(1, ef.life/25);
+                    ctx.font=`bold ${ef.size}px Impact, Arial`;
+                    ctx.fillStyle=ef.color; ctx.textAlign='center';
+                    ctx.fillText(ef.text,ef.x,ef.y);
+                    ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeText(ef.text,ef.x,ef.y);
+                }
+                ctx.globalAlpha=1;
+                for (let g of grenades) {
+                    ctx.fillStyle = '#333';
+                    ctx.beginPath(); ctx.arc(g.x, g.y, g.radius, 0, 2*Math.PI); ctx.fill();
+                    ctx.fillStyle = '#cc6600';
+                    ctx.beginPath(); ctx.arc(g.x-1, g.y-2, g.radius-2, 0, 2*Math.PI); ctx.fill();
+                    ctx.fillStyle = '#ff9900';
+                    ctx.beginPath(); ctx.arc(g.x-1, g.y-3, 2, 0, 2*Math.PI); ctx.fill();
+                }
+                for (let f of fighters) {
+                    if (f.hookTimer > 0 && f.hookTarget) {
+                        ctx.strokeStyle = '#aaa';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(f.x+f.width/2, f.y+f.height/3);
+                        ctx.lineTo(f.hookTarget.x+f.hookTarget.width/2, f.hookTarget.y+f.hookTarget.height/2);
+                        ctx.stroke();
+                        f.hookTimer--;
+                    }
+                }
+            }
+
+            function drawUI() {
+                for (let f of fighters) {
+                    if (f.health <= 0) continue;
+                    const barWidth = 40;
+                    const x = f.x + f.width/2 - barWidth/2;
+                    const y = f.y - 15;
+                    ctx.fillStyle = '#333'; ctx.fillRect(x, y, barWidth, 6);
+                    ctx.fillStyle = f.team === 'left' ? '#2ecc71' : '#e74c3c';
+                    ctx.fillRect(x, y, barWidth * (f.health/f.maxHealth), 6);
+                }
+                if (battleEnded) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 42px Impact, Arial';
+                    ctx.textAlign = 'center';
+                    const leftWon = fighters.some(f => f.team === 'left' && f.health > 0);
+                    ctx.fillText(leftWon ? 'ЛЁД ПОБЕЖДАЕТ!' : 'ТЬМА ПОБЕЖДАЕТ!', canvas.width/2, canvas.height/2);
+                }
+            }
+
+            function checkBattleEnd() {
+                if (battleEnded) return true;
+                const leftAlive = fighters.some(f => f.team === 'left' && f.health > 0);
+                const rightAlive = fighters.some(f => f.team === 'right' && f.health > 0);
+                if (!leftAlive || !rightAlive) {
+                    battleEnded = true;
+                    setTimeout(() => restartCartoon(), 3000);
+                    return true;
+                }
+                return false;
+            }
+
+            function gameLoop() {
+                if (!battleEnded) {
+                    for (let f of fighters) { updateAI(f); updatePhysics(f); }
+                    updateGrenades();
+                    checkBattleEnd();
+                } else {
+                    for (let f of fighters) updatePhysics(f);
+                }
+                for (let i=particles.length-1;i>=0;i--) {
+                    particles[i].x += particles[i].vx; particles[i].y += particles[i].vy;
+                    particles[i].vy += 0.2; particles[i].life--;
+                    if (particles[i].life<=0) particles.splice(i,1);
+                }
+                for (let i=hitEffects.length-1;i>=0;i--) {
+                    hitEffects[i].y -= 1; hitEffects[i].life--;
+                    if (hitEffects[i].life<=0) hitEffects.splice(i,1);
+                }
+                if (cameraShake>0) cameraShake-=0.7;
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                let shakeX=0, shakeY=0;
+                if (cameraShake>0) {
+                    shakeX = (Math.random()-0.5)*shakeIntensity*(cameraShake/10);
+                    shakeY = (Math.random()-0.5)*shakeIntensity*(cameraShake/10);
+                }
+                ctx.save(); ctx.translate(shakeX, shakeY);
+                drawBackground();
+                for (let f of fighters) drawFighter(f);
+                drawEffects();
+                drawUI();
+                ctx.restore();
+                animationFrame = requestAnimationFrame(gameLoop);
+            }
+
+            restartCartoon();
+            window.restartCartoon = restartCartoon;
+        })();
+    </script>
+</body>
+</html>

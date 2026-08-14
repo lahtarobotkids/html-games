@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Мультик: Побег Кроша 2</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #0a0a1a; }
+    #caption {
+      position: absolute;
+      bottom: 40px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      text-shadow: 0 0 20px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7);
+      pointer-events: none;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 12px 0;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.5s;
+    }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #aaa;
+      font-size: 14px;
+      background: rgba(0,0,0,0.6);
+      padding: 6px 14px;
+      border-radius: 20px;
+      z-index: 10;
+      backdrop-filter: blur(2px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #replayBtn {
+      position: absolute;
+      bottom: 100px;
+      right: 30px;
+      padding: 12px 28px;
+      background: #f1c40f;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 40px;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 20;
+      box-shadow: 0 0 20px rgba(241,196,15,0.5);
+      font-weight: bold;
+      transition: 0.2s;
+      display: none;
+    }
+    #replayBtn:hover {
+      transform: scale(1.05);
+      background: #f39c12;
+    }
+    #part1Link {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: #fff;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 16px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      z-index: 10;
+      backdrop-filter: blur(2px);
+    }
+    #part1Link:hover {
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="caption">🌳 Свобода! Но Крош не забыл друзей</div>
+  <div id="info">🎬 Часть 2 • Возвращение</div>
+  <a id="part1Link" href="#" onclick="alert('Откройте первую часть отдельно')">◀ Часть 1</a>
+  <button id="replayBtn">🔄 Смотреть снова</button>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.126.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // --- Сцена, камера, рендерер ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2c3e50);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 4, 8);
+    camera.lookAt(0, 1, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // --- Освещение ---
+    const ambientLight = new THREE.AmbientLight(0x404060);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    dirLight.position.set(8, 12, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 0.1;
+    dirLight.shadow.camera.far = 30;
+    dirLight.shadow.camera.left = -10;
+    dirLight.shadow.camera.right = 10;
+    dirLight.shadow.camera.top = 10;
+    dirLight.shadow.camera.bottom = -10;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0x88aaff, 0.3);
+    fillLight.position.set(-3, 2, 4);
+    scene.add(fillLight);
+
+    // --- Ландшафт: поле и лес ---
+    // Трава
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x2d7d3a, roughness: 0.9 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Тюрьма (удалённая) - просто стена с решёткой на заднем плане
+    function createWall(w, h, d, x, y, z, color = 0x4a4a6a) {
+      const wallMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+      wall.position.set(x, y, z);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      scene.add(wall);
+      return wall;
+    }
+    // Условная стена тюрьмы вдалеке
+    createWall(8, 4, 0.3, -2, 2, -10, 0x5a5a7a);
+    // решётка
+    const barMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
+    for (let x = -3.5; x <= 3.5; x += 0.8) {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4, 6), barMat);
+      bar.position.set(x, 2, -9.8);
+      bar.castShadow = true;
+      scene.add(bar);
+    }
+
+    // Деревья
+    function createTree(x, z) {
+      const group = new THREE.Group();
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.9 });
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.2), trunkMat);
+      trunk.position.y = 0.6;
+      trunk.castShadow = true;
+      group.add(trunk);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.8 });
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.9, 6), leafMat);
+      leaf.position.y = 1.3;
+      leaf.castShadow = true;
+      group.add(leaf);
+      group.position.set(x, 0, z);
+      return group;
+    }
+    // Разбросаем деревья
+    for (let i = 0; i < 30; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 4 + Math.random() * 8;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius - 3;
+      if (Math.abs(x) < 2 && z > -2) continue; // не ставить на пути
+      const tree = createTree(x, z);
+      scene.add(tree);
+    }
+
+    // --- Персонажи ---
+    function createCharacter(color, eyeColor = 0xffffff, pupilColor = 0x111111, earColor = null) {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), bodyMat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.y = 0.8;
+      group.add(body);
+
+      const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+      const eyePupilMat = new THREE.MeshStandardMaterial({ color: pupilColor, roughness: 0.1 });
+      function createEye(ex, ey, ez) {
+        const g = new THREE.Group();
+        const white = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), eyeWhiteMat);
+        white.position.set(0, 0, 0);
+        g.add(white);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), eyePupilMat);
+        pupil.position.set(0, 0.04, 0.22);
+        g.add(pupil);
+        const gloss = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 }));
+        gloss.position.set(0.07, 0.1, 0.28);
+        g.add(gloss);
+        g.position.set(ex, ey, ez);
+        return g;
+      }
+      group.add(createEye(0.3, 1.0, 0.65));
+      group.add(createEye(-0.3, 1.0, 0.65));
+
+      const mouthMat = new THREE.MeshStandardMaterial({ color: 0xcc3344, roughness: 0.4 });
+      const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.04, 8, 16, Math.PI), mouthMat);
+      mouth.position.set(0, 0.7, 0.85);
+      mouth.rotation.x = 0.2;
+      mouth.rotation.z = 0.1;
+      group.add(mouth);
+
+      const earMat = new THREE.MeshStandardMaterial({ color: earColor || color, roughness: 0.5 });
+      function createEar(ex, ey, ez, rotZ) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 8), earMat);
+        ear.position.set(ex, ey, ez);
+        ear.rotation.z = rotZ;
+        ear.rotation.x = 0.2;
+        ear.castShadow = true;
+        return ear;
+      }
+      group.add(createEar(0.4, 1.4, 0.2, 0.2));
+      group.add(createEar(-0.4, 1.4, 0.2, -0.2));
+
+      const handMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
+      function createHand(hx, hy, hz) {
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 12), handMat);
+        hand.position.set(hx, hy, hz);
+        hand.castShadow = true;
+        return hand;
+      }
+      group.add(createHand(0.9, 0.6, 0.2));
+      group.add(createHand(-0.9, 0.6, 0.2));
+
+      const legMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+      function createLeg(lx, ly, lz) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8), legMat);
+        leg.position.set(lx, ly, lz);
+        leg.castShadow = true;
+        return leg;
+      }
+      group.add(createLeg(0.35, 0.15, 0.15));
+      group.add(createLeg(-0.35, 0.15, 0.15));
+
+      return group;
+    }
+
+    // Создаём персонажей
+    const krosh = createCharacter(0xffb347, 0xffffff, 0x111111, 0xffa07a);
+    krosh.position.set(0, 0, 2.5);
+    scene.add(krosh);
+
+    const barash = createCharacter(0x9b59b6, 0xffffff, 0x111111, 0x8e44ad);
+    barash.position.set(-1.5, 0, -1);
+    scene.add(barash);
+
+    const hrusha = createCharacter(0xffb6c1, 0xffffff, 0x111111, 0xff8a9a);
+    hrusha.position.set(1.5, 0, -1.5);
+    scene.add(hrusha);
+
+    // Изначально Крош смотрит вперёд, друзья в тюрьме смотрят на него
+    barash.rotation.y = 0.2;
+    hrusha.rotation.y = -0.2;
+
+    // --- Инструменты (лопата, кирка) - для анимации ---
+    const toolMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.8 });
+    const pickMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.7, roughness: 0.4 });
+    const shovel = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), toolMat);
+    shovel.position.set(0.3, 0.2, 0.5);
+    shovel.castShadow = true;
+    scene.add(shovel);
+    // Лезвие
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.15), pickMat);
+    blade.position.set(0.3, 0.55, 0.5);
+    blade.castShadow = true;
+    scene.add(blade);
+
+    // Скрыть инструменты в начале
+    shovel.visible = false;
+    blade.visible = false;
+
+    // --- Анимационные переменные ---
+    let clock = new THREE.Clock();
+    let elapsedTime = 0;
+    let phase = 0; // 0-5
+    let phaseTime = 0;
+    const caption = document.getElementById('caption');
+    const replayBtn = document.getElementById('replayBtn');
+
+    const subtitles = [
+      "🌳 Крош на свободе, но он думает о друзьях",
+      "🔧 Он решает вернуться и копает подкоп",
+      "🕳️ Подкоп готов! Крош проникает в камеру",
+      "🤝 Крош освобождает Бараша и Хрюшу",
+      "🏃‍♂️ Все вместе бегут к выходу",
+      "🎉 Свобода! Они спасены!"
+    ];
+
+    // --- Анимация ---
+    function animate() {
+      const delta = clock.getDelta();
+      elapsedTime += delta;
+      phaseTime += delta;
+
+      let nextPhase = phase;
+      if (phase === 0 && phaseTime > 2.5) { nextPhase = 1; phaseTime = 0; }
+      if (phase === 1 && phaseTime > 3.5) { nextPhase = 2; phaseTime = 0; }
+      if (phase === 2 && phaseTime > 3.0) { nextPhase = 3; phaseTime = 0; }
+      if (phase === 3 && phaseTime > 3.5) { nextPhase = 4; phaseTime = 0; }
+      if (phase === 4 && phaseTime > 4.0) { nextPhase = 5; phaseTime = 0; }
+      if (phase === 5 && phaseTime > 5.0) {
+        replayBtn.style.display = 'block';
+      }
+
+      if (nextPhase !== phase) {
+        phase = nextPhase;
+        caption.textContent = subtitles[phase] || subtitles[0];
+        // Спецэффекты
+        if (phase === 1) {
+          // Показать инструменты
+          shovel.visible = true;
+          blade.visible = true;
+        }
+        if (phase === 2) {
+          // Скрыть инструменты, создать дыру (просто эффект)
+          shovel.visible = false;
+          blade.visible = false;
+          // Появится чёрная дыра на земле
+          const holeMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x000000 });
+          const hole = new THREE.Mesh(new THREE.CircleGeometry(0.6, 16), holeMat);
+          hole.rotation.x = -Math.PI / 2;
+          hole.position.set(0.5, 0.02, -0.2);
+          scene.add(hole);
+        }
+        if (phase === 3) {
+          // Друзья начинают двигаться
+        }
+        if (phase === 5) {
+          // Светлеет фон
+          scene.background = new THREE.Color(0x87CEEB);
+          dirLight.color.setHex(0xffeedd);
+        }
+      }
+
+      // --- Анимация персонажей ---
+      // Крош: в фазе 0 стоит, смотрит на тюрьму, затем копает, затем бежит
+      if (phase === 0) {
+        krosh.position.z = 2.5 + Math.sin(elapsedTime * 0.5) * 0.1;
+        krosh.rotation.y = Math.sin(elapsedTime * 0.3) * 0.1;
+      } else if (phase === 1) {
+        // Копает: наклон вперёд, руки двигаются
+        krosh.rotation.x = 0.3;
+        krosh.position.y = Math.sin(elapsedTime * 6) * 0.05;
+        // Двигать лопатой
+        shovel.position.y = 0.2 + Math.sin(elapsedTime * 6) * 0.3;
+        blade.position.y = 0.55 + Math.sin(elapsedTime * 6) * 0.3;
+        shovel.rotation.z = Math.sin(elapsedTime * 6) * 0.2;
+        blade.rotation.z = Math.sin(elapsedTime * 6) * 0.2;
+      } else if (phase === 2) {
+        // Крош ползёт в подкоп
+        krosh.position.z += 0.01;
+        krosh.position.y = -0.1;
+        krosh.rotation.x = 0.2;
+      } else if (phase === 3) {
+        // Крош в камере, обнимает друзей
+        krosh.position.z += 0.005;
+        krosh.position.y = 0;
+        krosh.rotation.x = 0;
+        barash.position.z += 0.005;
+        hrusha.position.z += 0.005;
+        // радостные покачивания
+        barash.rotation.z = Math.sin(elapsedTime * 3) * 0.05;
+        hrusha.rotation.z = Math.sin(elapsedTime * 3 + 1) * 0.05;
+      } else if (phase === 4) {
+        // Все бегут к выходу
+        const speed = 0.04;
+        krosh.position.z += speed;
+        barash.position.z += speed;
+        hrusha.position.z += speed;
+        krosh.position.x += Math.sin(elapsedTime * 4) * 0.003;
+        barash.position.x += Math.sin(elapsedTime * 4 + 0.5) * 0.003;
+        hrusha.position.x += Math.sin(elapsedTime * 4 + 1) * 0.003;
+        // наклон вперёд
+        krosh.rotation.x = 0.1;
+        barash.rotation.x = 0.1;
+        hrusha.rotation.x = 0.1;
+      } else if (phase === 5) {
+        // Свобода! Радуются
+        krosh.position.z += 0.01;
+        barash.position.z += 0.01;
+        hrusha.position.z += 0.01;
+        krosh.rotation.y = Math.sin(elapsedTime * 2) * 0.3;
+        barash.rotation.y = Math.sin(elapsedTime * 2 + 1) * 0.3;
+        hrusha.rotation.y = Math.sin(elapsedTime * 2 + 2) * 0.3;
+        krosh.position.y = Math.sin(elapsedTime * 4) * 0.05;
+        barash.position.y = Math.sin(elapsedTime * 4 + 1) * 0.05;
+        hrusha.position.y = Math.sin(elapsedTime * 4 + 2) * 0.05;
+      }
+
+      // Камера следит за действием
+      if (phase <= 1) {
+        camera.position.set(4, 3, 6);
+        camera.lookAt(0, 0.5, 1);
+      } else if (phase === 2) {
+        camera.position.set(1, 1.5, 4);
+        camera.lookAt(0, -0.2, 0.5);
+      } else if (phase === 3) {
+        camera.position.set(2, 2, 3);
+        camera.lookAt(0, 0.5, -0.5);
+      } else if (phase === 4) {
+        camera.position.set(0, 2.5, 5);
+        camera.lookAt(0, 0.5, 3);
+      } else if (phase === 5) {
+        camera.position.set(2, 3, 8);
+        camera.lookAt(0, 0.5, 5);
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    // --- Ресайз ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Кнопка повтора ---
+    replayBtn.addEventListener('click', () => {
+      location.reload();
+    });
+    replayBtn.style.display = 'none';
+
+    console.log('🎬 Часть 2: Возвращение Кроша запущена!');
+  </script>
+</body>
+</html>

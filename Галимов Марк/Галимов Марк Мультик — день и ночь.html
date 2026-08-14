@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мультик — день и ночь</title>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+        canvas { border: 2px solid #fff; border-radius: 12px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="500"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const W = 800, H = 500;
+        const horizon = H - 30; // линия горизонта (верх травы)
+
+        // Параметры солнца и луны
+        let sunAngle = 0;
+        const sunRadius = 45;
+        const sunY_center = 350; // центр вращения по Y
+        const orbitRadiusX = 300;
+        const orbitRadiusY = 200;
+
+        // Облака
+        const clouds = [
+            { x: 100, y: 80, speed: 0.3 },
+            { x: 400, y: 120, speed: 0.5 },
+            { x: 700, y: 60, speed: 0.2 }
+        ];
+
+        // Птица
+        let birdX = -50, birdY = 150, birdSpeed = 2.5, wingAngle = 0;
+
+        // Дом (на траве)
+        const houseX = 600, houseY = 380, houseW = 120, houseH = 90;
+
+        // Звёзды (генерируем один раз)
+        const stars = [];
+        for (let i = 0; i < 150; i++) {
+            stars.push({
+                x: Math.random() * W,
+                y: Math.random() * (horizon - 20),
+                r: Math.random() * 1.8 + 0.5,
+                twinkle: Math.random() * Math.PI * 2
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, W, H);
+
+            // --- Вычисляем положение солнца ---
+            sunAngle += 0.008;
+            const sunX = W/2 + orbitRadiusX * Math.cos(sunAngle);
+            const sunY = sunY_center + orbitRadiusY * Math.sin(sunAngle);
+            const isDay = (sunY + sunRadius) < horizon; // солнце над горизонтом
+
+            // --- Небо (день или ночь) ---
+            if (isDay) {
+                // Дневной градиент
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#4A90D9');
+                grad.addColorStop(0.6, '#87CEEB');
+                grad.addColorStop(1, '#B0E0E6');
+                ctx.fillStyle = grad;
+            } else {
+                // Ночное небо (тёмно-синее)
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#0B0B2A');
+                grad.addColorStop(0.8, '#1A1A4A');
+                grad.addColorStop(1, '#2A2A5A');
+                ctx.fillStyle = grad;
+            }
+            ctx.fillRect(0, 0, W, H);
+
+            // --- Звёзды (только ночью) ---
+            if (!isDay) {
+                stars.forEach(star => {
+                    star.twinkle += 0.02;
+                    const alpha = 0.6 + 0.4 * Math.sin(star.twinkle);
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.fill();
+                });
+            }
+
+            // --- Солнце или Луна ---
+            if (isDay) {
+                // Солнце
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                ctx.shadowColor = 'rgba(255,255,200,0.6)';
+                ctx.shadowBlur = 40;
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius, 0, Math.PI*2);
+                ctx.fillStyle = '#FFD700';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(-12, -12, 16, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fill();
+                ctx.restore();
+            } else {
+                // Луна
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                // Свечение
+                ctx.shadowColor = 'rgba(200,200,255,0.5)';
+                ctx.shadowBlur = 50;
+                // Основной круг
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius * 0.8, 0, Math.PI*2);
+                ctx.fillStyle = '#F5F5DC';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                // Кратеры (тени)
+                ctx.fillStyle = 'rgba(180,180,160,0.4)';
+                ctx.beginPath();
+                ctx.arc(-12, -8, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(15, 10, 7, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(5, -18, 5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // --- Облака (всегда, но ночью чуть темнее) ---
+            clouds.forEach(cloud => {
+                cloud.x += cloud.speed;
+                if (cloud.x > W + 100) cloud.x = -100;
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.1)';
+                ctx.shadowBlur = 10;
+                const alpha = isDay ? 0.9 : 0.4;
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, 40, 0, Math.PI*2);
+                ctx.arc(cloud.x - 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x + 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x - 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.arc(cloud.x + 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // --- Птица (летит всегда) ---
+            birdX += birdSpeed;
+            if (birdX > W + 50) birdX = -50;
+            wingAngle += 0.2;
+            const wingFlap = Math.sin(wingAngle) * 15;
+            ctx.save();
+            ctx.translate(birdX, birdY);
+            ctx.fillStyle = isDay ? '#333' : '#888';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(22, -4, 7, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = isDay ? '#FF8C00' : '#AAA';
+            ctx.beginPath();
+            ctx.moveTo(29, -4);
+            ctx.lineTo(36, -2);
+            ctx.lineTo(29, 0);
+            ctx.fill();
+            ctx.fillStyle = isDay ? '#555' : '#999';
+            ctx.save();
+            ctx.translate(-5, -5);
+            ctx.rotate(-0.3 + wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(-15, -10, 18, 7, 0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.save();
+            ctx.translate(5, -5);
+            ctx.rotate(0.3 - wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(15, -10, 18, 7, -0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = isDay ? '#444' : '#888';
+            ctx.beginPath();
+            ctx.moveTo(-22, 0);
+            ctx.lineTo(-32, -8);
+            ctx.lineTo(-30, 8);
+            ctx.fill();
+            ctx.restore();
+
+            // --- Дом (неподвижен) ---
+            ctx.save();
+            ctx.fillStyle = isDay ? '#E8C99B' : '#8B7D6B';
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(houseX, houseY, houseW, houseH);
+            ctx.fillStyle = isDay ? '#B22222' : '#6A1F1F';
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.moveTo(houseX - 15, houseY);
+            ctx.lineTo(houseX + houseW/2, houseY - 50);
+            ctx.lineTo(houseX + houseW + 15, houseY);
+            ctx.fill();
+            ctx.fillStyle = isDay ? '#87CEEB' : '#3A5A7A';
+            ctx.shadowBlur = 0;
+            ctx.fillRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.fillRect(houseX + 70, houseY + 20, 30, 30);
+            ctx.strokeStyle = isDay ? '#8B4513' : '#4A2A0A';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.strokeRect(houseX + 70, houseY + 20, 30, 30);
+            ctx.fillStyle = isDay ? '#8B4513' : '#4A2A0A';
+            ctx.fillRect(houseX + 45, houseY + 50, 30, 40);
+            ctx.beginPath();
+            ctx.arc(houseX + 68, houseY + 70, 3, 0, Math.PI*2);
+            ctx.fillStyle = isDay ? '#FFD700' : '#CCAA00';
+            ctx.fill();
+            ctx.restore();
+
+            // --- Трава (цвет может меняться) ---
+            const grassColor = isDay ? '#4CAF50' : '#2A5A2A';
+            ctx.fillStyle = grassColor;
+            ctx.shadowBlur = 0;
+            ctx.fillRect(0, horizon, W, 30);
+            ctx.strokeStyle = isDay ? '#388E3C' : '#1A3A1A';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < W; i += 6) {
+                const h = 5 + Math.sin(i * 0.5 + Date.now() * 0.001) * 3;
+                ctx.beginPath();
+                ctx.moveTo(i, horizon);
+                ctx.lineTo(i + 2, horizon - h);
+                ctx.stroke();
+            }
+
+            // --- Заголовок ---
+            ctx.fillStyle = isDay ? 'rgba(255,255,255,0.7)' : 'rgba(200,200,255,0.5)';
+            ctx.font = '20px Arial';
+            ctx.fillText('Мультик день/ночь', 20, 40);
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>

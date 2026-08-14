@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Эволюция робота TESLA • Серия 2: Миссии</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #020408;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      padding: 20px;
+    }
+    .cartoon-container {
+      max-width: 1000px;
+      width: 100%;
+      background: rgba(6, 8, 16, 0.9);
+      backdrop-filter: blur(20px);
+      border-radius: 3.5rem;
+      padding: 2rem 2rem 2.2rem;
+      box-shadow: 0 30px 55px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(70, 100, 230, 0.15);
+    }
+    h1 {
+      text-align: center;
+      color: #eef5ff;
+      font-weight: 400;
+      letter-spacing: 2px;
+      font-size: 2.6rem;
+      margin-bottom: 0.3rem;
+      text-shadow: 0 0 12px #3f6eff80;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    h1 span {
+      background: linear-gradient(135deg, #c0d0ff, #7f9bff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 700;
+    }
+    .subtitle {
+      text-align: center;
+      color: #8892b0;
+      margin-bottom: 0.8rem;
+      font-size: 1.15rem;
+      letter-spacing: 0.4px;
+    }
+    .auto-indicator {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #6d7ea0;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    .auto-indicator .dot {
+      width: 10px;
+      height: 10px;
+      background: #4f9eff;
+      border-radius: 50%;
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.3); }
+      100% { opacity: 0.5; transform: scale(0.9); }
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      width: 100%;
+      height: auto;
+      background: #0a0d14;
+      border-radius: 2.8rem;
+      box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.9), 0 18px 35px rgba(0, 15, 40, 0.9);
+      border: 1px solid rgba(74, 110, 255, 0.15);
+    }
+    .timeline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.8rem;
+      padding: 0 10px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .stage-btn {
+      background: #1e2640;
+      border: none;
+      color: #b9c8ff;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.7rem 1.1rem;
+      border-radius: 3rem;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      background: rgba(30, 38, 64, 0.8);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+      transition: all 0.25s ease;
+      border: 1px solid rgba(100, 140, 255, 0.25);
+      flex: 1;
+      min-width: 80px;
+      text-align: center;
+    }
+    .stage-btn:hover {
+      background: #2f3b66;
+      color: #ffffff;
+      border-color: #6c8aff;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 22px rgba(0, 80, 255, 0.25);
+    }
+    .stage-btn.active {
+      background: linear-gradient(135deg, #2f4bff, #1e36b0);
+      color: white;
+      border-color: #aac0ff;
+      box-shadow: 0 0 24px #2f4bffaa;
+      font-weight: 700;
+      transform: scale(1.02);
+    }
+    .info-panel {
+      margin-top: 1.5rem;
+      background: rgba(10, 14, 25, 0.7);
+      border-radius: 2rem;
+      padding: 1.2rem 1.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 15px;
+      border: 1px solid rgba(70, 100, 230, 0.3);
+    }
+    .robot-name {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #c6d9ff, #6588ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 1px;
+    }
+    .robot-desc {
+      color: #cdd6f0;
+      font-size: 1rem;
+      max-width: 400px;
+    }
+    .year-badge {
+      background: #0f1424;
+      color: #a0b9ff;
+      padding: 0.3rem 1.2rem;
+      border-radius: 5rem;
+      font-weight: 600;
+      font-size: 1.2rem;
+      border: 1px solid #4d6bff;
+    }
+    @media (max-width: 650px) {
+      .timeline {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .stage-btn {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="cartoon-container">
+  <h1>
+    <span>⚡TESLA</span> ROBOT
+  </h1>
+  <div class="subtitle">Серия 2: Миссии Optimus по всему миру</div>
+  <div class="auto-indicator">
+    <span class="dot"></span> Автосмена каждые 2 сек
+  </div>
+
+  <canvas id="robotCanvas" width="700" height="400" aria-label="Робот Tesla на миссиях"></canvas>
+
+  <div class="timeline" id="timeline">
+    <button class="stage-btn active" data-stage="0">🏭 Завод</button>
+    <button class="stage-btn" data-stage="1">🚀 Космос</button>
+    <button class="stage-btn" data-stage="2">🏠 Дом</button>
+    <button class="stage-btn" data-stage="3">🌆 Город</button>
+    <button class="stage-btn" data-stage="4">🌀 VR</button>
+  </div>
+
+  <div class="info-panel" id="infoPanel">
+    <span class="robot-name" id="robotName">Optimus Factory</span>
+    <span class="robot-desc" id="robotDesc">Сборка электромобилей на гигафабрике.</span>
+    <span class="year-badge" id="yearBadge">2026</span>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const canvas = document.getElementById('robotCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const stages = [
+      { year: 2026, name: 'Optimus Factory', desc: 'Сборка электромобилей, точная сварка.' },
+      { year: 2027, name: 'Optimus Space', desc: 'Работа в открытом космосе, ремонт спутника.' },
+      { year: 2028, name: 'Optimus Home', desc: 'Помощник по дому, готовит кофе.' },
+      { year: 2029, name: 'Optimus City', desc: 'Курьер в городе будущего, обходит препятствия.' },
+      { year: 2030, name: 'Optimus Meta', desc: 'Взаимодействие с голограммами, VR-интерфейс.' }
+    ];
+
+    let currentStage = 0;
+    let animationFrameId = null;
+    let animTime = 0;
+    let lastTimestamp = 0;
+    let autoInterval = null;
+
+    const buttons = document.querySelectorAll('.stage-btn');
+    const robotNameEl = document.getElementById('robotName');
+    const robotDescEl = document.getElementById('robotDesc');
+    const yearBadgeEl = document.getElementById('yearBadge');
+
+    // Частицы
+    let particles = [];
+    const MAX_PARTICLES = 60;
+
+    function spawnParticle(x, y, color, life = 0.5, vx = 0, vy = -1) {
+      if (particles.length > MAX_PARTICLES) particles.shift();
+      particles.push({
+        x, y,
+        vx: vx || (Math.random() - 0.5) * 1.5,
+        vy: vy || (Math.random() - 0.5) * 1.5 - 1,
+        life, maxLife: life, color
+      });
+    }
+
+    function updateParticles(dt) {
+      for (let p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= dt;
+      }
+      particles = particles.filter(p => p.life > 0);
+    }
+
+    function drawParticles(ctx) {
+      for (let p of particles) {
+        const alpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color.replace('1)', `${alpha})`).replace('rgb', 'rgba');
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2 * alpha, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function drawBackground(stage, time) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (stage === 0) { // Завод
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#1a1c22');
+        grad.addColorStop(1, '#0d0f14');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Конвейер
+        ctx.fillStyle = '#2a2e36';
+        ctx.fillRect(0, canvas.height-80, canvas.width, 40);
+        ctx.strokeStyle = '#4a5560';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < canvas.width; i += 60) {
+          ctx.beginPath();
+          ctx.moveTo(i, canvas.height-80);
+          ctx.lineTo(i+30, canvas.height-40);
+          ctx.stroke();
+        }
+        // Роботы-манипуляторы на фоне
+        for (let i = 0; i < 3; i++) {
+          const bx = 150 + i*200;
+          ctx.fillStyle = '#3a4450';
+          ctx.fillRect(bx-5, canvas.height-120, 10, 40);
+          ctx.fillStyle = '#5a6670';
+          ctx.beginPath(); ctx.arc(bx, canvas.height-130, 15, 0, Math.PI); ctx.fill();
+        }
+      } else if (stage === 1) { // Космос
+        ctx.fillStyle = '#050510';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Звезды
+        for (let i = 0; i < 80; i++) {
+          const sx = (i*37 + time*10) % canvas.width;
+          const sy = (i*23) % canvas.height;
+          ctx.fillStyle = `rgba(255,255,255,${0.5+Math.sin(time+i)*0.3})`;
+          ctx.beginPath(); ctx.arc(sx, sy, 1.2, 0, Math.PI*2); ctx.fill();
+        }
+        // Земля внизу
+        ctx.fillStyle = '#1a3b5c';
+        ctx.beginPath(); ctx.ellipse(canvas.width/2, canvas.height+20, 300, 60, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2d6b3a';
+        ctx.beginPath(); ctx.ellipse(canvas.width/2, canvas.height+10, 280, 50, 0, 0, Math.PI*2); ctx.fill();
+      } else if (stage === 2) { // Дом
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#f5e6d3');
+        grad.addColorStop(1, '#e0c8a8');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Кухонный стол
+        ctx.fillStyle = '#8b6b4d';
+        ctx.fillRect(canvas.width/2-80, canvas.height-90, 160, 20);
+        ctx.fillStyle = '#a08060';
+        ctx.fillRect(canvas.width/2-15, canvas.height-130, 30, 40);
+        // Окно
+        ctx.fillStyle = '#87ceeb';
+        ctx.fillRect(50, 50, 100, 80);
+        ctx.strokeStyle = '#5a4a3a';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(50, 50, 100, 80);
+      } else if (stage === 3) { // Город
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#1e2a3a');
+        grad.addColorStop(1, '#0b1118');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Небоскребы
+        for (let i = 0; i < 8; i++) {
+          const hx = 60 + i*85;
+          const hh = 120 + Math.sin(i)*30;
+          ctx.fillStyle = '#1f2a38';
+          ctx.fillRect(hx, canvas.height-hh, 40, hh);
+          ctx.fillStyle = '#2f3e50';
+          for (let j = 0; j < 6; j++) {
+            ctx.fillRect(hx+5, canvas.height-hh+10+j*20, 10, 8);
+            ctx.fillRect(hx+25, canvas.height-hh+10+j*20, 10, 8);
+          }
+        }
+        // Летающие машины
+        const carX = (time*30) % canvas.width;
+        ctx.fillStyle = '#4a6a8a';
+        ctx.beginPath(); ctx.ellipse(carX, 70, 20, 6, 0, 0, Math.PI*2); ctx.fill();
+      } else if (stage === 4) { // VR
+        ctx.fillStyle = '#050510';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Сетка
+        ctx.strokeStyle = '#203050';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < canvas.width; i += 30) {
+          ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+        }
+        for (let j = 0; j < canvas.height; j += 30) {
+          ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke();
+        }
+        // Парящие кубы
+        for (let i = 0; i < 5; i++) {
+          const cx = 100 + i*120 + Math.sin(time*2 + i)*15;
+          const cy = 150 + Math.cos(time*1.5 + i)*20;
+          ctx.fillStyle = 'rgba(80,120,255,0.3)';
+          ctx.fillRect(cx-15, cy-15, 30, 30);
+        }
+      }
+    }
+
+    function drawRoundedRect(x, y, w, h, radius, fill, stroke = null, lineWidth = 1.5) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+    }
+
+    function drawFace(x, y, stage, time, scale = 0.9) {
+      ctx.save();
+      ctx.translate(x, y);
+      const eyeGlow = 0.7 + Math.sin(time * 5) * 0.2;
+      ctx.fillStyle = '#1a1f2b';
+      ctx.beginPath(); ctx.arc(-19*scale, -3*scale, 9*scale, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#4a5b6e'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(19*scale, -3*scale, 9*scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#2f3b4a';
+      ctx.beginPath(); ctx.arc(-19*scale, -3*scale, 6*scale, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(19*scale, -3*scale, 6*scale, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(170, 204, 255, ${eyeGlow})`;
+      ctx.shadowBlur = 8; ctx.shadowColor = '#3f9eff';
+      ctx.beginPath(); ctx.arc(-17*scale, -4*scale, 2.8*scale, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(21*scale, -4*scale, 2.8*scale, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    function drawRobot(stageIndex, time) {
+      drawBackground(stageIndex, time);
+      updateParticles(0.016);
+      
+      const cx = canvas.width / 2;
+      const cy = 215;
+      const stage = Math.min(stageIndex, stages.length - 1);
+      const t = time;
+
+      const metalDark = '#2a3038';
+      const metalMid = '#4e5663';
+      const jointColor = '#1a1f29';
+
+      // Тень
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy+95, 42, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      const headY = cy - 72 + Math.sin(t * 2.5) * 1.3;
+      
+      drawRoundedRect(cx - 27, headY - 23, 54, 46, 14, metalDark, metalMid, 2.2);
+      ctx.fillStyle = jointColor;
+      drawRoundedRect(cx - 8, headY + 21, 16, 18, 6, jointColor, '#2f3845', 1.3);
+      
+      ctx.save();
+      ctx.translate(cx, headY);
+      ctx.rotate(Math.sin(t * 2) * 0.12);
+      drawFace(0, 0, stage, t, 0.88);
+      ctx.restore();
+
+      const torsoY = headY + 46;
+      ctx.save();
+      ctx.translate(cx, torsoY + 35);
+      if (stage === 3) ctx.rotate(Math.sin(t * 2) * 0.04);
+      ctx.translate(-cx, -torsoY - 35);
+      
+      drawRoundedRect(cx - 31, torsoY, 62, 70, 18, metalDark, metalMid, 2.6);
+      ctx.fillStyle = '#0e121c';
+      drawRoundedRect(cx - 19, torsoY + 18, 38, 18, 8, '#0b0f17', '#3d4e6b', 1.3);
+      ctx.fillStyle = '#c0d0ff';
+      ctx.font = 'bold 9px "Segoe UI"';
+      ctx.textAlign = 'center';
+      ctx.fillText('TESLA', cx, torsoY + 30);
+      ctx.restore();
+
+      const shoulderY = torsoY + 12;
+      
+      // Руки с анимацией под сцену
+      ctx.save();
+      const armSwing = Math.sin(t * 3) * 2.8;
+      if (stage === 0) { // Завод: сварка
+        const drill = t * 12;
+        drawRoundedRect(cx - 47, shoulderY - 5, 17, 25, 9, metalDark, metalMid, 1.8);
+        drawRoundedRect(cx - 53, shoulderY + 18, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(cx - 59, shoulderY + 50, 15, 12, 5, '#3a424d', '#6b7580', 1);
+        ctx.save();
+        ctx.translate(cx + 30, shoulderY);
+        ctx.rotate(-0.9);
+        drawRoundedRect(0, 0, 17, 25, 9, metalDark, metalMid, 1.8);
+        ctx.translate(8, 23);
+        ctx.rotate(0.35 + Math.sin(drill)*0.12);
+        drawRoundedRect(-6, 0, 13, 30, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(-7, 28, 15, 15, 7, '#3a424d', '#6b7580', 1);
+        ctx.save();
+        ctx.translate(0, 22);
+        ctx.rotate(drill);
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(-3, -14, 6, 24);
+        ctx.restore();
+        ctx.restore();
+        if (Math.sin(drill) > 0.9) spawnParticle(cx+65, shoulderY+35, 'rgb(255,200,50)', 0.3);
+      } else if (stage === 1) { // Космос: жесты
+        drawRoundedRect(cx - 47, shoulderY - 5, 17, 25, 9, metalDark, metalMid, 1.8);
+        drawRoundedRect(cx - 53, shoulderY + 18, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(cx - 59, shoulderY + 50, 15, 12, 5, '#3a424d', '#6b7580', 1);
+        ctx.save();
+        ctx.translate(cx + 30, shoulderY - 5);
+        ctx.rotate(-0.7 + Math.sin(t * 6) * 0.9);
+        drawRoundedRect(0, 0, 17, 25, 9, metalDark, metalMid, 1.8);
+        ctx.translate(8, 23);
+        ctx.rotate(0.45);
+        drawRoundedRect(-6, 0, 13, 32, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(-8, 30, 15, 12, 5, '#3a424d', '#6b7580', 1);
+        ctx.restore();
+      } else if (stage === 2) { // Дом: наливает кофе
+        drawRoundedRect(cx - 47, shoulderY - 5, 17, 25, 9, metalDark, metalMid, 1.8);
+        drawRoundedRect(cx - 53, shoulderY + 18, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(cx - 59, shoulderY + 50, 15, 12, 5, '#3a424d', '#6b7580', 1);
+        ctx.save();
+        ctx.translate(cx + 30, shoulderY);
+        ctx.rotate(-0.5);
+        drawRoundedRect(0, 0, 17, 25, 9, metalDark, metalMid, 1.8);
+        ctx.translate(8, 23);
+        ctx.rotate(0.2);
+        drawRoundedRect(-6, 0, 13, 28, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#6b4a3a';
+        ctx.beginPath(); ctx.arc(3, 30, 8, 0, Math.PI*2); ctx.fill(); // чашка
+        ctx.restore();
+      } else if (stage === 3) { // Город: курьер с сумкой
+        drawRoundedRect(cx - 47, shoulderY - 5, 17, 25, 9, metalDark, metalMid, 1.8);
+        drawRoundedRect(cx - 53, shoulderY + 18, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#4b5560';
+        drawRoundedRect(cx - 59, shoulderY + 50, 15, 12, 5, '#3a424d', '#6b7580', 1);
+        drawRoundedRect(cx + 30, shoulderY - 5, 17, 25, 9, metalDark, metalMid, 1.8);
+        drawRoundedRect(cx + 40, shoulderY + 18, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#c04040';
+        drawRoundedRect(cx + 34, shoulderY + 50, 22, 18, 5, '#b03030', '#8a2020', 1);
+      } else if (stage === 4) { // VR: руки плавно двигаются
+        const wing = Math.sin(t * 2.3) * 0.6 + 1.3;
+        ctx.save(); ctx.translate(cx-28, shoulderY-5); ctx.rotate(-wing);
+        drawRoundedRect(0, 0, 17, 25, 9, metalDark, metalMid, 1.8);
+        ctx.translate(8, 23); ctx.rotate(0.25);
+        drawRoundedRect(-6, 0, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#aaccff'; ctx.shadowBlur=8;
+        drawRoundedRect(-8, 32, 15, 14, 7, '#3e4c5c', '#7b8fa0', 1.5); ctx.shadowBlur=0; ctx.restore();
+        ctx.save(); ctx.translate(cx+28, shoulderY-5); ctx.rotate(wing);
+        drawRoundedRect(0, 0, 17, 25, 9, metalDark, metalMid, 1.8);
+        ctx.translate(8, 23); ctx.rotate(-0.25);
+        drawRoundedRect(-6, 0, 13, 34, 8, metalDark, jointColor, 1.6);
+        ctx.fillStyle = '#aaccff'; ctx.shadowBlur=8;
+        drawRoundedRect(-8, 32, 15, 14, 7, '#3e4c5c', '#7b8fa0', 1.5); ctx.shadowBlur=0; ctx.restore();
+        spawnParticle(cx-50, shoulderY-10, 'rgb(100,150,255)', 0.6);
+        spawnParticle(cx+50, shoulderY-10, 'rgb(100,150,255)', 0.6);
+      }
+      ctx.restore();
+
+      // Ноги
+      const legY = torsoY + 66;
+      const legShift = Math.sin(t * 2.5) * 2;
+      drawRoundedRect(cx - 19 + legShift, legY, 14, 46, 9, metalDark, jointColor, 1.8);
+      drawRoundedRect(cx + 5 - legShift, legY, 14, 46, 9, metalDark, jointColor, 1.8);
+      drawRoundedRect(cx - 25 + legShift, legY + 42, 18, 12, 6, '#212835', '#5a6470', 1.4);
+      drawRoundedRect(cx + 9 - legShift, legY + 42, 18, 12, 6, '#212835', '#5a6470', 1.4);
+
+      drawParticles(ctx);
+      ctx.font = 'bold 16px "Inter"';
+      ctx.fillStyle = '#d0d8ff';
+      ctx.fillText(stages[stage].year, cx - 16, cy + 125);
+    }
+
+    function animate(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+      animTime += delta;
+      lastTimestamp = timestamp;
+      drawRobot(currentStage, animTime);
+      animationFrameId = requestAnimationFrame(animate);
+    }
+
+    function updateUIForStage(index) {
+      buttons.forEach((btn, idx) => btn.classList.toggle('active', idx === index));
+      const d = stages[index];
+      robotNameEl.textContent = d.name;
+      robotDescEl.textContent = d.desc;
+      yearBadgeEl.textContent = d.year;
+    }
+
+    function restartAutoAdvance() {
+      if (autoInterval) clearInterval(autoInterval);
+      autoInterval = setInterval(() => {
+        currentStage = (currentStage + 1) % stages.length;
+        particles = [];
+        updateUIForStage(currentStage);
+      }, 2000);
+    }
+
+    function setStage(index) {
+      if (index === currentStage) { restartAutoAdvance(); return; }
+      currentStage = Math.min(Math.max(index, 0), stages.length - 1);
+      particles = [];
+      updateUIForStage(currentStage);
+      restartAutoAdvance();
+    }
+
+    buttons.forEach(btn => btn.addEventListener('click', e => setStage(parseInt(e.currentTarget.dataset.stage))));
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+        if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+        this.beginPath();
+        this.moveTo(x + r.tl, y);
+        this.lineTo(x + w - r.tr, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+        this.lineTo(x + w, y + h - r.br);
+        this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+        this.lineTo(x + r.bl, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+        this.lineTo(x, y + r.tl);
+        this.quadraticCurveTo(x, y, x + r.tl, y);
+        this.closePath();
+        return this;
+      };
+    }
+
+    updateUIForStage(0);
+    animationFrameId = requestAnimationFrame(animate);
+    restartAutoAdvance();
+
+    window.addEventListener('beforeunload', () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (autoInterval) clearInterval(autoInterval);
+    });
+  })();
+</script>
+</body>
+</html>

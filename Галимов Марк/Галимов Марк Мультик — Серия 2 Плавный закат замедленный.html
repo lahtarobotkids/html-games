@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мультик — Серия 2: Плавный закат (замедленный)</title>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+        canvas { border: 2px solid #fff; border-radius: 12px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="500"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const W = 800, H = 500;
+        const horizon = H - 30;
+
+        // --- Цикл дня/ночи (замедленный) ---
+        let sunAngle = 0;
+        const sunRadius = 45;
+        const sunY_center = 350;
+        const orbitRadiusX = 300;
+        const orbitRadiusY = 200;
+        let prevDayFactor = 1;
+
+        // Облака
+        const clouds = [
+            { x: 100, y: 70, speed: 0.3 },
+            { x: 400, y: 110, speed: 0.5 },
+            { x: 700, y: 60, speed: 0.2 }
+        ];
+
+        // Птица
+        let birdX = -50, birdY = 150, birdSpeed = 2.5, wingAngle = 0;
+
+        // Дом
+        const houseX = 600, houseY = 380, houseW = 120, houseH = 90;
+        const doorX = houseX + 45, doorY = houseY + 50, doorW = 30, doorH = 40;
+        const doorCenterX = houseX + 60, doorCenterY = houseY + 70;
+
+        // Персонажи
+        let boyX = 150, boyY = horizon - 30;
+        let boyDirection = 1;
+        let boyStep = 0;
+        let boyGoingHome = false;
+        let boyHome = false;
+        let boyTargetX = 0, boyTargetY = 0;
+        const boySpeed = 1.8;
+
+        let dogX = 200, dogY = horizon - 20;
+        let dogAngle = 0;
+        const dogRadius = 40;
+        let dogFollowing = false;
+        let dogTargetX = 0, dogTargetY = 0;
+        const dogSpeed = 2.2;
+
+        const treeX = 80, treeY = horizon - 10;
+
+        // Цветы
+        const flowers = [];
+        for (let i = 0; i < 12; i++) {
+            flowers.push({
+                x: 20 + Math.random() * 160,
+                y: horizon - 5 - Math.random() * 15,
+                color: ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF'][Math.floor(Math.random() * 4)],
+                size: 4 + Math.random() * 4
+            });
+        }
+
+        // Звёзды
+        const stars = [];
+        for (let i = 0; i < 150; i++) {
+            stars.push({
+                x: Math.random() * W,
+                y: Math.random() * (horizon - 20),
+                r: Math.random() * 1.8 + 0.5,
+                twinkle: Math.random() * Math.PI * 2
+            });
+        }
+
+        // ---- Вспомогательные функции ----
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function lerpColor(hex1, hex2, t) {
+            const c1 = hexToRgb(hex1);
+            const c2 = hexToRgb(hex2);
+            const r = Math.round(lerp(c1.r, c2.r, t));
+            const g = Math.round(lerp(c1.g, c2.g, t));
+            const b = Math.round(lerp(c1.b, c2.b, t));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        // ---- Основной цикл ----
+        function animate() {
+            ctx.clearRect(0, 0, W, H);
+
+            // --- Положение солнца/луны (замедленное движение) ---
+            sunAngle += 0.004;  // было 0.008 — теперь вдвое медленнее
+            const sunX = W/2 + orbitRadiusX * Math.cos(sunAngle);
+            const sunY = sunY_center + orbitRadiusY * Math.sin(sunAngle);
+
+            // Коэффициент дня (1 — день, 0 — ночь) с расширенной зоной перехода
+            const distToHorizon = horizon - (sunY + sunRadius);
+            let dayFactor = 1;
+            if (distToHorizon < 50) {   // зона перехода увеличена с 30 до 50
+                dayFactor = Math.max(0, (distToHorizon + 50) / 100); // плавный переход за 100 пикселей
+                dayFactor = Math.min(1, Math.max(0, dayFactor));
+            }
+
+            // Логика поведения мальчика
+            if (dayFactor > 0.5 && prevDayFactor <= 0.5) {
+                if (boyHome) {
+                    boyHome = false;
+                    boyGoingHome = false;
+                    boyX = 150;
+                    boyY = horizon - 30;
+                    boyDirection = 1;
+                    boyStep = 0;
+                    dogX = boyX + 30;
+                    dogY = boyY + 10;
+                    dogFollowing = false;
+                }
+            }
+            if (dayFactor < 0.5 && prevDayFactor >= 0.5) {
+                if (!boyHome && !boyGoingHome) {
+                    boyGoingHome = true;
+                    boyTargetX = doorCenterX;
+                    boyTargetY = horizon - 15;
+                    dogFollowing = true;
+                    dogTargetX = boyTargetX - 15;
+                    dogTargetY = boyTargetY + 5;
+                }
+            }
+            prevDayFactor = dayFactor;
+
+            // Движение мальчика домой
+            if (boyGoingHome) {
+                const dx = boyTargetX - boyX;
+                const dy = boyTargetY - boyY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 2) {
+                    const step = Math.min(boySpeed, dist);
+                    boyX += (dx / dist) * step;
+                    boyY += (dy / dist) * step;
+                    boyStep += 0.15;
+                    boyDirection = dx > 0 ? 1 : -1;
+                } else {
+                    boyGoingHome = false;
+                    boyHome = true;
+                    dogFollowing = false;
+                }
+            }
+
+            // Движение собачки
+            if (dogFollowing && boyGoingHome) {
+                const dx = dogTargetX - dogX;
+                const dy = dogTargetY - dogY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 2) {
+                    const step = Math.min(dogSpeed, dist);
+                    dogX += (dx / dist) * step;
+                    dogY += (dy / dist) * step;
+                }
+            } else if (!dogFollowing && !boyHome) {
+                dogAngle += 0.05;
+                dogX = boyX + dogRadius * Math.cos(dogAngle);
+                dogY = boyY + 10 + dogRadius * 0.4 * Math.sin(dogAngle);
+            }
+
+            // ---- РИСОВАНИЕ ----
+
+            // 1. Небо (ночной слой + дневной слой с прозрачностью)
+            const skyGradNight = ctx.createLinearGradient(0, 0, 0, H);
+            skyGradNight.addColorStop(0, '#0B0B2A');
+            skyGradNight.addColorStop(0.8, '#1A1A4A');
+            skyGradNight.addColorStop(1, '#2A2A5A');
+            ctx.fillStyle = skyGradNight;
+            ctx.fillRect(0, 0, W, H);
+
+            const skyGradDay = ctx.createLinearGradient(0, 0, 0, H);
+            skyGradDay.addColorStop(0, '#4A90D9');
+            skyGradDay.addColorStop(0.6, '#87CEEB');
+            skyGradDay.addColorStop(1, '#B0E0E6');
+            ctx.globalAlpha = dayFactor;
+            ctx.fillStyle = skyGradDay;
+            ctx.fillRect(0, 0, W, H);
+            ctx.globalAlpha = 1;
+
+            // Закатные цвета (оранжевый/красный у горизонта) — дольше видны
+            if (dayFactor < 1 && dayFactor > 0) {
+                const sunsetAlpha = (1 - dayFactor) * 0.7;
+                const grad = ctx.createRadialGradient(W/2, horizon, 10, W/2, horizon, 250);
+                grad.addColorStop(0, `rgba(255, 150, 50, ${sunsetAlpha})`);
+                grad.addColorStop(0.5, `rgba(255, 80, 20, ${sunsetAlpha * 0.6})`);
+                grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+            }
+
+            // 2. Звёзды (плавно появляются)
+            const starAlpha = 1 - dayFactor;
+            stars.forEach(star => {
+                star.twinkle += 0.02;
+                const twinkle = 0.6 + 0.4 * Math.sin(star.twinkle);
+                const alpha = starAlpha * twinkle;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.fill();
+            });
+
+            // 3. Солнце и Луна
+            if (dayFactor > 0) {
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                ctx.globalAlpha = dayFactor;
+                ctx.shadowColor = 'rgba(255,255,200,0.6)';
+                ctx.shadowBlur = 40;
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius, 0, Math.PI*2);
+                ctx.fillStyle = '#FFD700';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(-12, -12, 16, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fill();
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+            if (dayFactor < 1) {
+                const moonAlpha = 1 - dayFactor;
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                ctx.globalAlpha = moonAlpha;
+                ctx.shadowColor = 'rgba(200,200,255,0.5)';
+                ctx.shadowBlur = 50;
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius * 0.8, 0, Math.PI*2);
+                ctx.fillStyle = '#F5F5DC';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(180,180,160,0.4)';
+                ctx.beginPath();
+                ctx.arc(-12, -8, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(15, 10, 7, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(5, -18, 5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+
+            // 4. Облака
+            clouds.forEach(cloud => {
+                cloud.x += cloud.speed;
+                if (cloud.x > W + 100) cloud.x = -100;
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.1)';
+                ctx.shadowBlur = 10;
+                const alpha = 0.4 + 0.5 * dayFactor;
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, 40, 0, Math.PI*2);
+                ctx.arc(cloud.x - 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x + 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x - 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.arc(cloud.x + 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 5. Птица
+            const birdColor = lerpColor('#888', '#333', dayFactor);
+            const wingColor = lerpColor('#999', '#555', dayFactor);
+            const tailColor = lerpColor('#888', '#444', dayFactor);
+            const beakColor = lerpColor('#AAA', '#FF8C00', dayFactor);
+            birdX += birdSpeed;
+            if (birdX > W + 50) birdX = -50;
+            wingAngle += 0.2;
+            const wingFlap = Math.sin(wingAngle) * 15;
+            ctx.save();
+            ctx.translate(birdX, birdY);
+            ctx.fillStyle = birdColor;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(22, -4, 7, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = beakColor;
+            ctx.beginPath();
+            ctx.moveTo(29, -4);
+            ctx.lineTo(36, -2);
+            ctx.lineTo(29, 0);
+            ctx.fill();
+            ctx.fillStyle = wingColor;
+            ctx.save();
+            ctx.translate(-5, -5);
+            ctx.rotate(-0.3 + wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(-15, -10, 18, 7, 0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.save();
+            ctx.translate(5, -5);
+            ctx.rotate(0.3 - wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(15, -10, 18, 7, -0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = tailColor;
+            ctx.beginPath();
+            ctx.moveTo(-22, 0);
+            ctx.lineTo(-32, -8);
+            ctx.lineTo(-30, 8);
+            ctx.fill();
+            ctx.restore();
+
+            // 6. Дом
+            const wallColor = lerpColor('#8B7D6B', '#E8C99B', dayFactor);
+            const roofColor = lerpColor('#6A1F1F', '#B22222', dayFactor);
+            const windowColor = lerpColor('#3A5A7A', '#87CEEB', dayFactor);
+            const doorColor = lerpColor('#4A2A0A', '#8B4513', dayFactor);
+            const handleColor = lerpColor('#CCAA00', '#FFD700', dayFactor);
+            const frameColor = lerpColor('#4A2A0A', '#8B4513', dayFactor);
+            ctx.save();
+            ctx.fillStyle = wallColor;
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(houseX, houseY, houseW, houseH);
+            ctx.fillStyle = roofColor;
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.moveTo(houseX - 15, houseY);
+            ctx.lineTo(houseX + houseW/2, houseY - 50);
+            ctx.lineTo(houseX + houseW + 15, houseY);
+            ctx.fill();
+            ctx.fillStyle = windowColor;
+            ctx.shadowBlur = 0;
+            ctx.fillRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.fillRect(houseX + 70, houseY + 20, 30, 30);
+            ctx.strokeStyle = frameColor;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.strokeRect(houseX + 70, houseY + 20, 30, 30);
+            ctx.fillStyle = doorColor;
+            ctx.fillRect(doorX, doorY, doorW, doorH);
+            ctx.beginPath();
+            ctx.arc(houseX + 68, houseY + 70, 3, 0, Math.PI*2);
+            ctx.fillStyle = handleColor;
+            ctx.fill();
+            ctx.restore();
+
+            // 7. Дерево
+            const trunkColor = lerpColor('#5A3A1A', '#8B5A2B', dayFactor);
+            const leafColor = lerpColor('#1A4A1A', '#2E7D32', dayFactor);
+            ctx.save();
+            ctx.fillStyle = trunkColor;
+            ctx.fillRect(treeX - 8, treeY - 60, 16, 60);
+            ctx.fillStyle = leafColor;
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.arc(treeX, treeY - 70, 35, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(treeX - 25, treeY - 55, 25, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(treeX + 25, treeY - 55, 25, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+
+            // 8. Цветы
+            flowers.forEach(flower => {
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#388E3C';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(flower.x, flower.y + 8);
+                ctx.lineTo(flower.x, flower.y - 6);
+                ctx.stroke();
+                const darkColor = '#2A2A2A';
+                const color = lerpColor(darkColor, flower.color, dayFactor);
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(flower.x, flower.y - 8, flower.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(flower.x, flower.y - 8, flower.size * 0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 9. Мальчик
+            if (!boyHome) {
+                const bodyColor = lerpColor('#2A5A7A', '#4A90D9', dayFactor);
+                const pantsColor = lerpColor('#666', '#333', dayFactor);
+                ctx.save();
+                ctx.translate(boyX, boyY);
+                ctx.fillStyle = bodyColor;
+                ctx.fillRect(-8, -25, 16, 25);
+                ctx.fillStyle = '#FFDAB9';
+                ctx.beginPath();
+                ctx.arc(0, -30, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                const eyeDir = boyDirection;
+                ctx.beginPath();
+                ctx.arc(-4 + eyeDir*2, -32, 2, 0, Math.PI*2);
+                ctx.arc(4 + eyeDir*2, -32, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(0, -26, 5, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+                const legOffset = Math.sin(boyStep) * 6;
+                ctx.fillStyle = pantsColor;
+                ctx.fillRect(-6, 0, 4, 8 + legOffset);
+                ctx.fillRect(2, 0, 4, 8 - legOffset);
+                const armOffset = Math.sin(boyStep + 0.5) * 8;
+                ctx.fillStyle = '#FFDAB9';
+                ctx.fillRect(-14, -20, 4, 12 + armOffset);
+                ctx.fillRect(10, -20, 4, 12 - armOffset);
+                ctx.restore();
+            }
+
+            // 10. Собачка
+            if (!boyHome) {
+                const dogColor = lerpColor('#5D4037', '#8D6E63', dayFactor);
+                const earColor = lerpColor('#3E2723', '#6D4C41', dayFactor);
+                ctx.save();
+                ctx.translate(dogX, dogY);
+                ctx.fillStyle = dogColor;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 15, 10, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(16, -4, 8, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = earColor;
+                ctx.beginPath();
+                ctx.ellipse(14, -12, 4, 8, -0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(22, -12, 4, 8, 0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(20, -6, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(24, -3, 2, 0, Math.PI*2);
+                ctx.fill();
+                const tailAngle = Math.sin(dogAngle * 2) * 0.5;
+                ctx.fillStyle = dogColor;
+                ctx.save();
+                ctx.translate(-14, 0);
+                ctx.rotate(tailAngle);
+                ctx.fillRect(-10, -2, 10, 4);
+                ctx.restore();
+                ctx.restore();
+            }
+
+            // 11. Трава
+            const grassColor = lerpColor('#2A5A2A', '#4CAF50', dayFactor);
+            const bladeColor = lerpColor('#1A3A1A', '#388E3C', dayFactor);
+            ctx.fillStyle = grassColor;
+            ctx.shadowBlur = 0;
+            ctx.fillRect(0, horizon, W, 30);
+            ctx.strokeStyle = bladeColor;
+            ctx.lineWidth = 2;
+            for (let i = 0; i < W; i += 6) {
+                const h = 5 + Math.sin(i * 0.5 + Date.now() * 0.001) * 3;
+                ctx.beginPath();
+                ctx.moveTo(i, horizon);
+                ctx.lineTo(i + 2, horizon - h);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + 0.4 * dayFactor})`;
+            ctx.font = '20px Arial';
+            ctx.fillText('Мультик — Серия 2: Плавный закат (замедленный)', 20, 40);
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>

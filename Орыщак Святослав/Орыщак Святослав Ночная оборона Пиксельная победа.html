@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ночная оборона: Пиксельная победа</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a12;
+            font-family: 'Courier New', monospace;
+            user-select: none;
+            cursor: crosshair;
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #8f8;
+            font-size: 22px;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+            font-family: 'Courier New', monospace;
+        }
+        #ui span {
+            color: #ff4444;
+            font-weight: bold;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 20, 0.95);
+            color: #fff;
+            padding: 40px;
+            border-radius: 4px;
+            border: 4px solid #ff0000;
+            text-align: center;
+            display: none;
+            z-index: 20;
+            box-shadow: 0 0 60px rgba(255,0,0,0.3);
+            font-family: 'Courier New', monospace;
+            image-rendering: pixelated;
+        }
+        #game-over h1 { margin: 0 0 10px 0; font-size: 42px; color: #ff0000; }
+        #game-over button {
+            margin-top: 20px;
+            padding: 10px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            background: #222;
+            color: #fff;
+            border: 2px solid #555;
+            border-radius: 0;
+            font-family: 'Courier New', monospace;
+        }
+        #game-over button:hover { background: #444; border-color: #fff; }
+        
+        #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            z-index: 30;
+            pointer-events: none;
+        }
+        #win-screen svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: pixelated;
+        }
+        #win-screen button {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 14px 50px;
+            font-size: 22px;
+            cursor: pointer;
+            background: #2a2a3a;
+            color: #fff;
+            border: 4px solid #4CAF50;
+            border-radius: 0;
+            font-family: 'Courier New', monospace;
+            pointer-events: all;
+            z-index: 40;
+            box-shadow: 0 0 30px rgba(76, 175, 80, 0.4);
+            transition: 0.2s;
+        }
+        #win-screen button:hover {
+            background: #4CAF50;
+            color: #000;
+            border-color: #fff;
+            box-shadow: 0 0 60px rgba(76, 175, 80, 0.8);
+        }
+        .pixel-text {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+        }
+
+        /* Скример элементы */
+        #screamer-flash-white {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            display: none;
+            z-index: 99;
+            pointer-events: none;
+        }
+        #screamer-flash-red {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.8);
+            display: none;
+            z-index: 98;
+            pointer-events: none;
+        }
+        #screamer-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: none;
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            animation: shake 0.1s infinite;
+        }
+        #screamer-overlay svg {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            image-rendering: pixelated;
+            filter: contrast(2) brightness(0.6) saturate(3);
+        }
+        @keyframes shake {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-10px, 10px); }
+            50% { transform: translate(10px, -10px); }
+            75% { transform: translate(-5px, -5px); }
+            100% { transform: translate(5px, 5px); }
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+        #screamer-face-container {
+            animation: pulse 0.15s infinite;
+            width: 100%;
+            height: 100%;
+        }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-5px, 2px); }
+            40% { transform: translate(5px, -2px); }
+            60% { transform: translate(-2px, 5px); }
+            80% { transform: translate(2px, -5px); }
+            100% { transform: translate(0); }
+        }
+        #glitch-layer {
+            animation: glitch 0.08s infinite;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            mix-blend-mode: screen;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <span class="pixel-text">⏱️ <span id="timer">60</span>s</span><br>
+        <span class="pixel-text">🧟 <span id="enemy-count">0</span></span>
+    </div>
+
+    <div id="game-over">
+        <h1>💀 YOU DIED</h1>
+        <p class="pixel-text">Враг прорвался через двери!</p>
+        <button onclick="location.reload()">RETRY</button>
+    </div>
+
+    <!-- Экран победы (пиксельная картинка) -->
+    <div id="win-screen">
+        <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <filter id="pixelate">
+                    <feFlood flood-color="#000" flood-opacity="0.3"/>
+                    <feComposite in2="SourceGraphic" operator="in"/>
+                </filter>
+                <!-- Анимация фейерверков -->
+                <animate id="firework1" attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite" begin="0s"/>
+                <animate id="firework2" attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+                <animate id="firework3" attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite" begin="1s"/>
+            </defs>
+
+            <!-- Фон (рассвет) -->
+            <rect width="800" height="600" fill="#1a2a3a"/>
+            <!-- Солнце/луна -->
+            <rect x="650" y="80" width="80" height="80" fill="#ffcc44" rx="8"/>
+            <rect x="660" y="90" width="20" height="20" fill="#ffaa00"/>
+            <rect x="690" y="90" width="20" height="20" fill="#ffaa00"/>
+            
+            <!-- Небо с облаками -->
+            <rect x="100" y="60" width="120" height="30" fill="#2a4a5a" rx="6"/>
+            <rect x="130" y="40" width="60" height="30" fill="#2a4a5a" rx="6"/>
+            <rect x="400" y="100" width="100" height="25" fill="#2a4a5a" rx="6"/>
+            
+            <!-- Звезды (пиксельные) -->
+            <rect x="50" y="30" width="4" height="4" fill="#fff"/>
+            <rect x="200" y="20" width="4" height="4" fill="#fff"/>
+            <rect x="350" y="50" width="4" height="4" fill="#fff"/>
+            <rect x="500" y="30" width="4" height="4" fill="#fff"/>
+            <rect x="720" y="40" width="4" height="4" fill="#fff"/>
+
+            <!-- Земля -->
+            <rect x="0" y="400" width="800" height="200" fill="#2a4a2a"/>
+            <rect x="0" y="420" width="800" height="10" fill="#3a5a3a"/>
+            <rect x="0" y="460" width="800" height="10" fill="#3a5a3a"/>
+
+            <!-- Двери (закрытые, с защитой) -->
+            <!-- Дверь 1 -->
+            <rect x="180" y="280" width="100" height="140" fill="#5c3a1a" rx="4"/>
+            <rect x="185" y="285" width="90" height="130" fill="#6b4b2b" rx="2"/>
+            <rect x="190" y="290" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="190" y="320" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="190" y="350" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="190" y="380" width="80" height="10" fill="#8b6b4b"/>
+            <!-- Ручка -->
+            <rect x="260" y="330" width="10" height="20" fill="#D4A84B"/>
+            <!-- Замок -->
+            <rect x="265" y="355" width="8" height="8" fill="#ffcc00"/>
+
+            <!-- Дверь 2 -->
+            <rect x="520" y="280" width="100" height="140" fill="#5c3a1a" rx="4"/>
+            <rect x="525" y="285" width="90" height="130" fill="#6b4b2b" rx="2"/>
+            <rect x="530" y="290" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="530" y="320" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="530" y="350" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="530" y="380" width="80" height="10" fill="#8b6b4b"/>
+            <rect x="530" y="330" width="10" height="20" fill="#D4A84B"/>
+            <rect x="535" y="355" width="8" height="8" fill="#ffcc00"/>
+
+            <!-- Герой (выживший) -->
+            <!-- Тело -->
+            <rect x="360" y="340" width="80" height="80" fill="#2a4a8a" rx="4"/>
+            <rect x="370" y="350" width="20" height="20" fill="#3a5a9a"/>
+            <rect x="410" y="350" width="20" height="20" fill="#3a5a9a"/>
+            <!-- Голова -->
+            <rect x="375" y="310" width="50" height="40" fill="#e8c8a0" rx="4"/>
+            <!-- Глаза -->
+            <rect x="385" y="320" width="10" height="8" fill="#000"/>
+            <rect x="405" y="320" width="10" height="8" fill="#000"/>
+            <!-- Улыбка -->
+            <rect x="390" y="335" width="20" height="6" fill="#8a2a2a"/>
+            <!-- Волосы -->
+            <rect x="370" y="305" width="60" height="10" fill="#3a2a1a"/>
+            <rect x="380" y="295" width="40" height="10" fill="#3a2a1a"/>
+            <!-- Ноги -->
+            <rect x="370" y="420" width="25" height="40" fill="#1a2a6a"/>
+            <rect x="405" y="420" width="25" height="40" fill="#1a2a6a"/>
+            <!-- Ботинки -->
+            <rect x="365" y="455" width="35" height="10" fill="#3a2a1a"/>
+            <rect x="400" y="455" width="35" height="10" fill="#3a2a1a"/>
+            <!-- Руки (подняты вверх - победа) -->
+            <rect x="340" y="330" width="20" height="30" fill="#e8c8a0"/>
+            <rect x="440" y="330" width="20" height="30" fill="#e8c8a0"/>
+            <!-- Кулаки -->
+            <rect x="335" y="320" width="15" height="15" fill="#e8c8a0"/>
+            <rect x="450" y="320" width="15" height="15" fill="#e8c8a0"/>
+
+            <!-- Трофей (кубок) -->
+            <rect x="370" y="260" width="60" height="40" fill="#ffcc00" rx="4"/>
+            <rect x="380" y="250" width="40" height="15" fill="#ffdd44"/>
+            <rect x="390" y="240" width="20" height="15" fill="#ffdd44"/>
+            <!-- Ручки кубка -->
+            <rect x="365" y="265" width="10" height="20" fill="#ffaa00"/>
+            <rect x="425" y="265" width="10" height="20" fill="#ffaa00"/>
+
+            <!-- Фейерверки (пиксельные) -->
+            <!-- Взрыв 1 -->
+            <rect x="150" y="120" width="6" height="6" fill="#ff4444" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" begin="0s"/>
+            </rect>
+            <rect x="140" y="130" width="4" height="4" fill="#ffaa44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" begin="0.2s"/>
+            </rect>
+            <rect x="160" y="130" width="4" height="4" fill="#ffaa44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" begin="0.4s"/>
+            </rect>
+            <rect x="145" y="115" width="4" height="4" fill="#44ff44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" begin="0.3s"/>
+            </rect>
+            <rect x="155" y="115" width="4" height="4" fill="#44ff44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" begin="0.5s"/>
+            </rect>
+
+            <!-- Взрыв 2 -->
+            <rect x="650" y="150" width="6" height="6" fill="#44aaff" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1.5s" repeatCount="indefinite" begin="0.5s"/>
+            </rect>
+            <rect x="640" y="160" width="4" height="4" fill="#ff44ff" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1.5s" repeatCount="indefinite" begin="0.7s"/>
+            </rect>
+            <rect x="660" y="160" width="4" height="4" fill="#ff44ff" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1.5s" repeatCount="indefinite" begin="0.9s"/>
+            </rect>
+            <rect x="645" y="145" width="4" height="4" fill="#ffff44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1.5s" repeatCount="indefinite" begin="0.6s"/>
+            </rect>
+            <rect x="655" y="145" width="4" height="4" fill="#ffff44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="1.5s" repeatCount="indefinite" begin="0.8s"/>
+            </rect>
+
+            <!-- Взрыв 3 -->
+            <rect x="300" y="80" width="6" height="6" fill="#ffaa44" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="2s" repeatCount="indefinite" begin="1s"/>
+            </rect>
+            <rect x="290" y="90" width="4" height="4" fill="#44ffaa" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="2s" repeatCount="indefinite" begin="1.2s"/>
+            </rect>
+            <rect x="310" y="90" width="4" height="4" fill="#44ffaa" opacity="1">
+                <animate attributeName="opacity" values="1;0;1" dur="2s" repeatCount="indefinite" begin="1.4s"/>
+            </rect>
+
+            <!-- Конфетти (падающие квадратики) -->
+            <rect x="100" y="100" width="6" height="6" fill="#ff4444">
+                <animate attributeName="y" values="100;600" dur="4s" repeatCount="indefinite" begin="0s"/>
+            </rect>
+            <rect x="200" y="50" width="6" height="6" fill="#44ff44">
+                <animate attributeName="y" values="50;600" dur="3.5s" repeatCount="indefinite" begin="0.5s"/>
+            </rect>
+            <rect x="450" y="80" width="6" height="6" fill="#4444ff">
+                <animate attributeName="y" values="80;600" dur="4.5s" repeatCount="indefinite" begin="1s"/>
+            </rect>
+            <rect x="600" y="30" width="6" height="6" fill="#ff44ff">
+                <animate attributeName="y" values="30;600" dur="3.8s" repeatCount="indefinite" begin="0.3s"/>
+            </rect>
+            <rect x="700" y="120" width="6" height="6" fill="#ffff44">
+                <animate attributeName="y" values="120;600" dur="4.2s" repeatCount="indefinite" begin="0.8s"/>
+            </rect>
+            <rect x="320" y="60" width="6" height="6" fill="#44ffff">
+                <animate attributeName="y" values="60;600" dur="3.2s" repeatCount="indefinite" begin="1.5s"/>
+            </rect>
+
+            <!-- Надпись "VICTORY!" (пиксельная) -->
+            <rect x="200" y="160" width="400" height="60" fill="#1a1a2a" rx="8" opacity="0.8"/>
+            <!-- Буквы пикселями -->
+            <!-- V -->
+            <rect x="220" y="175" width="10" height="30" fill="#ffcc00"/>
+            <rect x="230" y="185" width="10" height="10" fill="#ffcc00"/>
+            <rect x="240" y="175" width="10" height="30" fill="#ffcc00"/>
+            <!-- I -->
+            <rect x="265" y="175" width="10" height="30" fill="#ffcc00"/>
+            <!-- C -->
+            <rect x="290" y="185" width="30" height="10" fill="#ffcc00"/>
+            <rect x="290" y="175" width="10" height="10" fill="#ffcc00"/>
+            <rect x="310" y="175" width="10" height="10" fill="#ffcc00"/>
+            <rect x="290" y="195" width="10" height="10" fill="#ffcc00"/>
+            <rect x="310" y="195" width="10" height="10" fill="#ffcc00"/>
+            <!-- T -->
+            <rect x="335" y="175" width="30" height="10" fill="#ffcc00"/>
+            <rect x="345" y="185" width="10" height="20" fill="#ffcc00"/>
+            <!-- O -->
+            <rect x="370" y="185" width="30" height="10" fill="#ffcc00"/>
+            <rect x="370" y="175" width="10" height="10" fill="#ffcc00"/>
+            <rect x="390" y="175" width="10" height="10" fill="#ffcc00"/>
+            <rect x="370" y="195" width="10" height="10" fill="#ffcc00"/>
+            <rect x="390" y="195" width="10" height="10" fill="#ffcc00"/>
+            <!-- R -->
+            <rect x="415" y="175" width="10" height="30" fill="#ffcc00"/>
+            <rect x="425" y="175" width="10" height="10" fill="#ffcc00"/>
+            <rect x="435" y="185" width="10" height="10" fill="#ffcc00"/>
+            <rect x="425" y="195" width="10" height="10" fill="#ffcc00"/>
+            <rect x="435" y="195" width="10" height="10" fill="#ffcc00"/>
+            <!-- Y -->
+            <rect x="450" y="175" width="10" height="15" fill="#ffcc00"/>
+            <rect x="470" y="175" width="10" height="15" fill="#ffcc00"/>
+            <rect x="460" y="190" width="10" height="15" fill="#ffcc00"/>
+            <!-- ! -->
+            <rect x="490" y="175" width="10" height="20" fill="#ff4444"/>
+            <rect x="490" y="200" width="10" height="6" fill="#ff4444"/>
+
+            <!-- Подпись -->
+            <text x="400" y="240" fill="#aaffaa" font-family="'Courier New', monospace" font-size="16" text-anchor="middle" letter-spacing="2">ВЫ ПРОДЕРЖАЛИСЬ 60 СЕКУНД!</text>
+            
+            <!-- Дополнительные звездочки -->
+            <rect x="80" y="200" width="6" height="6" fill="#ffaa44" opacity="0.8">
+                <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite"/>
+            </rect>
+            <rect x="700" y="220" width="6" height="6" fill="#44aaff" opacity="0.8">
+                <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.5s" repeatCount="indefinite"/>
+            </rect>
+        </svg>
+        <button onclick="location.reload()">🏆 ИГРАТЬ ЕЩЁ</button>
+    </div>
+
+    <!-- Скример элементы (не меняем) -->
+    <div id="screamer-flash-white"></div>
+    <div id="screamer-flash-red"></div>
+    <div id="screamer-overlay">
+        <div id="screamer-face-container">
+            <svg width="100%" height="100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" style="background:#000;">
+                <defs>
+                    <filter id="noise">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/>
+                        <feColorMatrix type="matrix" values="1 0 0 0 0, 0 0 0 0 0, 0 0 0 0 0, 0 0 0 0.4 0"/>
+                    </filter>
+                    <filter id="glitchFilter">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.01 0.1" numOctaves="1" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="15" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                </defs>
+                <rect width="800" height="600" fill="#1a0000" />
+                <rect width="800" height="600" fill="url(#noise)" opacity="0.6"/>
+                <circle cx="200" cy="150" r="80" fill="#6a0000" opacity="0.7"/>
+                <circle cx="600" cy="200" r="100" fill="#8a0000" opacity="0.6"/>
+                <circle cx="400" cy="500" r="120" fill="#5a0000" opacity="0.5"/>
+                <rect x="200" y="100" width="400" height="400" fill="#3a5a2a" rx="10"/>
+                <rect x="220" y="150" width="140" height="100" fill="#1a2a1a" rx="10"/>
+                <rect x="440" y="150" width="140" height="100" fill="#1a2a1a" rx="10"/>
+                <rect x="210" y="140" width="160" height="120" fill="#ff0000" rx="20"/>
+                <rect x="430" y="140" width="160" height="120" fill="#ff0000" rx="20"/>
+                <rect x="240" y="170" width="100" height="60" fill="#000000" rx="10"/>
+                <rect x="460" y="170" width="100" height="60" fill="#000000" rx="10"/>
+                <rect x="260" y="180" width="40" height="30" fill="#ffffff" rx="5"/>
+                <rect x="480" y="180" width="40" height="30" fill="#ffffff" rx="5"/>
+                <rect x="220" y="260" width="20" height="60" fill="#8a0000"/>
+                <rect x="340" y="250" width="15" height="50" fill="#8a0000"/>
+                <rect x="450" y="260" width="20" height="60" fill="#8a0000"/>
+                <rect x="560" y="250" width="15" height="50" fill="#8a0000"/>
+                <rect x="220" y="330" width="360" height="140" fill="#2a0000" rx="10"/>
+                <rect x="230" y="340" width="30" height="40" fill="#ffffc0"/>
+                <rect x="280" y="345" width="25" height="45" fill="#ffffc0"/>
+                <rect x="330" y="340" width="35" height="50" fill="#ffffc0"/>
+                <rect x="390" y="345" width="25" height="45" fill="#ffffc0"/>
+                <rect x="440" y="340" width="30" height="40" fill="#ffffc0"/>
+                <rect x="490" y="345" width="25" height="45" fill="#ffffc0"/>
+                <rect x="530" y="340" width="30" height="40" fill="#ffffc0"/>
+                <rect x="240" y="410" width="30" height="40" fill="#ffffc0"/>
+                <rect x="290" y="415" width="25" height="35" fill="#ffffc0"/>
+                <rect x="350" y="410" width="35" height="45" fill="#ffffc0"/>
+                <rect x="410" y="415" width="25" height="35" fill="#ffffc0"/>
+                <rect x="460" y="410" width="30" height="40" fill="#ffffc0"/>
+                <rect x="510" y="415" width="25" height="35" fill="#ffffc0"/>
+                <rect x="330" y="380" width="140" height="60" fill="#6a1a1a" rx="10"/>
+                <rect x="350" y="390" width="100" height="30" fill="#8a2a2a" rx="5"/>
+                <rect x="250" y="470" width="30" height="50" fill="#8a0000"/>
+                <rect x="300" y="480" width="20" height="40" fill="#8a0000"/>
+                <rect x="480" y="470" width="30" height="50" fill="#8a0000"/>
+                <rect x="520" y="480" width="20" height="40" fill="#8a0000"/>
+                <rect x="180" y="200" width="20" height="80" fill="#2a1a1a"/>
+                <rect x="600" y="220" width="20" height="90" fill="#2a1a1a"/>
+                <rect width="800" height="600" fill="url(#noise)" opacity="0.3" filter="url(#glitchFilter)"/>
+            </svg>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        
+        // Элементы
+        const screamerOverlay = document.getElementById('screamer-overlay');
+        const screamerFlashWhite = document.getElementById('screamer-flash-white');
+        const screamerFlashRed = document.getElementById('screamer-flash-red');
+        const winScreen = document.getElementById('win-screen');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameTime = 60;
+        let isGameOver = false;
+        let enemies = [];
+        let lastSpawnTime = 0;
+        let spawnDelay = 2000;
+        let frameCount = 0;
+        let screamerActive = false;
+
+        const doorPositions = [
+            { x: 0.3, z: 0.8, isClosed: false, closeTimer: 0, label: 'DOOR 1' },
+            { x: 0.7, z: 0.8, isClosed: false, closeTimer: 0, label: 'DOOR 2' }
+        ];
+
+        function playScreamerSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscBass = audioCtx.createOscillator();
+                const gainBass = audioCtx.createGain();
+                oscBass.type = 'sawtooth';
+                oscBass.frequency.setValueAtTime(60, audioCtx.currentTime);
+                oscBass.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.8);
+                gainBass.gain.setValueAtTime(0.6, audioCtx.currentTime);
+                gainBass.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+                oscBass.connect(gainBass);
+                gainBass.connect(audioCtx.destination);
+                oscBass.start(audioCtx.currentTime);
+                oscBass.stop(audioCtx.currentTime + 0.8);
+                
+                const oscHigh = audioCtx.createOscillator();
+                const gainHigh = audioCtx.createGain();
+                oscHigh.type = 'sawtooth';
+                oscHigh.frequency.setValueAtTime(2000, audioCtx.currentTime);
+                oscHigh.frequency.exponentialRampToValueAtTime(5000, audioCtx.currentTime + 0.3);
+                gainHigh.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gainHigh.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+                oscHigh.connect(gainHigh);
+                gainHigh.connect(audioCtx.destination);
+                oscHigh.start(audioCtx.currentTime);
+                oscHigh.stop(audioCtx.currentTime + 0.6);
+                
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.type = 'square';
+                osc2.frequency.setValueAtTime(1500, audioCtx.currentTime);
+                osc2.frequency.exponentialRampToValueAtTime(3500, audioCtx.currentTime + 0.4);
+                gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.start(audioCtx.currentTime);
+                osc2.stop(audioCtx.currentTime + 0.5);
+                
+                const bufferSize = audioCtx.sampleRate * 0.6;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    const env = Math.exp(-i / bufferSize * 4);
+                    data[i] = (Math.random() * 2 - 1) * env * 0.8;
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.7);
+                noise.connect(noiseGain);
+                noiseGain.connect(audioCtx.destination);
+                noise.start(audioCtx.currentTime);
+                
+                const oscScreech = audioCtx.createOscillator();
+                const gainScreech = audioCtx.createGain();
+                oscScreech.type = 'sawtooth';
+                oscScreech.frequency.setValueAtTime(4000, audioCtx.currentTime + 0.2);
+                oscScreech.frequency.exponentialRampToValueAtTime(8000, audioCtx.currentTime + 0.4);
+                gainScreech.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainScreech.gain.setValueAtTime(0.8, audioCtx.currentTime + 0.2);
+                gainScreech.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                oscScreech.connect(gainScreech);
+                gainScreech.connect(audioCtx.destination);
+                oscScreech.start(audioCtx.currentTime + 0.2);
+                oscScreech.stop(audioCtx.currentTime + 0.5);
+            } catch (e) {}
+        }
+
+        function triggerScreamer() {
+            if (screamerActive) return;
+            screamerActive = true;
+            screamerFlashWhite.style.display = 'block';
+            setTimeout(() => {
+                screamerFlashWhite.style.display = 'none';
+                screamerFlashRed.style.display = 'block';
+                setTimeout(() => {
+                    screamerFlashRed.style.display = 'none';
+                    screamerOverlay.style.display = 'flex';
+                }, 150);
+            }, 100);
+            playScreamerSound();
+            setTimeout(() => {
+                screamerOverlay.style.display = 'none';
+                document.getElementById('game-over').style.display = 'block';
+            }, 2000);
+        }
+
+        class PixelZombie {
+            constructor(targetDoor) {
+                this.targetDoor = targetDoor;
+                this.x = targetDoor.x + (Math.random() - 0.5) * 0.06;
+                if (this.x < 0.05) this.x = 0.05;
+                if (this.x > 0.95) this.x = 0.95;
+                this.z = 1.8;
+                this.speed = 0.01 + Math.random() * 0.006;
+                this.isDead = false;
+                this.isAttacking = false;
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.hasTriggeredScreamer = false;
+                this.skinColor = Math.random() > 0.5 ? '#6b8e5a' : '#7a9e6a';
+                this.eyeColor = '#ff0000';
+                this.clothesColor = '#4a5a3a';
+            }
+
+            update() {
+                if (isGameOver || this.isDead) return;
+                this.animTimer += this.speed * 2;
+                if (this.animTimer > 0.5) {
+                    this.animTimer = 0;
+                    this.animFrame = (this.animFrame + 1) % 4;
+                }
+                this.z -= this.speed;
+                for (let door of doorPositions) {
+                    if (this.z < 0.7 && Math.abs(this.x - door.x) < 0.15) {
+                        if (door.isClosed) {
+                            this.isDead = true;
+                            return;
+                        } else {
+                            this.isAttacking = true;
+                            if (!this.hasTriggeredScreamer && this.z < 0.4) {
+                                this.hasTriggeredScreamer = true;
+                                triggerScreamer();
+                            }
+                        }
+                    }
+                }
+                if (this.z < 0.35 && !this.hasTriggeredScreamer) {
+                    this.hasTriggeredScreamer = true;
+                    triggerScreamer();
+                }
+            }
+
+            draw() {
+                if (this.isDead) return;
+                const screenX = this.x * canvas.width;
+                const scale = 1 / (this.z + 0.25);
+                const size = Math.floor(60 * scale);
+                const pixelSize = Math.max(2, Math.floor(size / 20));
+                const baseY = canvas.height / 2 + 100 - (this.z * 50);
+
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(screenX - size/2 + pixelSize * 3, baseY + size * 0.6, size - pixelSize * 6, pixelSize * 3);
+
+                const legOffset = this.animFrame % 2 === 0 ? 0 : pixelSize * 2;
+                ctx.fillStyle = '#2a3a2a';
+                ctx.fillRect(screenX - size/3, baseY + size * 0.5 + legOffset, pixelSize * 4, pixelSize * 6);
+                ctx.fillRect(screenX + size/3 - pixelSize * 4, baseY + size * 0.5 - legOffset, pixelSize * 4, pixelSize * 6);
+
+                ctx.fillStyle = this.clothesColor;
+                ctx.fillRect(screenX - size/2 + pixelSize * 2, baseY + size * 0.1, size - pixelSize * 4, size * 0.5);
+                ctx.fillStyle = '#3a4a3a';
+                ctx.fillRect(screenX - pixelSize * 2, baseY + size * 0.2, pixelSize * 2, pixelSize * 2);
+                ctx.fillRect(screenX + pixelSize * 1, baseY + size * 0.2, pixelSize * 2, pixelSize * 2);
+                
+                const armY = baseY + size * 0.15;
+                ctx.fillStyle = this.skinColor;
+                ctx.fillRect(screenX - size/2 - pixelSize, armY + (this.animFrame % 2 === 0 ? 0 : pixelSize), pixelSize * 5, pixelSize * 7);
+                ctx.fillRect(screenX + size/2 - pixelSize * 4, armY - (this.animFrame % 2 === 0 ? 0 : pixelSize), pixelSize * 5, pixelSize * 7);
+                ctx.fillStyle = '#5a7a4a';
+                for (let i = 0; i < 3; i++) {
+                    ctx.fillRect(screenX - size/2 - pixelSize + i * pixelSize * 2, armY + pixelSize * 6, pixelSize, pixelSize * 2);
+                    ctx.fillRect(screenX + size/2 - pixelSize * 3 + i * pixelSize * 2, armY + pixelSize * 6, pixelSize, pixelSize * 2);
+                }
+
+                ctx.fillStyle = this.skinColor;
+                ctx.fillRect(screenX - size/3, baseY - size * 0.1, size * 0.66, size * 0.4);
+                ctx.fillStyle = '#2a2a1a';
+                ctx.fillRect(screenX - size/3, baseY - size * 0.15, size * 0.66, pixelSize * 3);
+                for (let i = 0; i < 6; i++) {
+                    ctx.fillRect(screenX - size/3 + i * pixelSize * 4, baseY - size * 0.15 - (i % 2 === 0 ? pixelSize * 2 : 0), pixelSize * 2, pixelSize * 3);
+                }
+
+                ctx.fillStyle = this.eyeColor;
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(screenX - size/5, baseY + pixelSize * 2, pixelSize * 3, pixelSize * 3);
+                ctx.fillRect(screenX + size/5 - pixelSize * 3, baseY + pixelSize * 2, pixelSize * 3, pixelSize * 3);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(screenX - size/5 + pixelSize, baseY + pixelSize * 3, pixelSize, pixelSize);
+                ctx.fillRect(screenX + size/5 - pixelSize * 2, baseY + pixelSize * 3, pixelSize, pixelSize);
+
+                ctx.fillStyle = '#3a1a1a';
+                ctx.fillRect(screenX - size/6, baseY + size * 0.25, size * 0.33, pixelSize * 2);
+                ctx.fillStyle = '#c8c8a0';
+                for (let i = 0; i < 4; i++) {
+                    ctx.fillRect(screenX - size/6 + i * pixelSize * 3, baseY + size * 0.25, pixelSize, pixelSize * 1.5);
+                }
+
+                ctx.fillStyle = '#8a2a2a';
+                ctx.fillRect(screenX - size/3 + pixelSize * 8, baseY + size * 0.05, pixelSize * 4, pixelSize * 2);
+                ctx.fillRect(screenX + size/3 - pixelSize * 10, baseY + size * 0.1, pixelSize * 3, pixelSize * 2);
+
+                if (!this.isDead) {
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.font = `${Math.floor(16 * scale / 2)}px 'Courier New'`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('▶ ' + this.targetDoor.label, screenX, baseY - size * 0.2);
+                }
+            }
+        }
+
+        function spawnEnemy() {
+            if (isGameOver) return;
+            if (enemies.length > 0) return;
+            const doorIndex = Math.floor(Math.random() * doorPositions.length);
+            const targetDoor = doorPositions[doorIndex];
+            enemies.push(new PixelZombie(targetDoor));
+        }
+
+        function tryCloseDoor(xPos) {
+            if (isGameOver) return;
+            for (let door of doorPositions) {
+                if (Math.abs(xPos - door.x) < 0.15) {
+                    if (!door.isClosed) {
+                        door.isClosed = true;
+                        door.closeTimer = 2.0;
+                        for (let enemy of enemies) {
+                            if (enemy.targetDoor === door && !enemy.isDead) {
+                                enemy.isDead = true;
+                                setTimeout(() => {
+                                    if (!isGameOver) spawnEnemy();
+                                }, spawnDelay);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const worldX = mouseX / canvas.width;
+            tryCloseDoor(worldX);
+        });
+
+        let timerInterval;
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (isGameOver) return;
+                gameTime--;
+                document.getElementById('timer').innerText = gameTime;
+                if (gameTime <= 0) {
+                    clearInterval(timerInterval);
+                    isGameOver = true;
+                    // Показываем экран победы вместо обычного
+                    winScreen.style.display = 'block';
+                }
+            }, 1000);
+        }
+
+        function drawPixelBackground() {
+            ctx.fillStyle = '#0a0a18';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 30; i++) {
+                const starX = (i * 137 + 50) % canvas.width;
+                const starY = (i * 251 + 30) % (canvas.height / 2 - 50);
+                ctx.fillRect(starX, starY, 2, 2);
+            }
+            const floorY = canvas.height / 2;
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, floorY, canvas.width, canvas.height);
+            ctx.strokeStyle = '#2a2a3e';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 12; i++) {
+                const y = floorY + i * 30 + 15;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, floorY - 50);
+            ctx.strokeStyle = '#2a2a3e';
+            ctx.lineWidth = 1;
+            for (let y = 0; y < floorY - 50; y += 20) {
+                for (let x = 0; x < canvas.width; x += 40) {
+                    const offset = (Math.floor(y / 20) % 2) * 20;
+                    ctx.strokeRect(x + offset, y, 40, 20);
+                }
+            }
+        }
+
+        function gameLoop(time) {
+            frameCount++;
+            drawPixelBackground();
+
+            for (let door of doorPositions) {
+                if (door.isClosed) {
+                    door.closeTimer -= 1/60;
+                    if (door.closeTimer <= 0) {
+                        door.isClosed = false;
+                        door.closeTimer = 0;
+                    }
+                }
+                const doorX = door.x * canvas.width;
+                const doorWidth = 140;
+                const doorHeight = 240;
+                const doorY = canvas.height / 2 - doorHeight / 2 + 50;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(doorX - doorWidth/2 + 5, doorY + 5, doorWidth, doorHeight);
+                ctx.fillStyle = door.isClosed ? '#8B6B4B' : '#5C3A1A';
+                ctx.fillRect(doorX - doorWidth/2, doorY, doorWidth, doorHeight);
+                ctx.strokeStyle = door.isClosed ? '#6B4B2B' : '#4A2A0A';
+                ctx.lineWidth = 2;
+                for (let y = 0; y < doorHeight; y += 30) {
+                    ctx.beginPath();
+                    ctx.moveTo(doorX - doorWidth/2, doorY + y);
+                    ctx.lineTo(doorX + doorWidth/2, doorY + y);
+                    ctx.stroke();
+                }
+                ctx.fillStyle = '#D4A84B';
+                ctx.fillRect(doorX + (door.isClosed ? 40 : 0), doorY + doorHeight/2, 8, 12);
+                if (door.isClosed) {
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.fillRect(doorX + 45, doorY + doorHeight/2 + 15, 6, 6);
+                }
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px "Courier New"';
+                ctx.textAlign = 'center';
+                ctx.fillText(door.isClosed ? '[ЗАКРЫТО]' : '[ОТКРЫТО]', doorX, doorY - 20);
+                if (!door.isClosed) {
+                    ctx.fillStyle = '#ff3333';
+                    ctx.fillText('⚠', doorX, doorY - 45);
+                }
+            }
+
+            document.getElementById('enemy-count').innerText = enemies.length;
+
+            if (!isGameOver && gameTime > 0 && enemies.length === 0) {
+                if (Date.now() - lastSpawnTime > spawnDelay) {
+                    spawnEnemy();
+                    lastSpawnTime = Date.now();
+                }
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let enemy = enemies[i];
+                enemy.update();
+                enemy.draw();
+                if (enemy.isDead || enemy.z < 0.3) {
+                    enemies.splice(i, 1);
+                }
+            }
+
+            ctx.fillStyle = '#88ff88';
+            ctx.font = '24px "Courier New"';
+            ctx.textAlign = 'center';
+            ctx.fillText('◄ DOOR 1', canvas.width * 0.2, 40);
+            ctx.fillText('DOOR 2 ►', canvas.width * 0.8, 40);
+
+            if (enemies.length === 0 && !isGameOver && gameTime > 0) {
+                ctx.fillStyle = '#4CAF50';
+                ctx.font = '20px "Courier New"';
+                ctx.textAlign = 'center';
+                ctx.fillText('✓ ВРАГ УНИЧТОЖЕН. ОЖИДАЙТЕ...', canvas.width/2, canvas.height/2 + 200);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        startTimer();
+        setTimeout(() => spawnEnemy(), 1000);
+        requestAnimationFrame(gameLoop);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>

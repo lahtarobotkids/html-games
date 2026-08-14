@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>❄️ Мультик: Саб-Зиро vs Морти — Исправленный бой</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            border: 3px solid #2e4a1e;
+            border-radius: 12px;
+            box-shadow: 0 0 60px rgba(0, 200, 255, 0.7);
+        }
+        .restart-btn {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #1e5f3e, #0d3b1e);
+            color: white;
+            border: none;
+            padding: 12px 35px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            letter-spacing: 2px;
+            box-shadow: 0 0 25px #2ecc71;
+            transition: 0.3s;
+            z-index: 20;
+        }
+        .restart-btn:hover {
+            background: #2e8b57;
+            box-shadow: 0 0 40px #3cb371;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="cartoonCanvas"></canvas>
+    <button class="restart-btn" onclick="restartCartoon()">🔄 СМОТРЕТЬ ЕЩЁ РАЗ</button>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('cartoonCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 960;
+            canvas.height = 540;
+
+            // ---------- СОСТОЯНИЕ МУЛЬТИКА ----------
+            let animationFrame;
+            let cameraShake = 0, shakeIntensity = 0;
+            let particles = [];
+            let hitEffects = [];
+            let textBubbles = [];
+            let actionQueue = [];
+            let actionIndex = 0;
+            let actionTimer = 0;
+
+            // Персонажи
+            const subZero = {
+                name: 'Саб-Зиро',
+                x: 250, y: 380, vx: 0, vy: 0,
+                width: 44, height: 74,
+                health: 100,
+                facing: 1,
+                color: '#3498db', darkColor: '#1e6fa5',
+                state: 'idle',
+                attackTimer: 0,
+                hitTimer: 0,
+                grounded: true,
+                frozenTimer: 0,
+                jumpAttackFlag: false, // чтобы setTimeout не срабатывал повторно
+            };
+            const morty = {
+                name: 'Морти',
+                x: 680, y: 380, vx: 0, vy: 0,
+                width: 44, height: 74,
+                health: 100,
+                facing: -1,
+                color: '#8e44ad', darkColor: '#5e2b7a',
+                state: 'idle',
+                attackTimer: 0,
+                hitTimer: 0,
+                grounded: true,
+                frozenTimer: 0,
+            };
+
+            const groundY = 430;
+            const gravity = 0.7;
+
+            // ---------- ПОСТРОЕНИЕ СЦЕНАРИЯ (исправлено) ----------
+            function buildScenario() {
+                actionQueue = [
+                    { type: 'wait', duration: 40 },
+                    { type: 'dialogue', speaker: 'subzero', text: 'Сейчас ты упадешь!', duration: 70 },
+                    // Акт 1: Саб-Зиро прыгает и бьёт Морти
+                    { type: 'jumpAttack', who: 'subzero', target: 'morty', power: 22, effect: 'AIR STRIKE!' },
+                    { type: 'wait', duration: 70 },
+                    // Акт 2: Морти подходит и контратакует (ГАРАНТИРОВАННО)
+                    { type: 'move', who: 'morty', targetX: subZero.x + 60, duration: 45 },
+                    { type: 'wait', duration: 30 },
+                    { type: 'dialogue', speaker: 'morty', text: 'Это было больно... получи!', duration: 50 },
+                    { type: 'enemyAttack', who: 'morty', target: 'subzero', power: 14, effect: 'REVENGE!' },
+                    { type: 'wait', duration: 60 },
+                    // Акт 3: Саб-Зиро финальным ударом побеждает
+                    { type: 'dialogue', speaker: 'subzero', text: 'Хватит! Ледяная смерть!', duration: 60 },
+                    { type: 'finalAttack', who: 'subzero', target: 'morty', power: 80, effect: 'ICE BLAST!', freeze: true },
+                    { type: 'wait', duration: 40 },
+                    { type: 'knockout', who: 'morty' },
+                    { type: 'dialogue', speaker: 'subzero', text: 'Фаталити!', duration: 120 },
+                    { type: 'wait', duration: 30 },
+                    { type: 'reset', duration: 1 }
+                ];
+                actionIndex = 0;
+                actionTimer = 0;
+                subZero.jumpAttackFlag = false;
+            }
+
+            // ---------- СБРОС МУЛЬТИКА ----------
+            function restartCartoon() {
+                cancelAnimationFrame(animationFrame);
+                subZero.health = 100; subZero.x = 250; subZero.y = 380; subZero.vx = 0; subZero.vy = 0;
+                subZero.state = 'idle'; subZero.facing = 1; subZero.frozenTimer = 0; subZero.jumpAttackFlag = false;
+                morty.health = 100; morty.x = 680; morty.y = 380; morty.vx = 0; morty.vy = 0;
+                morty.state = 'idle'; morty.facing = -1; morty.frozenTimer = 0;
+                particles = []; hitEffects = []; textBubbles = [];
+                cameraShake = 0; shakeIntensity = 0;
+                buildScenario();
+                actionIndex = 0; actionTimer = 0;
+                animationFrame = requestAnimationFrame(gameLoop);
+            }
+
+            // ---------- ФИЗИКА И ОБНОВЛЕНИЕ ----------
+            function updateFighter(f) {
+                if (f.frozenTimer > 0) {
+                    f.frozenTimer--;
+                    f.vx = 0;
+                    return;
+                }
+                f.vy += gravity;
+                f.y += f.vy;
+                if (f.y + f.height >= groundY) {
+                    f.y = groundY - f.height;
+                    f.vy = 0;
+                    f.grounded = true;
+                } else {
+                    f.grounded = false;
+                }
+                f.x += f.vx;
+                f.vx *= 0.85;
+                if (f.x < 60) f.x = 60;
+                if (f.x + f.width > canvas.width - 60) f.x = canvas.width - 60 - f.width;
+
+                if (f.attackTimer > 0) {
+                    f.attackTimer--;
+                    if (f.attackTimer === 0) f.state = 'idle';
+                }
+                if (f.hitTimer > 0) {
+                    f.hitTimer--;
+                    if (f.hitTimer === 0 && f.state === 'hit') f.state = 'idle';
+                }
+                if (f.health < 0) f.health = 0;
+            }
+
+            function applyDamage(attacker, defender, damage, effectText, freeze = false) {
+                defender.health -= damage;
+                defender.state = 'hit';
+                defender.hitTimer = 14;
+                defender.vx = attacker.facing * (freeze ? 2 : 6);
+                defender.vy = freeze ? -2 : -4;
+                if (freeze) defender.frozenTimer = 45;
+
+                cameraShake = freeze ? 24 : 10;
+                shakeIntensity = freeze ? 16 : 7;
+                const impactX = defender.x + defender.width/2;
+                const impactY = defender.y + defender.height/2;
+                for (let i=0; i < (freeze?45:20); i++) {
+                    particles.push({
+                        x: impactX, y: impactY,
+                        vx: (Math.random()-0.5) * (freeze?18:12),
+                        vy: (Math.random()-0.8) * (freeze?14:9) - 3,
+                        life: 25 + Math.random()*20,
+                        maxLife: 45,
+                        color: freeze ? '#a0e0ff' : '#ffaa00',
+                        size: 2+Math.random()*4
+                    });
+                }
+                hitEffects.push({
+                    x: impactX, y: impactY-20,
+                    text: '-' + damage,
+                    life: 28,
+                    color: freeze ? '#00ccff' : '#ff3333',
+                    size: 32
+                });
+                hitEffects.push({
+                    x: impactX, y: impactY-45,
+                    text: effectText,
+                    life: 22,
+                    color: '#ffcc00',
+                    size: 22
+                });
+            }
+
+            function executeAction(action) {
+                if (!action) return;
+                const sub = subZero, mor = morty;
+                switch (action.type) {
+                    case 'dialogue':
+                        textBubbles.push({
+                            speaker: action.speaker,
+                            text: action.text,
+                            life: action.duration,
+                            maxLife: action.duration
+                        });
+                        break;
+                    case 'wait':
+                        break;
+                    case 'move':
+                        const target = action.who === 'subzero' ? sub : mor;
+                        const targetX = action.targetX;
+                        const dir = targetX > target.x ? 1 : -1;
+                        target.vx = dir * 6;
+                        target.facing = dir;
+                        target.state = 'walk';
+                        // остановка через время
+                        setTimeout(() => {
+                            if (target.state === 'walk') target.state = 'idle';
+                        }, action.duration * 16);
+                        break;
+                    case 'jumpAttack':
+                        if (!sub.jumpAttackFlag && sub.grounded && sub.state !== 'hit') {
+                            sub.jumpAttackFlag = true;
+                            sub.vy = -13;
+                            sub.vx = (mor.x > sub.x) ? 6 : -6;
+                            sub.facing = (mor.x > sub.x) ? 1 : -1;
+                            sub.state = 'jump';
+                            sub.grounded = false;
+                            // Удар в воздухе через 300мс
+                            setTimeout(() => {
+                                if (sub.health > 0 && mor.health > 0) {
+                                    // всегда попадание (как в мультике)
+                                    applyDamage(sub, mor, action.power, action.effect);
+                                    sub.state = 'kick';
+                                    sub.attackTimer = 20;
+                                }
+                            }, 300);
+                        }
+                        break;
+                    case 'enemyAttack':
+                        // Морти всегда бьёт, даже если далеко – подводим его
+                        if (mor.state !== 'hit' && mor.attackTimer <= 0 && mor.frozenTimer <= 0) {
+                            // двигаем в сторону Саб-Зиро для реализма
+                            const dirToSub = (sub.x > mor.x) ? 1 : -1;
+                            mor.x += dirToSub * 30; // резкое сближение
+                            mor.facing = dirToSub;
+                            mor.state = 'punch';
+                            mor.attackTimer = 18;
+                            applyDamage(mor, sub, action.power, action.effect);
+                        }
+                        break;
+                    case 'finalAttack':
+                        if (sub.state !== 'hit' && sub.attackTimer <= 0 && sub.frozenTimer <= 0) {
+                            sub.facing = (mor.x > sub.x) ? 1 : -1;
+                            sub.state = 'ult';
+                            sub.attackTimer = 28;
+                            applyDamage(sub, mor, action.power, action.effect, action.freeze || false);
+                        }
+                        break;
+                    case 'knockout':
+                        const ko = action.who === 'subzero' ? sub : mor;
+                        ko.health = 0;
+                        ko.state = 'hit';
+                        ko.vy = -10;
+                        ko.vx = (ko.facing) * 5;
+                        cameraShake = 22;
+                        shakeIntensity = 15;
+                        break;
+                    default: break;
+                }
+            }
+
+            // ---------- ОТРИСОВКА ----------
+            function drawJungleBackground() {
+                const gradSky = ctx.createLinearGradient(0,0,0,300);
+                gradSky.addColorStop(0,'#1b4a2e'); gradSky.addColorStop(0.7,'#3a7a4b'); gradSky.addColorStop(1,'#6b9e4a');
+                ctx.fillStyle = gradSky; ctx.fillRect(0,0,canvas.width,280);
+                ctx.fillStyle = '#ffdd77'; ctx.beginPath(); ctx.arc(800,80,45,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#1e4a1e';
+                for (let i=0;i<12;i++) { let tx=i*90-20; ctx.beginPath(); ctx.moveTo(tx,280); ctx.lineTo(tx+40,150); ctx.lineTo(tx+80,280); ctx.fill(); }
+                ctx.fillStyle = '#2d5e2d';
+                for (let i=0;i<8;i++) { let lx=i*130+Math.sin(i)*20; ctx.beginPath(); ctx.ellipse(lx,270,70,35,0,0,Math.PI*2); ctx.fill(); }
+                ctx.fillStyle = '#4a6b2a'; ctx.fillRect(0,groundY+5,canvas.width,canvas.height-groundY-5);
+                ctx.fillStyle = '#3b5e1a';
+                for (let i=0;i<20;i++) { let gx=i*50+10; ctx.beginPath(); ctx.moveTo(gx,groundY+5); ctx.lineTo(gx-10,groundY-15); ctx.lineTo(gx+10,groundY-10); ctx.fill(); }
+                ctx.strokeStyle = '#5a7a2a'; ctx.lineWidth=3;
+                for (let i=0;i<5;i++) { ctx.beginPath(); ctx.moveTo(100+i*180,50); ctx.quadraticCurveTo(120+i*180,150,90+i*180,280); ctx.stroke(); }
+                ctx.fillStyle = '#2d4a1e';
+                for (let i=0;i<6;i++) { ctx.beginPath(); ctx.ellipse(150+i*150,groundY+10,40,20,0,0,Math.PI*2); ctx.fill(); }
+            }
+
+            function drawFighter(f, isSubZero) {
+                ctx.save();
+                const x=f.x, y=f.y, w=f.width, h=f.height;
+                const cx=x+w/2, headR=15;
+                const bodyColor = f.frozenTimer>0 ? '#a0d8ef' : f.color;
+                const darkColor = f.frozenTimer>0 ? '#6fa8c0' : f.darkColor;
+                if (f.hitTimer>0 && Math.floor(f.hitTimer/2)%2===0) ctx.globalAlpha=0.6;
+                ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(cx,groundY+2,w*0.6,5,0,0,Math.PI*2); ctx.fill();
+                const legY=y+h-10; ctx.strokeStyle=bodyColor; ctx.lineWidth=6; ctx.lineCap='round';
+                if (f.state==='kick' && f.attackTimer>10) {
+                    const kickX=cx+f.facing*30, kickY=legY-15;
+                    ctx.beginPath(); ctx.moveTo(cx-f.facing*5,legY); ctx.lineTo(kickX,kickY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+f.facing*5,legY); ctx.lineTo(cx+f.facing*8,legY+8); ctx.stroke();
+                    ctx.fillStyle=darkColor; ctx.beginPath(); ctx.ellipse(kickX,kickY-2,7,4,0,0,Math.PI*2); ctx.fill();
+                } else {
+                    ctx.beginPath(); ctx.moveTo(cx-7,legY); ctx.lineTo(cx-11,legY+8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+7,legY); ctx.lineTo(cx+11,legY+8); ctx.stroke();
+                }
+                const shoulderY=y+30; ctx.lineWidth=6;
+                if (f.state==='punch' && f.attackTimer>12) {
+                    const fistX=cx+f.facing*32, fistY=shoulderY+6;
+                    ctx.beginPath(); ctx.moveTo(cx+f.facing*5,shoulderY); ctx.lineTo(fistX,fistY); ctx.stroke();
+                    ctx.fillStyle=isSubZero?'#d0f0ff':'#ffddaa'; ctx.beginPath(); ctx.arc(fistX,fistY,8,0,2*Math.PI); ctx.fill();
+                } else if (f.state==='ult' && f.attackTimer>18) {
+                    const ultX=cx+f.facing*28;
+                    ctx.beginPath(); ctx.moveTo(cx,shoulderY-5); ctx.lineTo(ultX,shoulderY-8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx,shoulderY+10); ctx.lineTo(ultX,shoulderY+8); ctx.stroke();
+                    ctx.fillStyle='#a0f0ff'; ctx.shadowColor='#00ccff'; ctx.shadowBlur=18;
+                    ctx.beginPath(); ctx.arc(ultX+10,shoulderY,16,0,2*Math.PI); ctx.fill(); ctx.shadowBlur=0;
+                } else {
+                    ctx.beginPath(); ctx.moveTo(cx-6,shoulderY); ctx.lineTo(cx-16,shoulderY+15); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+6,shoulderY); ctx.lineTo(cx+16,shoulderY+15); ctx.stroke();
+                }
+                ctx.fillStyle=bodyColor; ctx.beginPath(); ctx.roundRect(cx-w*0.38,y+headR*2-5,w*0.76,h-headR*2-10,6); ctx.fill();
+                ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.stroke();
+                ctx.fillStyle=bodyColor; ctx.beginPath(); ctx.arc(cx,y+headR,headR,0,2*Math.PI); ctx.fill();
+                ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.stroke();
+                if (isSubZero) {
+                    ctx.fillStyle='#222'; ctx.fillRect(cx-12,y+headR-3,24,10);
+                    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+f.facing*5,y+headR-4,3.5,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(cx+f.facing*6.5,y+headR-4,1.8,0,2*Math.PI); ctx.fill();
+                } else {
+                    ctx.fillStyle='#f0e6d2'; ctx.beginPath(); ctx.arc(cx,y+headR,headR-2,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(cx-4,y+headR-4,3,0,2*Math.PI); ctx.fill();
+                    ctx.beginPath(); ctx.arc(cx+4,y+headR-4,3,0,2*Math.PI); ctx.fill();
+                    ctx.fillStyle='#fff'; for (let i=0;i<4;i++) ctx.fillRect(cx-5+i*3,y+headR+4,2,3);
+                }
+                ctx.restore();
+            }
+
+            CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+                if (w<2*r) r=w/2; if (h<2*r) r=h/2;
+                this.moveTo(x+r,y); this.lineTo(x+w-r,y); this.quadraticCurveTo(x+w,y,x+w,y+r);
+                this.lineTo(x+w,y+h-r); this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+                this.lineTo(x+r,y+h); this.quadraticCurveTo(x,y+h,x,y+h-r);
+                this.lineTo(x,y+r); this.quadraticCurveTo(x,y,x+r,y); this.closePath(); return this;
+            };
+
+            function drawEffects() {
+                for (let p of particles) {
+                    ctx.globalAlpha=p.life/p.maxLife; ctx.fillStyle=p.color;
+                    ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,2*Math.PI); ctx.fill();
+                }
+                ctx.globalAlpha=1;
+                for (let ef of hitEffects) {
+                    ctx.globalAlpha=Math.min(1, ef.life/25);
+                    ctx.font=`bold ${ef.size}px Impact, Arial`;
+                    ctx.fillStyle=ef.color; ctx.textAlign='center';
+                    ctx.fillText(ef.text,ef.x,ef.y);
+                    ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeText(ef.text,ef.x,ef.y);
+                }
+                ctx.globalAlpha=1;
+                for (let tb of textBubbles) {
+                    let alpha = Math.min(1, tb.life/40);
+                    ctx.globalAlpha = alpha;
+                    let speaker = tb.speaker === 'subzero' ? subZero : morty;
+                    let bx = speaker.x + 10;
+                    let by = speaker.y - 45;
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.roundRect(bx-10, by-25, ctx.measureText(tb.text).width+20, 30, 10);
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(tb.text, bx, by-5);
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            function drawUI() {
+                ctx.fillStyle='#222'; ctx.fillRect(40,25,220,20);
+                ctx.fillStyle='#2ecc71'; ctx.fillRect(40,25,220*(subZero.health/100),20);
+                ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(40,25,220,20);
+                ctx.fillStyle='#fff'; ctx.font='bold 14px Arial'; ctx.fillText('САБ-ЗИРО',45,42);
+
+                ctx.fillStyle='#222'; ctx.fillRect(canvas.width-260,25,220,20);
+                ctx.fillStyle='#e74c3c'; ctx.fillRect(canvas.width-260,25,220*(morty.health/100),20);
+                ctx.strokeStyle='#fff'; ctx.strokeRect(canvas.width-260,25,220,20);
+                ctx.fillText('МОРТИ',canvas.width-255,42);
+            }
+
+            function gameLoop() {
+                if (actionIndex < actionQueue.length) {
+                    let currentAction = actionQueue[actionIndex];
+                    if (actionTimer === 0) executeAction(currentAction);
+                    actionTimer++;
+                    if (actionTimer >= currentAction.duration) {
+                        actionTimer = 0;
+                        actionIndex++;
+                        if (actionIndex >= actionQueue.length) {
+                            setTimeout(() => restartCartoon(), 2500);
+                            actionIndex = actionQueue.length;
+                        }
+                    }
+                }
+
+                updateFighter(subZero);
+                updateFighter(morty);
+
+                for (let i=particles.length-1;i>=0;i--) {
+                    particles[i].x += particles[i].vx;
+                    particles[i].y += particles[i].vy;
+                    particles[i].vy += 0.2;
+                    particles[i].life--;
+                    if (particles[i].life<=0) particles.splice(i,1);
+                }
+                for (let i=hitEffects.length-1;i>=0;i--) {
+                    hitEffects[i].y -= 1;
+                    hitEffects[i].life--;
+                    if (hitEffects[i].life<=0) hitEffects.splice(i,1);
+                }
+                for (let i=textBubbles.length-1;i>=0;i--) {
+                    textBubbles[i].life--;
+                    if (textBubbles[i].life<=0) textBubbles.splice(i,1);
+                }
+                if (cameraShake>0) cameraShake-=0.8;
+
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                let shakeX=0, shakeY=0;
+                if (cameraShake>0) {
+                    shakeX = (Math.random()-0.5)*shakeIntensity*(cameraShake/10);
+                    shakeY = (Math.random()-0.5)*shakeIntensity*(cameraShake/10);
+                }
+                ctx.save();
+                ctx.translate(shakeX, shakeY);
+                drawJungleBackground();
+                drawFighter(subZero, true);
+                drawFighter(morty, false);
+                drawEffects();
+                drawUI();
+                ctx.restore();
+
+                animationFrame = requestAnimationFrame(gameLoop);
+            }
+
+            buildScenario();
+            animationFrame = requestAnimationFrame(gameLoop);
+            window.restartCartoon = restartCartoon;
+        })();
+    </script>
+</body>
+</html>

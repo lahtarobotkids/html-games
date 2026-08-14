@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Мультик: Побег Кроша 3</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #0a2f1f; }
+    #caption {
+      position: absolute;
+      bottom: 40px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      text-shadow: 0 0 20px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7);
+      pointer-events: none;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 12px 0;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.5s;
+    }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #aaa;
+      font-size: 14px;
+      background: rgba(0,0,0,0.6);
+      padding: 6px 14px;
+      border-radius: 20px;
+      z-index: 10;
+      backdrop-filter: blur(2px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #replayBtn {
+      position: absolute;
+      bottom: 100px;
+      right: 30px;
+      padding: 12px 28px;
+      background: #e67e22;
+      color: white;
+      border: none;
+      border-radius: 40px;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 20;
+      box-shadow: 0 0 20px rgba(230,126,34,0.5);
+      font-weight: bold;
+      transition: 0.2s;
+      display: none;
+    }
+    #replayBtn:hover {
+      transform: scale(1.05);
+      background: #d35400;
+    }
+  </style>
+</head>
+<body>
+  <div id="caption">🌲 Новое приключение: строим дом!</div>
+  <div id="info">🎬 Часть 3 • Строительство</div>
+  <button id="replayBtn">🔄 Смотреть снова</button>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.126.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // --- Сцена, камера, рендерер ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2d5a27); // тёмно-зелёный лесной фон
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(6, 4, 8);
+    camera.lookAt(0, 1, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // --- Освещение ---
+    const ambientLight = new THREE.AmbientLight(0x404060);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    dirLight.position.set(8, 12, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 0.1;
+    dirLight.shadow.camera.far = 30;
+    dirLight.shadow.camera.left = -10;
+    dirLight.shadow.camera.right = 10;
+    dirLight.shadow.camera.top = 10;
+    dirLight.shadow.camera.bottom = -10;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0x88aaff, 0.3);
+    fillLight.position.set(-3, 2, 4);
+    scene.add(fillLight);
+
+    // --- Ландшафт: поляна ---
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.9 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Деревья вокруг
+    function createTree(x, z) {
+      const group = new THREE.Group();
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.9 });
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 1.5), trunkMat);
+      trunk.position.y = 0.75;
+      trunk.castShadow = true;
+      group.add(trunk);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.8 });
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.2, 6), leafMat);
+      leaf.position.y = 1.6;
+      leaf.castShadow = true;
+      group.add(leaf);
+      group.position.set(x, 0, z);
+      return group;
+    }
+    // Разбросаем деревья по кругу
+    for (let i = 0; i < 20; i++) {
+      const angle = (i / 20) * Math.PI * 2;
+      const radius = 4 + Math.random() * 4;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius - 1;
+      if (Math.abs(x) < 2.5 && z > -1 && z < 3) continue; // оставим место для дома
+      const tree = createTree(x, z);
+      scene.add(tree);
+    }
+
+    // --- Персонажи ---
+    function createCharacter(color, eyeColor = 0xffffff, pupilColor = 0x111111, earColor = null) {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), bodyMat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.y = 0.8;
+      group.add(body);
+
+      const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+      const eyePupilMat = new THREE.MeshStandardMaterial({ color: pupilColor, roughness: 0.1 });
+      function createEye(ex, ey, ez) {
+        const g = new THREE.Group();
+        const white = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), eyeWhiteMat);
+        white.position.set(0, 0, 0);
+        g.add(white);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), eyePupilMat);
+        pupil.position.set(0, 0.04, 0.22);
+        g.add(pupil);
+        const gloss = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 }));
+        gloss.position.set(0.07, 0.1, 0.28);
+        g.add(gloss);
+        g.position.set(ex, ey, ez);
+        return g;
+      }
+      group.add(createEye(0.3, 1.0, 0.65));
+      group.add(createEye(-0.3, 1.0, 0.65));
+
+      const mouthMat = new THREE.MeshStandardMaterial({ color: 0xcc3344, roughness: 0.4 });
+      const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.04, 8, 16, Math.PI), mouthMat);
+      mouth.position.set(0, 0.7, 0.85);
+      mouth.rotation.x = 0.2;
+      mouth.rotation.z = 0.1;
+      group.add(mouth);
+
+      const earMat = new THREE.MeshStandardMaterial({ color: earColor || color, roughness: 0.5 });
+      function createEar(ex, ey, ez, rotZ) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 8), earMat);
+        ear.position.set(ex, ey, ez);
+        ear.rotation.z = rotZ;
+        ear.rotation.x = 0.2;
+        ear.castShadow = true;
+        return ear;
+      }
+      group.add(createEar(0.4, 1.4, 0.2, 0.2));
+      group.add(createEar(-0.4, 1.4, 0.2, -0.2));
+
+      const handMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
+      function createHand(hx, hy, hz) {
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 12), handMat);
+        hand.position.set(hx, hy, hz);
+        hand.castShadow = true;
+        return hand;
+      }
+      group.add(createHand(0.9, 0.6, 0.2));
+      group.add(createHand(-0.9, 0.6, 0.2));
+
+      const legMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+      function createLeg(lx, ly, lz) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8), legMat);
+        leg.position.set(lx, ly, lz);
+        leg.castShadow = true;
+        return leg;
+      }
+      group.add(createLeg(0.35, 0.15, 0.15));
+      group.add(createLeg(-0.35, 0.15, 0.15));
+
+      return group;
+    }
+
+    // Создаём трёх друзей
+    const krosh = createCharacter(0xffb347, 0xffffff, 0x111111, 0xffa07a);
+    krosh.position.set(-1.2, 0, 1.5);
+    scene.add(krosh);
+
+    const barash = createCharacter(0x9b59b6, 0xffffff, 0x111111, 0x8e44ad);
+    barash.position.set(0, 0, 0.8);
+    scene.add(barash);
+
+    const hrusha = createCharacter(0xffb6c1, 0xffffff, 0x111111, 0xff8a9a);
+    hrusha.position.set(1.2, 0, 1.8);
+    scene.add(hrusha);
+
+    // Повернём всех лицом к центру (где будет дом)
+    krosh.rotation.y = 0.2;
+    barash.rotation.y = 0;
+    hrusha.rotation.y = -0.2;
+
+    // --- Инструменты: молотки ---
+    const hammerMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.8 });
+    const headMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.7, roughness: 0.4 });
+    function createHammer(x, y, z, rotY) {
+      const group = new THREE.Group();
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5), hammerMat);
+      handle.position.y = 0.25;
+      handle.rotation.x = Math.PI / 2;
+      group.add(handle);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.1), headMat);
+      head.position.set(0, 0.4, 0);
+      group.add(head);
+      group.position.set(x, y, z);
+      group.rotation.y = rotY;
+      return group;
+    }
+    const hammer1 = createHammer(-1.2, 0.6, 1.8, 0.3);
+    const hammer2 = createHammer(1.2, 0.6, 2.0, -0.3);
+    scene.add(hammer1);
+    scene.add(hammer2);
+    // Скрываем молотки в начале
+    hammer1.visible = false;
+    hammer2.visible = false;
+
+    // --- Строительные материалы (доски, брёвна) ---
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.9 });
+    function createBoard(x, y, z, w, h, d, rot = 0) {
+      const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), woodMat);
+      board.position.set(x, y, z);
+      board.rotation.y = rot;
+      board.castShadow = true;
+      board.receiveShadow = true;
+      scene.add(board);
+      return board;
+    }
+    // Заготовки для дома (будут появляться поэтапно)
+    const houseParts = [];
+    // Стены: 4 доски
+    const wall1 = createBoard(0, 0.5, 0, 1.2, 0.8, 0.05);
+    const wall2 = createBoard(0, 0.5, 0, 1.2, 0.8, 0.05);
+    const wall3 = createBoard(0, 0.5, 0, 1.2, 0.8, 0.05);
+    const wall4 = createBoard(0, 0.5, 0, 1.2, 0.8, 0.05);
+    // Крыша (две плоскости)
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x8B0000, roughness: 0.7 });
+    const roof1 = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.8), roofMat);
+    roof1.position.set(0, 1.0, 0);
+    roof1.rotation.x = 0.5;
+    roof1.castShadow = true;
+    scene.add(roof1);
+    const roof2 = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.8), roofMat);
+    roof2.position.set(0, 1.0, 0);
+    roof2.rotation.x = -0.5;
+    roof2.castShadow = true;
+    scene.add(roof2);
+    // Дверь
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x5d3a1a });
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.05), doorMat);
+    door.position.set(0, 0.3, 0.65);
+    door.castShadow = true;
+    scene.add(door);
+    // Окна (маленькие квадраты)
+    const windowMat = new THREE.MeshStandardMaterial({ color: 0x87CEEB, emissive: 0x224466, emissiveIntensity: 0.1 });
+    const win1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.05), windowMat);
+    win1.position.set(-0.5, 0.6, 0.65);
+    scene.add(win1);
+    const win2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.05), windowMat);
+    win2.position.set(0.5, 0.6, 0.65);
+    scene.add(win2);
+
+    // Изначально все части дома скрыты (или размещены в другом месте)
+    const allHouseParts = [wall1, wall2, wall3, wall4, roof1, roof2, door, win1, win2];
+    allHouseParts.forEach(p => p.visible = false);
+
+    // --- Анимационные переменные ---
+    let clock = new THREE.Clock();
+    let elapsedTime = 0;
+    let phase = 0;
+    let phaseTime = 0;
+    const caption = document.getElementById('caption');
+    const replayBtn = document.getElementById('replayBtn');
+
+    const subtitles = [
+      "🌲 На поляне решено построить дом!",
+      "🔨 Крош и Бараш начинают строительство",
+      "🧱 Стены готовы! Крош забивает гвозди",
+      "🏠 Крыша установлена! Дом почти готов",
+      "🎉 Дом построен! Все радуются",
+      "🏡 Счастливая жизнь в новом доме!"
+    ];
+
+    // Фазы появления частей дома
+    let phaseParts = [
+      [], // 0 - ничего
+      [wall1, wall2, wall3, wall4], // 1 - стены
+      [roof1, roof2], // 2 - крыша
+      [door, win1, win2], // 3 - дверь и окна
+      [], // 4 - всё готово
+      [] // 5 - финал
+    ];
+
+    // --- Анимация ---
+    function animate() {
+      const delta = clock.getDelta();
+      elapsedTime += delta;
+      phaseTime += delta;
+
+      let nextPhase = phase;
+      if (phase === 0 && phaseTime > 2.5) { nextPhase = 1; phaseTime = 0; }
+      if (phase === 1 && phaseTime > 3.5) { nextPhase = 2; phaseTime = 0; }
+      if (phase === 2 && phaseTime > 3.0) { nextPhase = 3; phaseTime = 0; }
+      if (phase === 3 && phaseTime > 3.5) { nextPhase = 4; phaseTime = 0; }
+      if (phase === 4 && phaseTime > 3.0) { nextPhase = 5; phaseTime = 0; }
+      if (phase === 5 && phaseTime > 4.0) {
+        replayBtn.style.display = 'block';
+      }
+
+      if (nextPhase !== phase) {
+        phase = nextPhase;
+        caption.textContent = subtitles[phase] || subtitles[0];
+
+        // Показываем части дома согласно фазе
+        if (phase === 1) {
+          // Стены
+          wall1.visible = true;
+          wall2.visible = true;
+          wall3.visible = true;
+          wall4.visible = true;
+          // Позиционируем стены: образуют квадрат
+          wall1.position.set(-0.6, 0.5, 0);
+          wall2.position.set(0.6, 0.5, 0);
+          wall3.position.set(0, 0.5, -0.6);
+          wall4.position.set(0, 0.5, 0.6);
+          // Молотки появляются
+          hammer1.visible = true;
+          hammer2.visible = true;
+        }
+        if (phase === 2) {
+          // Крыша
+          roof1.visible = true;
+          roof2.visible = true;
+          roof1.position.set(0, 1.2, 0);
+          roof2.position.set(0, 1.2, 0);
+        }
+        if (phase === 3) {
+          // Дверь и окна
+          door.visible = true;
+          win1.visible = true;
+          win2.visible = true;
+          // Молотки исчезают
+          hammer1.visible = false;
+          hammer2.visible = false;
+        }
+        if (phase === 4) {
+          // Всё готово, празднуем
+          // Дом полностью собран
+        }
+        if (phase === 5) {
+          // Финал
+          scene.background = new THREE.Color(0x87CEEB); // солнечное небо
+          dirLight.color.setHex(0xffeedd);
+        }
+      }
+
+      // --- Анимация персонажей ---
+      // Крош и Бараш стучат молотками в фазе 1-2
+      if (phase === 1 || phase === 2) {
+        // Движение молотков
+        const swing = Math.sin(elapsedTime * 8) * 0.3 + 0.5;
+        hammer1.position.y = 0.6 + swing * 0.2;
+        hammer1.rotation.z = swing * 0.3;
+        hammer2.position.y = 0.6 + Math.sin(elapsedTime * 8 + 1) * 0.2 + 0.3;
+        hammer2.rotation.z = Math.sin(elapsedTime * 8 + 1) * 0.3;
+        // Крош и Бараш наклоняются
+        krosh.rotation.x = 0.1 + Math.sin(elapsedTime * 8) * 0.05;
+        barash.rotation.x = 0.1 + Math.sin(elapsedTime * 8 + 1) * 0.05;
+        hrusha.rotation.z = Math.sin(elapsedTime * 3) * 0.05; // Хрюша подбадривает
+      } else if (phase === 3) {
+        // Устанавливают дверь
+        krosh.rotation.x = 0.2;
+        barash.rotation.x = 0.2;
+        hrusha.rotation.z = Math.sin(elapsedTime * 3) * 0.05;
+      } else if (phase === 4 || phase === 5) {
+        // Празднуют: танцуют
+        krosh.rotation.y = Math.sin(elapsedTime * 2) * 0.3;
+        barash.rotation.y = Math.sin(elapsedTime * 2 + 1) * 0.3;
+        hrusha.rotation.y = Math.sin(elapsedTime * 2 + 2) * 0.3;
+        krosh.position.y = Math.sin(elapsedTime * 4) * 0.05;
+        barash.position.y = Math.sin(elapsedTime * 4 + 1) * 0.05;
+        hrusha.position.y = Math.sin(elapsedTime * 4 + 2) * 0.05;
+        // Хрюша машет руками
+        hrusha.children.forEach(child => {
+          if (child.position && child.position.x > 0.5 && child.position.y < 1) {
+            child.rotation.z = Math.sin(elapsedTime * 3) * 0.5 + 0.5;
+          }
+          if (child.position && child.position.x < -0.5 && child.position.y < 1) {
+            child.rotation.z = Math.sin(elapsedTime * 3 + 1) * 0.5 - 0.5;
+          }
+        });
+      }
+
+      // Камера
+      if (phase <= 1) {
+        camera.position.set(5, 3.5, 6);
+        camera.lookAt(0, 0.5, 0);
+      } else if (phase === 2) {
+        camera.position.set(3, 2.5, 5);
+        camera.lookAt(0, 0.8, 0);
+      } else if (phase === 3) {
+        camera.position.set(2, 2, 4);
+        camera.lookAt(0, 0.6, 0);
+      } else if (phase >= 4) {
+        camera.position.set(2, 3, 6);
+        camera.lookAt(0, 0.5, 0);
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    // --- Ресайз ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Кнопка повтора ---
+    replayBtn.addEventListener('click', () => {
+      location.reload();
+    });
+    replayBtn.style.display = 'none';
+
+    console.log('🎬 Часть 3: Строительство дома запущена!');
+  </script>
+</body>
+</html>

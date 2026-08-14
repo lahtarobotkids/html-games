@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мультик — Серия 2: Прогулка (с возвращением домой)</title>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+        canvas { border: 2px solid #fff; border-radius: 12px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="500"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const W = 800, H = 500;
+        const horizon = H - 30; // верх травы
+
+        // --- Цикл дня/ночи ---
+        let sunAngle = 0;
+        const sunRadius = 45;
+        const sunY_center = 350;
+        const orbitRadiusX = 300;
+        const orbitRadiusY = 200;
+        let prevIsDay = true; // для отслеживания перехода
+
+        // Облака
+        const clouds = [
+            { x: 100, y: 70, speed: 0.3 },
+            { x: 400, y: 110, speed: 0.5 },
+            { x: 700, y: 60, speed: 0.2 }
+        ];
+
+        // Птица
+        let birdX = -50, birdY = 150, birdSpeed = 2.5, wingAngle = 0;
+
+        // Дом
+        const houseX = 600, houseY = 380, houseW = 120, houseH = 90;
+        const doorX = houseX + 45, doorY = houseY + 50, doorW = 30, doorH = 40;
+        const doorCenterX = houseX + 60, doorCenterY = houseY + 70;
+
+        // --- Персонажи ---
+        // Мальчик
+        let boyX = 150, boyY = horizon - 30;
+        let boyDirection = 1;
+        let boyStep = 0;
+        let boyGoingHome = false;
+        let boyHome = false;
+        let boyTargetX = 0, boyTargetY = 0;
+        const boySpeed = 1.8;
+
+        // Собачка
+        let dogX = 200, dogY = horizon - 20;
+        let dogAngle = 0;
+        const dogRadius = 40;
+        let dogFollowing = false;
+        let dogTargetX = 0, dogTargetY = 0;
+        const dogSpeed = 2.2;
+
+        // Дерево
+        const treeX = 80, treeY = horizon - 10;
+
+        // Цветы
+        const flowers = [];
+        for (let i = 0; i < 12; i++) {
+            flowers.push({
+                x: 20 + Math.random() * 160,
+                y: horizon - 5 - Math.random() * 15,
+                color: ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF'][Math.floor(Math.random() * 4)],
+                size: 4 + Math.random() * 4
+            });
+        }
+
+        // Звёзды
+        const stars = [];
+        for (let i = 0; i < 150; i++) {
+            stars.push({
+                x: Math.random() * W,
+                y: Math.random() * (horizon - 20),
+                r: Math.random() * 1.8 + 0.5,
+                twinkle: Math.random() * Math.PI * 2
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, W, H);
+
+            // --- Положение солнца/луны ---
+            sunAngle += 0.008;
+            const sunX = W/2 + orbitRadiusX * Math.cos(sunAngle);
+            const sunY = sunY_center + orbitRadiusY * Math.sin(sunAngle);
+            const isDay = (sunY + sunRadius) < horizon;
+
+            // --- Логика перехода день/ночь ---
+            if (isDay && !prevIsDay) {
+                // Наступил день — мальчик выходит из дома
+                if (boyHome) {
+                    boyHome = false;
+                    boyGoingHome = false;
+                    boyX = 150;
+                    boyY = horizon - 30;
+                    boyDirection = 1;
+                    boyStep = 0;
+                    // Собачка рядом
+                    dogX = boyX + 30;
+                    dogY = boyY + 10;
+                    dogFollowing = false;
+                }
+            }
+            if (!isDay && prevIsDay) {
+                // Наступила ночь — мальчик идёт домой
+                if (!boyHome && !boyGoingHome) {
+                    boyGoingHome = true;
+                    boyTargetX = doorCenterX;
+                    boyTargetY = horizon - 15; // чтобы стоять у двери
+                    // Собачка следует за ним
+                    dogFollowing = true;
+                    dogTargetX = boyTargetX - 15;
+                    dogTargetY = boyTargetY + 5;
+                }
+            }
+            prevIsDay = isDay;
+
+            // --- Движение мальчика домой ---
+            if (boyGoingHome) {
+                const dx = boyTargetX - boyX;
+                const dy = boyTargetY - boyY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 2) {
+                    const step = Math.min(boySpeed, dist);
+                    boyX += (dx / dist) * step;
+                    boyY += (dy / dist) * step;
+                    boyStep += 0.15;
+                    // Определяем направление взгляда
+                    boyDirection = dx > 0 ? 1 : -1;
+                } else {
+                    // Дошёл до дома
+                    boyGoingHome = false;
+                    boyHome = true;
+                    // Собачка тоже дома
+                    dogFollowing = false;
+                }
+            }
+
+            // --- Движение собачки за мальчиком, когда он идёт домой ---
+            if (dogFollowing && boyGoingHome) {
+                const dx = dogTargetX - dogX;
+                const dy = dogTargetY - dogY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 2) {
+                    const step = Math.min(dogSpeed, dist);
+                    dogX += (dx / dist) * step;
+                    dogY += (dy / dist) * step;
+                } else {
+                    // собачка пришла к дому
+                }
+            } else if (!dogFollowing && !boyHome) {
+                // Обычное поведение: бегает вокруг мальчика
+                dogAngle += 0.05;
+                dogX = boyX + dogRadius * Math.cos(dogAngle);
+                dogY = boyY + 10 + dogRadius * 0.4 * Math.sin(dogAngle);
+            }
+
+            // --- Рисование ---
+
+            // Небо
+            if (isDay) {
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#4A90D9');
+                grad.addColorStop(0.6, '#87CEEB');
+                grad.addColorStop(1, '#B0E0E6');
+                ctx.fillStyle = grad;
+            } else {
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, '#0B0B2A');
+                grad.addColorStop(0.8, '#1A1A4A');
+                grad.addColorStop(1, '#2A2A5A');
+                ctx.fillStyle = grad;
+            }
+            ctx.fillRect(0, 0, W, H);
+
+            // Звёзды
+            if (!isDay) {
+                stars.forEach(star => {
+                    star.twinkle += 0.02;
+                    const alpha = 0.6 + 0.4 * Math.sin(star.twinkle);
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.fill();
+                });
+            }
+
+            // Солнце / Луна
+            if (isDay) {
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                ctx.shadowColor = 'rgba(255,255,200,0.6)';
+                ctx.shadowBlur = 40;
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius, 0, Math.PI*2);
+                ctx.fillStyle = '#FFD700';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(-12, -12, 16, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fill();
+                ctx.restore();
+            } else {
+                ctx.save();
+                ctx.translate(sunX, sunY);
+                ctx.shadowColor = 'rgba(200,200,255,0.5)';
+                ctx.shadowBlur = 50;
+                ctx.beginPath();
+                ctx.arc(0, 0, sunRadius * 0.8, 0, Math.PI*2);
+                ctx.fillStyle = '#F5F5DC';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(180,180,160,0.4)';
+                ctx.beginPath();
+                ctx.arc(-12, -8, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(15, 10, 7, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(5, -18, 5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Облака
+            clouds.forEach(cloud => {
+                cloud.x += cloud.speed;
+                if (cloud.x > W + 100) cloud.x = -100;
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.1)';
+                ctx.shadowBlur = 10;
+                const alpha = isDay ? 0.9 : 0.4;
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, 40, 0, Math.PI*2);
+                ctx.arc(cloud.x - 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x + 35, cloud.y + 5, 30, 0, Math.PI*2);
+                ctx.arc(cloud.x - 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.arc(cloud.x + 15, cloud.y - 20, 25, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // Птица
+            birdX += birdSpeed;
+            if (birdX > W + 50) birdX = -50;
+            wingAngle += 0.2;
+            const wingFlap = Math.sin(wingAngle) * 15;
+            ctx.save();
+            ctx.translate(birdX, birdY);
+            ctx.fillStyle = isDay ? '#333' : '#888';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 20, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(22, -4, 7, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = isDay ? '#FF8C00' : '#AAA';
+            ctx.beginPath();
+            ctx.moveTo(29, -4);
+            ctx.lineTo(36, -2);
+            ctx.lineTo(29, 0);
+            ctx.fill();
+            ctx.fillStyle = isDay ? '#555' : '#999';
+            ctx.save();
+            ctx.translate(-5, -5);
+            ctx.rotate(-0.3 + wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(-15, -10, 18, 7, 0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.save();
+            ctx.translate(5, -5);
+            ctx.rotate(0.3 - wingFlap * 0.02);
+            ctx.beginPath();
+            ctx.ellipse(15, -10, 18, 7, -0.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = isDay ? '#444' : '#888';
+            ctx.beginPath();
+            ctx.moveTo(-22, 0);
+            ctx.lineTo(-32, -8);
+            ctx.lineTo(-30, 8);
+            ctx.fill();
+            ctx.restore();
+
+            // Дом
+            ctx.save();
+            ctx.fillStyle = isDay ? '#E8C99B' : '#8B7D6B';
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(houseX, houseY, houseW, houseH);
+            ctx.fillStyle = isDay ? '#B22222' : '#6A1F1F';
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.moveTo(houseX - 15, houseY);
+            ctx.lineTo(houseX + houseW/2, houseY - 50);
+            ctx.lineTo(houseX + houseW + 15, houseY);
+            ctx.fill();
+            // Окна
+            ctx.fillStyle = isDay ? '#87CEEB' : '#3A5A7A';
+            ctx.shadowBlur = 0;
+            ctx.fillRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.fillRect(houseX + 70, houseY + 20, 30, 30);
+            ctx.strokeStyle = isDay ? '#8B4513' : '#4A2A0A';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(houseX + 20, houseY + 20, 30, 30);
+            ctx.strokeRect(houseX + 70, houseY + 20, 30, 30);
+            // Дверь
+            ctx.fillStyle = isDay ? '#8B4513' : '#4A2A0A';
+            ctx.fillRect(doorX, doorY, doorW, doorH);
+            ctx.beginPath();
+            ctx.arc(houseX + 68, houseY + 70, 3, 0, Math.PI*2);
+            ctx.fillStyle = isDay ? '#FFD700' : '#CCAA00';
+            ctx.fill();
+            ctx.restore();
+
+            // Дерево
+            ctx.save();
+            ctx.fillStyle = isDay ? '#8B5A2B' : '#5A3A1A';
+            ctx.fillRect(treeX - 8, treeY - 60, 16, 60);
+            ctx.fillStyle = isDay ? '#2E7D32' : '#1A4A1A';
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.arc(treeX, treeY - 70, 35, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(treeX - 25, treeY - 55, 25, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(treeX + 25, treeY - 55, 25, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+
+            // Цветы
+            flowers.forEach(flower => {
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#388E3C';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(flower.x, flower.y + 8);
+                ctx.lineTo(flower.x, flower.y - 6);
+                ctx.stroke();
+                ctx.fillStyle = flower.color;
+                ctx.beginPath();
+                ctx.arc(flower.x, flower.y - 8, flower.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(flower.x, flower.y - 8, flower.size * 0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // --- Мальчик (рисуем, если не дома) ---
+            if (!boyHome) {
+                ctx.save();
+                ctx.translate(boyX, boyY);
+                // Тело
+                ctx.fillStyle = isDay ? '#4A90D9' : '#2A5A7A';
+                ctx.fillRect(-8, -25, 16, 25);
+                // Голова
+                ctx.fillStyle = '#FFDAB9';
+                ctx.beginPath();
+                ctx.arc(0, -30, 10, 0, Math.PI*2);
+                ctx.fill();
+                // Глаза (смотрят в сторону движения)
+                ctx.fillStyle = '#000';
+                const eyeDir = boyDirection;
+                ctx.beginPath();
+                ctx.arc(-4 + eyeDir*2, -32, 2, 0, Math.PI*2);
+                ctx.arc(4 + eyeDir*2, -32, 2, 0, Math.PI*2);
+                ctx.fill();
+                // Рот
+                ctx.beginPath();
+                ctx.arc(0, -26, 5, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+                // Ноги (шагают)
+                const legOffset = Math.sin(boyStep) * 6;
+                ctx.fillStyle = isDay ? '#333' : '#666';
+                ctx.fillRect(-6, 0, 4, 8 + legOffset);
+                ctx.fillRect(2, 0, 4, 8 - legOffset);
+                // Руки
+                const armOffset = Math.sin(boyStep + 0.5) * 8;
+                ctx.fillStyle = '#FFDAB9';
+                ctx.fillRect(-14, -20, 4, 12 + armOffset);
+                ctx.fillRect(10, -20, 4, 12 - armOffset);
+                ctx.restore();
+            }
+
+            // --- Собачка (рисуем, если мальчик не дома) ---
+            if (!boyHome) {
+                ctx.save();
+                ctx.translate(dogX, dogY);
+                ctx.fillStyle = isDay ? '#8D6E63' : '#5D4037';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 15, 10, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(16, -4, 8, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = isDay ? '#6D4C41' : '#3E2723';
+                ctx.beginPath();
+                ctx.ellipse(14, -12, 4, 8, -0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(22, -12, 4, 8, 0.3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(20, -6, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(24, -3, 2, 0, Math.PI*2);
+                ctx.fill();
+                // Хвост
+                const tailAngle = Math.sin(dogAngle * 2) * 0.5;
+                ctx.fillStyle = isDay ? '#8D6E63' : '#5D4037';
+                ctx.save();
+                ctx.translate(-14, 0);
+                ctx.rotate(tailAngle);
+                ctx.fillRect(-10, -2, 10, 4);
+                ctx.restore();
+                ctx.restore();
+            }
+
+            // Трава
+            const grassColor = isDay ? '#4CAF50' : '#2A5A2A';
+            ctx.fillStyle = grassColor;
+            ctx.shadowBlur = 0;
+            ctx.fillRect(0, horizon, W, 30);
+            ctx.strokeStyle = isDay ? '#388E3C' : '#1A3A1A';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < W; i += 6) {
+                const h = 5 + Math.sin(i * 0.5 + Date.now() * 0.001) * 3;
+                ctx.beginPath();
+                ctx.moveTo(i, horizon);
+                ctx.lineTo(i + 2, horizon - h);
+                ctx.stroke();
+            }
+
+            // Заголовок
+            ctx.fillStyle = isDay ? 'rgba(255,255,255,0.7)' : 'rgba(200,200,255,0.5)';
+            ctx.font = '20px Arial';
+            ctx.fillText('Мультик — Серия 2: Прогулка (домой ночью)', 20, 40);
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>
