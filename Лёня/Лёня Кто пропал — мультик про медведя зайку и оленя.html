@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Кто пропал? — мультик про медведя, зайку и оленя</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #12301a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: "Comic Sans MS", "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  #wrap { position: relative; box-shadow: 0 10px 40px rgba(0,0,0,.5); border-radius: 14px; overflow: hidden; }
+  canvas { display: block; cursor: pointer; }
+  #bar {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #d8f0d0;
+    user-select: none;
+  }
+  #bar button {
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e3a1c;
+    background: #ffe97d;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 18px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #c9a94a;
+    transition: transform .06s;
+  }
+  #bar button:active { transform: translateY(2px); box-shadow: 0 1px 0 #c9a94a; }
+  #hint { font-size: 15px; opacity: .8; }
+</style>
+</head>
+<body>
+  <div id="wrap"><canvas id="cv"></canvas></div>
+  <div id="bar">
+    <button id="pauseBtn">⏸ Пауза</button>
+    <button id="restartBtn">↻ Заново</button>
+    <span id="hint">нажми на картинку — пропустить реплику</span>
+  </div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = 1280, H = 720;
+const GROUND = 600;
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+cv.width = W * dpr; cv.height = H * dpr;
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+function resize(){
+  const scale = Math.min(innerWidth / W, (innerHeight - 70) / H);
+  cv.style.width = Math.floor(W * scale) + 'px';
+  cv.style.height = Math.floor(H * scale) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------------- helpers ---------------- */
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function rrPath(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function wrapText(txt, maxW){
+  const words = txt.split(' ');
+  const lines = []; let cur = '';
+  for (const w of words){
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && cur){ lines.push(cur); cur = w; }
+    else cur = test;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function drawEyes(x, y, blink){
+  if (blink > 0.5){
+    ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - 11, y); ctx.lineTo(x - 3, y);
+    ctx.moveTo(x + 3, y); ctx.lineTo(x + 11, y);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x - 12, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 12, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#241407';
+    ctx.beginPath(); ctx.arc(x - 11, y + 1, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 13, y + 1, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x - 12.5, y - 1, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 11.5, y - 1, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+/* ---------------- characters ---------------- */
+function drawBear(x, y, s, talk, blink){
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const fur = '#8a5a33', dark = '#6d4525', light = '#b57f4a', belly = '#d9b58a', muzzle = '#d9a86b';
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(-26, -16, 20, 16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(26, -16, 20, 16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(0, -72, 56, 66, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath(); ctx.ellipse(0, -56, 34, 42, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(-52, -58, 18, 26, 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(52, -58, 18, 26, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.arc(0, -140, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-34, -176, 17, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(34, -176, 17, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = light;
+  ctx.beginPath(); ctx.arc(-34, -176, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(34, -176, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = muzzle;
+  ctx.beginPath(); ctx.ellipse(0, -124, 26, 20, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2b1a0e';
+  ctx.beginPath(); ctx.ellipse(0, -130, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+  drawEyes(0, -150, blink);
+  if (talk > 0.5){
+    ctx.fillStyle = '#3a2213';
+    ctx.beginPath(); ctx.ellipse(0, -112, 7, 6 + talk * 6, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#3a2213'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, -116, 8, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawBunny(x, y, s, talk, blink){
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const fur = '#f2f0ec', dark = '#d7d3cb', pink = '#f6b8c8';
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(-16, -150, 13, 40, -0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(16, -150, 13, 40, 0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = pink;
+  ctx.beginPath(); ctx.ellipse(-16, -150, 6, 26, -0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(16, -150, 6, 26, 0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(0, -66, 44, 50, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-34, -58, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(-22, -8, 22, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(22, -8, 22, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.arc(0, -120, 36, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fbd6dc';
+  ctx.beginPath(); ctx.arc(-20, -108, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(20, -108, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = pink;
+  ctx.beginPath(); ctx.moveTo(0, -116); ctx.lineTo(-5, -109); ctx.lineTo(5, -109); ctx.closePath(); ctx.fill();
+  drawEyes(0, -126, blink);
+  ctx.strokeStyle = '#bbb6ad'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-24, -112); ctx.lineTo(-44, -116);
+  ctx.moveTo(-24, -108); ctx.lineTo(-44, -106);
+  ctx.moveTo(24, -112); ctx.lineTo(44, -116);
+  ctx.moveTo(24, -108); ctx.lineTo(44, -106);
+  ctx.stroke();
+  if (talk > 0.5){
+    ctx.fillStyle = '#e58aa0';
+    ctx.beginPath(); ctx.ellipse(0, -104, 5, 3 + talk * 5, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#c79aa6'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, -108, 5, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDeer(x, y, s, talk, blink){
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const fur = '#c99b6a', light = '#e6c69a', dark = '#a5784d', antler = '#8a5a33';
+  ctx.fillStyle = dark;
+  ctx.fillRect(-32, -70, 14, 56);
+  ctx.fillRect(18, -70, 14, 56);
+  ctx.fillStyle = '#5c4328';
+  ctx.beginPath(); ctx.ellipse(-25, -12, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(25, -12, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(0, -84, 52, 44, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = light;
+  ctx.beginPath(); ctx.arc(-20, -88, 7, 0, Math.PI * 2); ctx.arc(14, -94, 6, 0, Math.PI * 2); ctx.arc(-6, -78, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(0, -120, 22, 30, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -150, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = light;
+  ctx.beginPath(); ctx.ellipse(0, -140, 15, 13, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2414';
+  ctx.beginPath(); ctx.ellipse(0, -144, 6, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  drawEyes(0, -156, blink);
+  ctx.fillStyle = fur;
+  ctx.beginPath(); ctx.ellipse(-22, -164, 9, 14, -0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(22, -164, 9, 14, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = antler; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-16, -170); ctx.lineTo(-22, -196);
+  ctx.moveTo(-22, -196); ctx.lineTo(-34, -212);
+  ctx.moveTo(-22, -196); ctx.lineTo(-10, -206);
+  ctx.moveTo(16, -170); ctx.lineTo(22, -196);
+  ctx.moveTo(22, -196); ctx.lineTo(34, -212);
+  ctx.moveTo(22, -196); ctx.lineTo(10, -206);
+  ctx.stroke();
+  if (talk > 0.5){
+    ctx.fillStyle = '#7a4b28';
+    ctx.beginPath(); ctx.ellipse(0, -132, 5, 3 + talk * 4, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#7a4b28'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, -134, 5, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawMushroom(x, y){
+  ctx.fillStyle = '#f2e6d5';
+  ctx.fillRect(x - 2, y - 6, 4, 8);
+  ctx.fillStyle = '#d94f3d';
+  ctx.beginPath(); ctx.arc(x, y - 6, 8, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x - 3, y - 9, 1.8, 0, Math.PI * 2); ctx.arc(x + 3, y - 9, 1.8, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawHedgehog(x, y, s, talk, blink){
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const spike = '#7a5230', face = '#e8c39a', nose = '#3a2414';
+  ctx.fillStyle = '#5c4328';
+  ctx.beginPath(); ctx.ellipse(-12, -6, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(12, -6, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = spike;
+  ctx.beginPath(); ctx.ellipse(0, -36, 38, 32, 0, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = spike;
+  for (let a = Math.PI; a <= Math.PI * 2 + 0.01; a += 0.28){
+    const ix = Math.cos(a) * 38, iy = -36 + Math.sin(a) * 30;
+    const ox = Math.cos(a) * 48, oy = -36 + Math.sin(a) * 40;
+    const nx = Math.cos(a + 0.14) * 48, ny = -36 + Math.sin(a + 0.14) * 40;
+    ctx.beginPath(); ctx.moveTo(ix, iy); ctx.lineTo(ox, oy); ctx.lineTo(nx, ny); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = face;
+  ctx.beginPath(); ctx.ellipse(0, -28, 26, 26, 0, 0, Math.PI * 2); ctx.fill();
+  drawEyes(0, -36, blink);
+  ctx.fillStyle = nose;
+  ctx.beginPath(); ctx.arc(0, -26, 4, 0, Math.PI * 2); ctx.fill();
+  if (talk > 0.5){
+    ctx.fillStyle = '#8a4b28';
+    ctx.beginPath(); ctx.ellipse(0, -18, 4, 2 + talk * 4, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#8a4b28'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, -20, 4, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+  }
+  drawMushroom(-16, -8);
+  ctx.restore();
+}
+
+/* ---------------- background ---------------- */
+function drawSun(x, y, t){
+  ctx.save(); ctx.translate(x, y);
+  const glow = '#fff3b0', core = '#ffd54f';
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.rotate(t * 0.05);
+  ctx.strokeStyle = glow; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  for (let i = 0; i < 12; i++){
+    const a = i / 12 * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 52, Math.sin(a) * 52);
+    ctx.lineTo(Math.cos(a) * 70, Math.sin(a) * 70);
+    ctx.stroke();
+  }
+  ctx.restore(); ctx.restore();
+}
+function drawCloud(x, y, s, t){
+  ctx.save(); ctx.translate(x + Math.sin(t * 0.1) * 8, y); ctx.scale(s, s);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath();
+  ctx.arc(0, 0, 26, 0, Math.PI * 2);
+  ctx.arc(24, -8, 32, 0, Math.PI * 2);
+  ctx.arc(52, 0, 26, 0, Math.PI * 2);
+  ctx.arc(24, 8, 28, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+function drawTree(x, y, s){
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.fillStyle = '#7a5230';
+  ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(-10, -130); ctx.lineTo(10, -130); ctx.lineTo(16, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#4e8f3a';
+  ctx.beginPath(); ctx.arc(0, -150, 62, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-46, -120, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(46, -120, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -106, 52, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#5fa54a';
+  ctx.beginPath(); ctx.arc(-16, -160, 24, 0, Math.PI * 2); ctx.arc(20, -150, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawBush(x, y){
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = '#3f8a35';
+  ctx.beginPath();
+  ctx.arc(0, -30, 46, 0, Math.PI * 2);
+  ctx.arc(-40, -22, 34, 0, Math.PI * 2);
+  ctx.arc(40, -22, 34, 0, Math.PI * 2);
+  ctx.arc(-22, -44, 30, 0, Math.PI * 2);
+  ctx.arc(22, -44, 30, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#57a344';
+  ctx.beginPath(); ctx.arc(-8, -42, 16, 0, Math.PI * 2); ctx.arc(18, -36, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e0523d';
+  for (const p of [[-30, -26], [24, -30], [0, -52], [36, -16]]){
+    ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawGrass(x, y){
+  ctx.strokeStyle = '#4c8a36'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  for (let i = 0; i < 5; i++){
+    const a = -0.6 + i * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x + i * 2 - 4, y);
+    ctx.lineTo(x + i * 2 - 4 + Math.sin(a) * 6, y - 10 - (i % 3) * 4);
+    ctx.stroke();
+  }
+}
+function drawFlower(x, y, c){
+  ctx.strokeStyle = '#4c8a36'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 14); ctx.stroke();
+  ctx.fillStyle = c;
+  for (let i = 0; i < 5; i++){
+    const a = i / 5 * Math.PI * 2;
+    ctx.beginPath(); ctx.arc(x + Math.cos(a) * 6, y - 16 + Math.sin(a) * 6, 4.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#ffd54f';
+  ctx.beginPath(); ctx.arc(x, y - 16, 4, 0, Math.PI * 2); ctx.fill();
+}
+function drawBackground(t){
+  const g = ctx.createLinearGradient(0, 0, 0, 470);
+  g.addColorStop(0, '#79c7ef'); g.addColorStop(1, '#d7f0ff');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 470);
+  drawSun(1080, 100, t);
+  drawCloud(190, 90, 1.0, t);
+  drawCloud(520, 140, 0.8, t);
+  drawCloud(830, 70, 1.1, t);
+  // distant hills
+  ctx.fillStyle = '#a8d878';
+  ctx.beginPath(); ctx.ellipse(300, 470, 300, 60, 0, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(760, 470, 320, 70, 0, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(1180, 470, 260, 55, 0, Math.PI, 0); ctx.fill();
+  // ground
+  const g2 = ctx.createLinearGradient(0, 440, 0, H);
+  g2.addColorStop(0, '#7ec04f'); g2.addColorStop(1, '#3f7d2c');
+  ctx.fillStyle = g2; ctx.fillRect(0, 440, W, H - 440);
+  drawTree(120, GROUND, 1.3);
+  drawTree(1200, GROUND, 1.1);
+  // grass + flowers
+  for (const x of [60, 150, 230, 310, 400, 480, 560, 650, 730, 820, 910, 990, 1080, 1180, 1250]){
+    drawGrass(x, GROUND);
+  }
+  for (const p of [[190, '#ff6b8a'], [350, '#ffd54f'], [530, '#b388ff'], [680, '#ff8a65'], [760, '#ff6b8a'], [990, '#ffd54f'], [1045, '#b388ff']]){
+    drawFlower(p[0], GROUND - 6, p[1]);
+  }
+}
+function drawButterflies(t){
+  drawButterfly(340, 260, t, 0);
+  drawButterfly(760, 200, t, 1.7);
+}
+function drawButterfly(x, y, t, ph){
+  const bx = x + Math.sin(t * 0.6 + ph) * 90;
+  const by = y + Math.sin(t * 0.9 + ph * 2) * 40;
+  const flap = Math.sin(t * 14 + ph);
+  ctx.save(); ctx.translate(bx, by);
+  ctx.strokeStyle = '#5c4328'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(0, 6); ctx.stroke();
+  ctx.fillStyle = '#ff8f6b';
+  ctx.save(); ctx.scale(1, 0.3 + Math.abs(flap) * 0.7); ctx.beginPath(); ctx.arc(-6, 0, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.scale(1, 0.3 + Math.abs(flap) * 0.7); ctx.beginPath(); ctx.arc(6, 0, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.restore();
+}
+
+/* ---------------- characters state ---------------- */
+const chars = {
+  bear:     { x: 430, tx: 430, s: 1.25, phase: 0.0, talk: false, bubbleY: 185 },
+  bunny:    { x: 600, tx: 600, s: 0.90, phase: 1.7, talk: false, bubbleY: 130 },
+  deer:     { x: 900, tx: 900, s: 1.05, phase: 3.1, talk: false, bubbleY: 175 },
+  hedgehog: { x: 1065, tx: 1065, s: 0.62, phase: 2.3, talk: false, bubbleY: 50,
+              pop: 0, target: 0, visible: false },
+};
+
+function drawChar(name){
+  const c = chars[name];
+  if (name === 'hedgehog' && !c.visible) return;
+  c.x += (c.tx - c.x) * 0.08;
+  const bob = Math.sin(state.time * 2.2 + c.phase) * 3;
+  const blink = ((state.time + c.phase) % 3.4) < 0.13 ? 1 : 0;
+  const talk = c.talk ? 0.5 + 0.5 * Math.sin(state.time * 13) : 0;
+  let yy = GROUND + bob;
+  if (name === 'hedgehog') yy = GROUND - Math.sin(c.pop * Math.PI) * 42;
+  switch (name){
+    case 'bear': drawBear(c.x, yy, c.s, talk, blink); break;
+    case 'bunny': drawBunny(c.x, yy, c.s, talk, blink); break;
+    case 'deer': drawDeer(c.x, yy, c.s, talk, blink); break;
+    case 'hedgehog': drawHedgehog(c.x, yy, c.s, talk, blink); break;
+  }
+}
+
+/* ---------------- story timeline ---------------- */
+const beats = [
+  { type: 'title', text: 'КТО ПРОПАЛ?', sub: 'мультик про медведя, зайку и оленя', dur: 3.6 },
+  { speaker: 'bunny', text: 'Как хорошо на лесной полянке!', dur: 3.2 },
+  { speaker: 'bear', text: 'Солнышко светит, птички поют!', dur: 3.4 },
+  { speaker: 'deer', text: 'Давайте поиграем в прятки!', dur: 3.2 },
+  { speaker: 'bunny', text: 'Раз, два, три… Нас трое!', dur: 3.0 },
+  { speaker: 'deer', text: 'Погодите… Нас было четверо!', dur: 3.4 },
+  { speaker: 'bear', text: 'Точно! Кого-то не хватает!', dur: 3.4 },
+  { speaker: 'bunny', text: 'Он был совсем маленький…', dur: 3.0 },
+  { speaker: 'bear', text: 'И весь в иголочках!', dur: 3.0 },
+  { speaker: 'deer', text: 'Это же Ёжик! Где же наш ёжик?!', dur: 3.2 },
+  { speaker: 'all', text: 'Ёжик! Ёжик! Ты где?', dur: 3.0 },
+  { speaker: 'none', text: 'Звери оглядываются по сторонам…', dur: 2.4 },
+  { speaker: 'hedgehog', text: 'Я тут! Я грибочки собирал!', dur: 3.6, hedgehog: 'pop' },
+  { speaker: 'bear', text: 'Ура! Все на месте!', dur: 3.0, hedgehog: 'join' },
+  { speaker: 'deer', text: 'Теперь нас снова четверо!', dur: 3.2 },
+  { speaker: 'all', text: 'Как хорошо, что мы вместе!', dur: 3.4 },
+  { type: 'end', text: 'КОНЕЦ', dur: 6 },
+];
+
+function applyBeat(b){
+  for (const k in chars) chars[k].talk = false;
+  if (b.speaker && b.speaker !== 'none' && b.speaker !== 'all' && chars[b.speaker]) chars[b.speaker].talk = true;
+  if (b.hedgehog === 'pop'){ chars.hedgehog.target = 1; chars.hedgehog.visible = true; }
+  if (b.hedgehog === 'join'){ chars.hedgehog.tx = 790; chars.deer.tx = 925; chars.hedgehog.target = 1; }
+}
+
+/* ---------------- state / loop ---------------- */
+const state = { time: 0, beat: 0, beatTime: 0, paused: false, done: false };
+
+function currentBeat(){ return beats[Math.min(state.beat, beats.length - 1)]; }
+
+function restart(){
+  state.beat = 0; state.beatTime = 0; state.done = false; state.paused = false;
+  chars.bear.x = 430; chars.bear.tx = 430;
+  chars.bunny.x = 600; chars.bunny.tx = 600;
+  chars.deer.x = 900; chars.deer.tx = 900;
+  chars.hedgehog.x = 1065; chars.hedgehog.tx = 1065;
+  chars.hedgehog.pop = 0; chars.hedgehog.target = 0; chars.hedgehog.visible = false;
+  applyBeat(beats[0]);
+  pauseBtn.textContent = '⏸ Пауза';
+}
+
+function update(dt){
+  if (!state.paused && !state.done){
+    state.time += dt;
+    const b = currentBeat();
+    if (state.beatTime < b.dur){
+      state.beatTime += dt;
+      if (state.beatTime >= b.dur){
+        if (state.beat < beats.length - 1){
+          state.beat++; state.beatTime = 0; applyBeat(currentBeat());
+        } else {
+          state.done = true;
+        }
+      }
+    }
+  }
+  const h = chars.hedgehog;
+  if (h.target > h.pop) h.pop = Math.min(1, h.pop + dt * 2.6);
+  else if (h.target < h.pop) h.pop = Math.max(0, h.pop - dt * 2.6);
+}
+
+/* ---------------- text overlay ---------------- */
+function drawBubble(x, tipY, lines){
+  ctx.save();
+  ctx.font = '600 23px "Comic Sans MS", "Segoe UI", sans-serif';
+  const lh = 30, pad = 16, maxW = 330, border = '#2b6a1e';
+  const wrapped = []; let w = 0;
+  for (const ln of lines){ for (const p of wrapText(ln, maxW)){ wrapped.push(p); w = Math.max(w, ctx.measureText(p).width); } }
+  const bw = w + pad * 2, bh = wrapped.length * lh + pad * 2, r = 18;
+  const bx = clamp(x - bw / 2, 10, W - bw - 10);
+  const by = tipY - bh - 8;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(x - 11, tipY - 8); ctx.lineTo(x + 11, tipY - 8); ctx.lineTo(x, tipY + 11); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = border; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x - 11, tipY - 8); ctx.lineTo(x, tipY + 11); ctx.lineTo(x + 11, tipY - 8); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = border; ctx.lineWidth = 3;
+  rrPath(bx, by, bw, bh, r); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#22301d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  wrapped.forEach((ln, i) => ctx.fillText(ln, bx + bw / 2, by + pad + lh / 2 + i * lh));
+  ctx.restore();
+}
+
+function drawText(){
+  const b = currentBeat();
+  if (!b) return;
+  if (b.type === 'title'){
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(20,50,20,0.30)'; ctx.fillRect(0, 0, W, H);
+    ctx.font = '900 84px "Comic Sans MS", "Segoe UI", sans-serif';
+    ctx.lineWidth = 11; ctx.strokeStyle = '#2b6a1e'; ctx.lineJoin = 'round';
+    ctx.strokeText(b.text, W / 2, 290);
+    ctx.fillStyle = '#fff'; ctx.fillText(b.text, W / 2, 290);
+    ctx.font = '600 36px "Comic Sans MS", "Segoe UI", sans-serif';
+    ctx.lineWidth = 8; ctx.strokeStyle = '#2b6a1e';
+    ctx.strokeText(b.sub, W / 2, 375);
+    ctx.fillStyle = '#ffe97d'; ctx.fillText(b.sub, W / 2, 375);
+    ctx.font = '500 23px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText('нажми на экран, чтобы начать', W / 2, 470);
+    ctx.restore();
+    return;
+  }
+  if (b.type === 'end'){
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 92px "Comic Sans MS", "Segoe UI", sans-serif';
+    ctx.lineWidth = 13; ctx.strokeStyle = '#2b6a1e'; ctx.lineJoin = 'round';
+    ctx.strokeText('КОНЕЦ', W / 2, 240);
+    ctx.fillStyle = '#ffe97d'; ctx.fillText('КОНЕЦ', W / 2, 240);
+    ctx.font = '600 31px "Comic Sans MS", "Segoe UI", sans-serif';
+    ctx.lineWidth = 8; ctx.strokeStyle = '#2b6a1e';
+    ctx.strokeText('Вот так звери нашли ёжика!', W / 2, 330);
+    ctx.fillStyle = '#fff'; ctx.fillText('Вот так звери нашли ёжика!', W / 2, 330);
+    if (state.done){
+      const pulse = 0.6 + 0.4 * Math.sin(state.time * 4);
+      ctx.font = '600 27px "Comic Sans MS", "Segoe UI", sans-serif';
+      ctx.fillStyle = 'rgba(255,233,125,' + pulse.toFixed(2) + ')';
+      ctx.fillText('нажми, чтобы посмотреть ещё раз', W / 2, 420);
+    }
+    ctx.restore();
+    return;
+  }
+  if (b.speaker === 'none'){
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'italic 600 28px "Comic Sans MS", "Segoe UI", sans-serif';
+    const w2 = ctx.measureText(b.text).width;
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    rrPath(W / 2 - w2 / 2 - 20, 30, w2 + 40, 46, 23); ctx.fill();
+    ctx.fillStyle = '#33471f'; ctx.fillText(b.text, W / 2, 54);
+    ctx.restore();
+    return;
+  }
+  if (b.speaker === 'all'){
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 32px "Comic Sans MS", "Segoe UI", sans-serif';
+    const lines = wrapText(b.text, 600);
+    const lh = 40, pad = 18, bw = 640, bh = lines.length * lh + pad * 2;
+    const bx = W / 2 - bw / 2, by = 470 - bh;
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#2b6a1e'; ctx.lineWidth = 4;
+    rrPath(bx, by, bw, bh, 20); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#22301d';
+    lines.forEach((ln, i) => ctx.fillText(ln, W / 2, by + pad + lh / 2 + i * lh));
+    ctx.restore();
+    return;
+  }
+  const c = chars[b.speaker];
+  if (!c) return;
+  drawBubble(c.x, GROUND - c.bubbleY, [b.text]);
+}
+
+/* ---------------- render loop ---------------- */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+
+  drawBackground(state.time);
+  drawButterflies(state.time);
+  drawChar('bear');
+  drawChar('bunny');
+  drawChar('deer');
+  const h = chars.hedgehog;
+  if (h.visible && h.pop < 1){ drawBush(1105, GROUND); drawChar('hedgehog'); }
+  else {
+    if (h.visible && h.pop >= 1) drawChar('hedgehog');
+    drawBush(1105, GROUND);
+  }
+  drawText();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------------- controls ---------------- */
+function skip(){
+  if (state.done){ restart(); return; }
+  const b = currentBeat();
+  if (state.beat < beats.length - 1){
+    state.beat++; state.beatTime = 0; applyBeat(currentBeat());
+  } else if (state.beatTime >= b.dur){
+    state.done = true;
+  }
+}
+cv.addEventListener('click', skip);
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowRight'){ e.preventDefault(); skip(); }
+  if (e.code === 'KeyP'){ togglePause(); }
+});
+const pauseBtn = document.getElementById('pauseBtn');
+const restartBtn = document.getElementById('restartBtn');
+function togglePause(){
+  state.paused = !state.paused;
+  pauseBtn.textContent = state.paused ? '▶ Играть' : '⏸ Пауза';
+}
+pauseBtn.addEventListener('click', togglePause);
+restartBtn.addEventListener('click', restart);
+
+applyBeat(beats[0]);
+</script>
+</body>
+</html>

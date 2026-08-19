@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ЛЕГО Ниндзяго — Сезон 1</title>
+<style>
+  :root {
+    --gold: #f5c518;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a12;
+    overflow: hidden;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    user-select: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #stage {
+    position: relative;
+    width: min(100vw, calc(100vh * 16 / 9));
+    aspect-ratio: 16 / 9;
+    background: #000;
+    box-shadow: 0 0 60px rgba(0,0,0,.8);
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---- Overlay (start) ---- */
+  #overlay {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 30%, #2a1a3a 0%, #0d0814 70%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 26px; z-index: 50; text-align: center; padding: 20px;
+  }
+  #overlay .brick {
+    background: #d82026;
+    color: #fff;
+    font-weight: 900; font-size: clamp(26px, 5vw, 44px);
+    padding: 8px 30px; border-radius: 10px;
+    box-shadow: 0 6px 0 #8f1115, 0 10px 24px rgba(0,0,0,.5);
+    letter-spacing: 2px;
+  }
+  #overlay h1 {
+    font-size: clamp(40px, 9vw, 96px);
+    letter-spacing: 4px;
+    background: linear-gradient(180deg, #ffd34d, #f5c518 45%, #c98600);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 4px 0 rgba(0,0,0,.4);
+    line-height: 1;
+  }
+  #overlay .sub { color: #cfc3e0; font-size: clamp(14px, 2vw, 20px); letter-spacing: 3px; }
+  #playBtn {
+    font-size: clamp(18px, 2.6vw, 26px); font-weight: 700; color: #222;
+    background: linear-gradient(180deg, #ffd34d, #f5c518);
+    border: none; border-radius: 14px; padding: 16px 42px; cursor: pointer;
+    box-shadow: 0 5px 0 #b8860b, 0 12px 26px rgba(0,0,0,.5);
+    transition: transform .1s, box-shadow .1s;
+    letter-spacing: 1px;
+  }
+  #playBtn:active { transform: translateY(4px); box-shadow: 0 1px 0 #b8860b, 0 6px 14px rgba(0,0,0,.5); }
+  #overlay .hint { color: #8a7aa0; font-size: 13px; }
+
+  /* ---- Subtitles ---- */
+  #subtitle {
+    position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%);
+    max-width: 86%; padding: 12px 22px; border-radius: 14px;
+    background: rgba(10,10,20,.82); border: 2px solid rgba(255,255,255,.14);
+    color: #fff; font-size: clamp(16px, 2.4vw, 22px); text-align: center;
+    z-index: 40; transition: opacity .25s;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  }
+  #subtitle .sp { font-weight: 800; margin-right: 8px; }
+  #subtitle.hidden { opacity: 0; pointer-events: none; }
+
+  /* ---- Big center text ---- */
+  #bigText {
+    position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
+    color: #fff; font-weight: 900; text-align: center; z-index: 41;
+    font-size: clamp(28px, 6vw, 60px); letter-spacing: 2px;
+    text-shadow: 0 4px 0 rgba(0,0,0,.5);
+    pointer-events: none; transition: opacity .3s; white-space: pre-line;
+  }
+  #bigText .red { color: #ffd34d; }
+
+  /* ---- Scene label ---- */
+  #sceneLabel {
+    position: absolute; left: 18px; top: 14px; z-index: 42;
+    color: rgba(255,255,255,.65); font-size: clamp(11px, 1.5vw, 15px);
+    letter-spacing: 2px; text-transform: uppercase; pointer-events: none;
+  }
+
+  /* ---- Controls ---- */
+  #controls {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center; z-index: 45;
+    background: rgba(10,10,20,.7); border-radius: 30px; padding: 7px 12px;
+  }
+  #controls button {
+    width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,.12); color: #fff; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  #controls button:hover { background: rgba(255,255,255,.25); }
+  #controls .bar { width: 120px; height: 6px; background: rgba(255,255,255,.18); border-radius: 3px; overflow: hidden; }
+  #controls .fill { height: 100%; background: var(--gold); width: 0%; }
+
+  /* ---- Fade ---- */
+  #fade {
+    position: absolute; inset: 0; background: #000; opacity: 0;
+    pointer-events: none; z-index: 55;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="c"></canvas>
+
+    <div id="overlay">
+      <div class="brick">ЛЕГО</div>
+      <h1>НИНДЗЯГО</h1>
+      <div class="sub">— СЕЗОН 1 —</div>
+      <button id="playBtn">▶ Смотреть мультик</button>
+      <div class="hint">Кай · Джей · Зэйн · Коул · Ллойд · Сэнсэй Ву · Лорд Гармадон</div>
+    </div>
+
+    <div id="sceneLabel"></div>
+    <div id="bigText"></div>
+    <div id="subtitle" class="hidden"><span class="sp"></span><span class="tx"></span></div>
+
+    <div id="controls" style="display:none">
+      <button id="btnRestart" title="Сначала">⏮</button>
+      <button id="btnPause" title="Пауза/Играть">⏸</button>
+      <button id="btnNext" title="Следующая сцена">⏭</button>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <button id="btnMute" title="Звук">🔊</button>
+    </div>
+
+    <div id="fade"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Canvas ----------
+  const W = 960, H = 540;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  canvas.width = W; canvas.height = H;
+
+  // ---------- DOM ----------
+  const overlay = document.getElementById('overlay');
+  const playBtn = document.getElementById('playBtn');
+  const subtitleEl = document.getElementById('subtitle');
+  const subSpeaker = subtitleEl.querySelector('.sp');
+  const subText = subtitleEl.querySelector('.tx');
+  const bigText = document.getElementById('bigText');
+  const sceneLabel = document.getElementById('sceneLabel');
+  const fadeEl = document.getElementById('fade');
+  const controls = document.getElementById('controls');
+  const btnRestart = document.getElementById('btnRestart');
+  const btnPause = document.getElementById('btnPause');
+  const btnNext = document.getElementById('btnNext');
+  const btnMute = document.getElementById('btnMute');
+  const fillEl = document.getElementById('fill');
+
+  // ---------- Audio ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function tone(freq, type, vol, dur, when) {
+    if (!audioCtx || muted) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    const t = when != null ? when : audioCtx.currentTime;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+  function noiseBurst(vol, dur, when) {
+    if (!audioCtx || muted) return;
+    const t = when != null ? when : audioCtx.currentTime;
+    const len = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const g = audioCtx.createGain(); g.gain.value = vol;
+    src.connect(g); g.connect(audioCtx.destination);
+    src.start(t);
+  }
+  const sfx = {
+    blip()  { tone(660, 'triangle', 0.07, 0.09); },
+    whoosh(){ noiseBurst(0.20, 0.35); tone(240, 'sawtooth', 0.05, 0.3); },
+    boom()  { tone(90, 'sawtooth', 0.28, 0.5); noiseBurst(0.4, 0.5); },
+    crack() { noiseBurst(0.35, 0.25); tone(1200, 'square', 0.08, 0.12); },
+    fire()  { noiseBurst(0.22, 0.3); tone(180, 'sawtooth', 0.06, 0.28); },
+    poof()  { noiseBurst(0.16, 0.16); },
+    fanfare(){ [523,659,784,1047].forEach((f,i)=>tone(f,'triangle',0.14,0.5, audioCtx.currentTime+i*0.14)); }
+  };
+
+  // simple pentatonic music loop
+  const MELODY = [0,2,4,7,9,7,4,2,0,4,7,9,12,9,7,4];
+  let nextNote = 0, noteIdx = 0;
+  function music() {
+    if (!audioCtx || muted || !started || paused) return;
+    while (nextNote < audioCtx.currentTime + 0.3) {
+      const f = 220 * Math.pow(2, MELODY[noteIdx % MELODY.length] / 12);
+      tone(f, 'triangle', 0.05, 0.4, nextNote);
+      tone(f / 2, 'sine', 0.035, 0.45, nextNote);
+      nextNote += 0.34; noteIdx++;
+    }
+  }
+  setInterval(music, 100);
+
+  // ---------- State ----------
+  const SCENES = [
+    { name: 'ЛЕГО Ниндзяго', dur: 7 },
+    { name: 'Знакомство с ниндзя', dur: 12 },
+    { name: 'Силы стихий', dur: 16 },
+    { name: 'Лорд Гармадон', dur: 12 },
+    { name: 'Битва!', dur: 18 },
+    { name: 'Ллойд', dur: 10 },
+    { name: 'Продолжение следует...', dur: 9 }
+  ];
+  const DIALOG = {
+    1: [
+      {t:0.4, sp:'Сэнсэй Ву', tx:'Я — Сэнсэй Ву. Добро пожаловать в мир Ниндзяго!'},
+      {t:2.8, sp:'Сэнсэй Ву', tx:'Это мои ученики: Кай, Джей, Зэйн и Коул.'},
+      {t:5.6, sp:'Кай', tx:'Мы — ниндзя!'},
+      {t:7.0, sp:'Джей', tx:'Готовы к бою!'},
+      {t:8.8, sp:'Сэнсэй Ву', tx:'Но враг уже близко...'}
+    ],
+    2: [
+      {t:0.4, sp:'Кай', tx:'Огонь!'},
+      {t:4.0, sp:'Джей', tx:'Молния!'},
+      {t:7.6, sp:'Зэйн', tx:'Лёд!'},
+      {t:11.2, sp:'Коул', tx:'Земля!'}
+    ],
+    3: [
+      {t:0.4, sp:'Сэнсэй Ву', tx:'Это Лорд Гармадон!'},
+      {t:2.6, sp:'Лорд Гармадон', tx:'Я захвачу весь Ниндзяго!'},
+      {t:5.6, sp:'Лорд Гармадон', tx:'Моё каменное войско — в атаку!'}
+    ],
+    4: [
+      {t:0.4, sp:'Кай', tx:'Ниндзяго! Кружитцу!'},
+      {t:2.8, sp:'Джей', tx:'Мы победим!'},
+      {t:6.4, sp:'Сэнсэй Ву', tx:'Скелеты отступают!'},
+      {t:9.4, sp:'Зэйн', tx:'Победа за нами!'},
+      {t:12.4, sp:'Коул', tx:'Ура!'}
+    ],
+    5: [
+      {t:0.4, sp:'Ллойд', tx:'Привет! Я Ллойд!'},
+      {t:2.6, sp:'Ллойд', tx:'Когда-нибудь я стану Зелёным Ниндзя!'},
+      {t:5.6, sp:'Кай', tx:'Кто этот мальчик?'},
+      {t:7.2, sp:'Сэнсэй Ву', tx:'Это начало великой истории...'}
+    ]
+  };
+  const SPEAKER_COLOR = {
+    'Сэнсэй Ву': '#e8b23a', 'Кай': '#ff6a55', 'Джей': '#5db2ff', 'Зэйн': '#cfeaff',
+    'Коул': '#b0b0b0', 'Ллойд': '#6fd06f', 'Лорд Гармадон': '#c05ae0'
+  };
+
+  let started = false, paused = false, muted = false;
+  let scene = 0, sceneT = 0, globalT = 0, lastFrame = 0;
+  let particles = [];
+  let lightningFlash = 0;
+
+  // ---------- Helpers ----------
+  function rr(c, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    if (c.roundRect) { c.roundRect(x, y, w, h, r); }
+    else {
+      c.moveTo(x + r, y);
+      c.arcTo(x + w, y, x + w, y + h, r);
+      c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r);
+      c.arcTo(x, y, x + w, y, r);
+      c.closePath();
+    }
+  }
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  // ---------- Particles ----------
+  function emit(type, x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const p = { type, x, y };
+      if (type === 'fire') {
+        p.vx = rand(-30, 30); p.vy = rand(-120, -40);
+        p.life = p.maxLife = rand(0.5, 1.1);
+        p.size = rand(3, 8);
+        p.color = ['#ff8c00','#ff4d00','#ffd23d','#ff2200'][i % 4];
+      } else if (type === 'spark') {
+        p.vx = rand(-160, 160); p.vy = rand(-160, 160);
+        p.life = p.maxLife = rand(0.25, 0.5);
+        p.size = rand(1.5, 3);
+        p.color = '#8fd0ff';
+      } else if (type === 'snow') {
+        p.vx = rand(-15, 15); p.vy = rand(-20, 10);
+        p.life = p.maxLife = rand(1.2, 2.0);
+        p.size = rand(2, 5);
+        p.color = '#dff3ff';
+      } else if (type === 'rock') {
+        p.vx = rand(-40, 40); p.vy = rand(-200, -120);
+        p.life = p.maxLife = rand(0.8, 1.4);
+        p.size = rand(4, 9);
+        p.color = ['#7a5a34','#8a6a44','#6a4c2c'][i % 3];
+      } else if (type === 'confetti') {
+        p.vx = rand(-20, 20); p.vy = rand(20, 80);
+        p.life = p.maxLife = rand(2.5, 4);
+        p.size = rand(3, 7);
+        p.color = ['#ff4d4d','#ffd23d','#4db8ff','#6fd06f','#c05ae0'][i % 5];
+      } else if (type === 'poof') {
+        p.vx = rand(-40, 40); p.vy = rand(-40, 40);
+        p.life = p.maxLife = rand(0.3, 0.6);
+        p.size = rand(6, 14);
+        p.color = '#e8e8e8';
+      } else if (type === 'firework') {
+        const a = rand(0, Math.PI * 2), sp = rand(60, 200);
+        p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
+        p.life = p.maxLife = rand(0.7, 1.3);
+        p.size = rand(2, 4);
+        p.color = ['#ffd23d','#ff4d4d','#4db8ff','#6fd06f'][i % 4];
+      }
+      p.gravity = (type === 'rock' || type === 'firework') ? 300 : (type === 'confetti' ? 40 : 0);
+      particles.push(p);
+    }
+  }
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.vy += p.gravity * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+  }
+  function drawParticles() {
+    for (const p of particles) {
+      const a = clamp(p.life / p.maxLife, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      if (p.type === 'confetti') {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.x * 0.05);
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); ctx.restore();
+      } else if (p.type === 'snow') {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      } else if (p.type === 'spark') {
+        ctx.fillRect(p.x - 0.5, p.y - 2, 1.5, 4);
+      } else if (p.type === 'rock') {
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      } else {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Minifigure ----------
+  function drawEyes(x, y, color, angry) {
+    ctx.fillStyle = '#fff';
+    rr(ctx, x - 7, y, 5, 6, 2); ctx.fill();
+    rr(ctx, x + 2, y, 5, 6, 2); ctx.fill();
+    ctx.fillStyle = color || '#1a1a1a';
+    ctx.fillRect(x - 6, y + 2, 3, 3);
+    ctx.fillRect(x + 3, y + 2, 3, 3);
+    if (angry) {
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - 9, y + 1); ctx.lineTo(x - 4, y - 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + 9, y + 1); ctx.lineTo(x + 4, y - 1); ctx.stroke();
+    }
+  }
+
+  // o: { h, gi, pants, skin, hood, hoodColor, armsUp, angry, beard, hat, hair, kid, grin, fourArms, redEyes }
+  function fig(x, y, o) {
+    const s = (o.h || 90) / 90;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    if (o.flip) ctx.scale(-1, 1);
+
+    const skin = o.skin || '#ffd97a';
+    const gi = o.gi || '#d82026';
+    const pants = o.pants || '#2b2b2b';
+    const hoodColor = o.hoodColor || gi;
+
+    // legs
+    ctx.fillStyle = pants;
+    rr(ctx, -13, -34, 10, 26, 3); ctx.fill();
+    rr(ctx, 3, -34, 10, 26, 3); ctx.fill();
+    // feet
+    ctx.fillStyle = '#222';
+    rr(ctx, -14, -8, 13, 8, 3); ctx.fill();
+    rr(ctx, 2, -8, 13, 8, 3); ctx.fill();
+    // hips
+    ctx.fillStyle = pants;
+    rr(ctx, -14, -38, 28, 8, 3); ctx.fill();
+    // torso
+    ctx.fillStyle = gi;
+    rr(ctx, -15, -66, 30, 30, 5); ctx.fill();
+    // belt
+    ctx.fillStyle = o.belt || '#1a1a1a';
+    ctx.fillRect(-15, -47, 30, 5);
+    // arms
+    drawArms(o, gi, skin);
+
+    // head
+    if (o.skull) {
+      drawSkullHead();
+    } else {
+      ctx.fillStyle = skin;
+      rr(ctx, -13, -90, 26, 26, 7); ctx.fill();
+      if (o.hood) {
+        // hood cap
+        ctx.fillStyle = hoodColor;
+        rr(ctx, -16, -92, 32, 24, 9); ctx.fill();
+        rr(ctx, -14, -68, 28, 7, 3); ctx.fill();
+        // eye mask
+        ctx.fillStyle = '#101010';
+        rr(ctx, -11, -82, 22, 10, 4); ctx.fill();
+        ctx.fillStyle = '#fff';
+        rr(ctx, -8, -81, 6, 8, 2); ctx.fill();
+        rr(ctx, 2, -81, 6, 8, 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-6, -77, 3, 4); ctx.fillRect(4, -77, 3, 4);
+      } else {
+        // face
+        if (o.redEyes) {
+          ctx.fillStyle = '#ff2222';
+          rr(ctx, -7, -80, 5, 6, 2); ctx.fill();
+          rr(ctx, 2, -80, 5, 6, 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(-6, -79, 2, 2); ctx.fillRect(3, -79, 2, 2);
+        } else {
+          drawEyes(0, -80, o.eyeColor || '#1a1a1a', o.angry);
+        }
+        if (o.grin) {
+          ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(0, -72, 4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+        } else if (!o.beard && !o.hair) {
+          ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(-2, -73); ctx.lineTo(2, -73); ctx.stroke();
+        }
+        if (o.beard) {
+          ctx.fillStyle = '#f4f4f4';
+          ctx.beginPath();
+          ctx.moveTo(-12, -74); ctx.lineTo(12, -74); ctx.lineTo(12, -58);
+          ctx.quadraticCurveTo(0, -52, -12, -58); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#e9e9e9';
+          ctx.fillRect(-6, -70, 4, 3); ctx.fillRect(2, -70, 4, 3);
+        }
+        if (o.hair) {
+          ctx.fillStyle = o.hairColor || '#6b4226';
+          ctx.fillRect(-13, -94, 5, 8); ctx.fillRect(-6, -96, 5, 9);
+          ctx.fillRect(1, -96, 5, 9); ctx.fillRect(8, -94, 5, 8);
+        }
+        if (o.hat) {
+          ctx.fillStyle = '#d9b36a';
+          ctx.beginPath();
+          ctx.moveTo(0, -104); ctx.lineTo(-20, -76); ctx.lineTo(20, -76); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#c49a52';
+          ctx.fillRect(-21, -79, 42, 4);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawArms(o, gi, skin) {
+    ctx.fillStyle = gi;
+    if (o.armsUp) {
+      // raised arms (celebration / spinjitzu)
+      for (const dir of [-1, 1]) {
+        ctx.save();
+        ctx.translate(dir * 15, -62);
+        ctx.rotate(dir * -2.3);
+        rr(ctx, -4, 0, 8, 20, 3); ctx.fill();
+        ctx.fillStyle = skin;
+        rr(ctx, -4, 16, 8, 7, 2); ctx.fill();
+        ctx.restore();
+      }
+    } else {
+      rr(ctx, -23, -62, 8, 24, 3); ctx.fill();
+      rr(ctx, 15, -62, 8, 24, 3); ctx.fill();
+      ctx.fillStyle = skin;
+      rr(ctx, -23, -40, 8, 6, 2); ctx.fill();
+      rr(ctx, 15, -40, 8, 6, 2); ctx.fill();
+      ctx.fillStyle = gi;
+    }
+    if (o.fourArms) {
+      // second pair slightly behind, lower
+      ctx.fillStyle = '#1a1a1a';
+      rr(ctx, -23, -56, 8, 20, 3); ctx.fill();
+      rr(ctx, 15, -56, 8, 20, 3); ctx.fill();
+      ctx.fillStyle = skin;
+      rr(ctx, -23, -38, 8, 6, 2); ctx.fill();
+      rr(ctx, 15, -38, 8, 6, 2); ctx.fill();
+    }
+  }
+
+  function drawSkullHead() {
+    ctx.fillStyle = '#e8e6e0';
+    rr(ctx, -13, -90, 26, 26, 8); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(-5, -80, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -80, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3a3a3a';
+    ctx.beginPath(); ctx.moveTo(0, -74); ctx.lineTo(-2.5, -70); ctx.lineTo(2.5, -70); ctx.closePath(); ctx.fill();
+    // teeth
+    ctx.fillStyle = '#e8e6e0';
+    ctx.fillRect(-5, -68, 3, 4); ctx.fillRect(0, -68, 3, 4); ctx.fillRect(5, -68, 3, 4);
+  }
+
+  function drawSkeleton(x, y, o) {
+    const s = (o.h || 88) / 88;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    if (o.flip) ctx.scale(-1, 1);
+    const bone = '#e8e6e0', dark = '#8a8a8a';
+    // legs
+    ctx.fillStyle = bone;
+    rr(ctx, -11, -32, 8, 24, 3); ctx.fill();
+    rr(ctx, 3, -32, 8, 24, 3); ctx.fill();
+    ctx.fillStyle = '#222'; rr(ctx, -12, -8, 10, 8, 2); ctx.fill(); rr(ctx, 2, -8, 10, 8, 2); ctx.fill();
+    // hips
+    ctx.fillStyle = dark; rr(ctx, -12, -36, 24, 7, 3); ctx.fill();
+    // ribcage
+    ctx.fillStyle = bone; rr(ctx, -13, -64, 26, 30, 6); ctx.fill();
+    ctx.fillStyle = dark;
+    for (let i = 0; i < 4; i++) ctx.fillRect(-12, -60 + i * 6, 24, 2);
+    // arms (bone)
+    ctx.fillStyle = bone;
+    rr(ctx, -21, -62, 7, 22, 3); ctx.fill();
+    rr(ctx, 14, -62, 7, 22, 3); ctx.fill();
+    // skull
+    ctx.save(); ctx.translate(0, -64); ctx.scale(0.98, 0.98); drawSkullHead(); ctx.restore();
+    // bone sword in hand
+    if (o.sword) {
+      ctx.strokeStyle = '#f2f0ea'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-24, -34); ctx.lineTo(-24, -70); ctx.stroke();
+      ctx.strokeStyle = '#d8d6d0'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-24, -34); ctx.lineTo(-16, -28); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------- Background ----------
+  function drawMountains(color, baseY, amp, seed) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, baseY);
+    for (let x = 0; x <= W; x += 40) {
+      const y = baseY - Math.abs(Math.sin(x * 0.008 + seed)) * amp - Math.abs(Math.sin(x * 0.021 + seed * 2)) * amp * 0.5;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, baseY);
+    ctx.closePath(); ctx.fill();
+  }
+  function drawDojo(x, y) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-70, -40, 140, 40);
+    ctx.fillStyle = '#5b3d24';
+    ctx.beginPath(); ctx.moveTo(-85, -40); ctx.lineTo(0, -110); ctx.lineTo(85, -40); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#8a2a1a';
+    ctx.fillRect(-50, -25, 30, 25); ctx.fillRect(20, -25, 30, 25);
+    ctx.restore();
+  }
+  function drawBackground(s, t) {
+    // sky
+    let top, bottom;
+    if (s === 0) { top = '#2b1a3a'; bottom = '#ff8c42'; }
+    else if (s === 3) { top = '#0a0a14'; bottom = '#241634'; }
+    else if (s === 4) { top = '#141b33'; bottom = '#2c2030'; }
+    else if (s === 6) { top = '#05060f'; bottom = '#1a1230'; }
+    else { top = '#3f8fd8'; bottom = '#bfe6ff'; }
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, top); g.addColorStop(1, bottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // sun / moon
+    if (s === 0 || s === 1 || s === 2 || s === 5) {
+      ctx.fillStyle = 'rgba(255,240,180,.9)';
+      ctx.beginPath(); ctx.arc(W - 140, 110, 46, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.beginPath(); ctx.arc(W - 140, 110, 60, 0, Math.PI * 2); ctx.fill();
+    } else if (s === 3 || s === 4) {
+      ctx.fillStyle = 'rgba(200,200,255,.6)';
+      ctx.beginPath(); ctx.arc(W - 160, 100, 40, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // mountains
+    drawMountains('rgba(70,50,90,.7)', 470, 140, 3.0);
+    drawMountingsBack();
+
+    // ground
+    const gg = ctx.createLinearGradient(0, 460, 0, H);
+    gg.addColorStop(0, s === 3 || s === 4 ? '#241d18' : '#5f7d3a');
+    gg.addColorStop(1, s === 3 || s === 4 ? '#120e0a' : '#3c5227');
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, 462, W, H - 462);
+
+    if (s === 1 || s === 2 || s === 5) drawDojo(820, 470);
+  }
+  function drawMountingsBack() {
+    drawMountains('rgba(40,60,45,.55)', 470, 90, 8.0);
+  }
+
+  // lightning bolt
+  function drawBolt(x1, y1, x2, y2) {
+    ctx.strokeStyle = '#cfe8ff'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+    ctx.shadowColor = '#9fd0ff'; ctx.shadowBlur = 18;
+    ctx.beginPath();
+    let x = x1, y = y1;
+    ctx.moveTo(x, y);
+    const segs = 5;
+    for (let i = 0; i < segs; i++) {
+      const nx = x1 + (x2 - x1) * (i + 1) / segs;
+      const ny = y1 + (y2 - y1) * (i + 1) / segs;
+      ctx.lineTo(nx + (i % 2 ? 16 : -16), ny);
+      x = nx; y = ny;
+    }
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // spinjitzu tornado
+  function drawTornado(x, groundY, color, t) {
+    ctx.save();
+    ctx.translate(x, groundY);
+    const spin = t * 8;
+    for (let i = 0; i < 7; i++) {
+      ctx.save();
+      ctx.rotate(spin + i * Math.PI / 3.5);
+      ctx.translate(16, 0);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = color;
+      rr(ctx, -6, -90 + i * 6, 12, 40, 6); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    const cg = ctx.createLinearGradient(0, -140, 0, 0);
+    cg.addColorStop(0, 'rgba(255,255,255,0)');
+    cg.addColorStop(1, color);
+    ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.moveTo(-26, -130); ctx.lineTo(26, -130); ctx.lineTo(14, 0); ctx.lineTo(-14, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------- Characters ----------
+  const NINJA = {
+    kai:  { gi:'#d82026', hoodColor:'#e02828', name:'Кай' },
+    jay:  { gi:'#2b6cd4', hoodColor:'#3577dd', name:'Джей' },
+    zane: { gi:'#e9eef2', hoodColor:'#f4f8fb', name:'Зэйн' },
+    cole: { gi:'#2a2a2a', hoodColor:'#3a3a3a', name:'Коул' }
+  };
+  function ninja(c, x, y, opts) {
+    fig(x, y, { h: 96, gi: c.gi, pants: '#232323', hood: true, hoodColor: c.hoodColor, ...opts });
+  }
+  function sensei(x, y, opts) {
+    fig(x, y, { h: 100, gi: '#f2f2f2', pants: '#c8c8c8', skin: '#ffcf9e', beard: true, hat: true, ...opts });
+  }
+  function garmadon(x, y, opts) {
+    fig(x, y, { h: 108, gi: '#1a1a1a', pants: '#111', skin: '#3a3a3a', redEyes: true, fourArms: true, belt: '#5b2b8c', ...opts });
+    // helmet with horns
+    ctx.save(); ctx.translate(x, y); ctx.scale(108/90, 108/90);
+    ctx.fillStyle = '#222';
+    rr(ctx, -16, -94, 32, 8, 3); ctx.fill();
+    ctx.fillStyle = '#888';
+    ctx.beginPath(); ctx.moveTo(-12, -92); ctx.lineTo(-16, -104); ctx.lineTo(-7, -94); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(12, -92); ctx.lineTo(16, -104); ctx.lineTo(7, -94); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function lloyd(x, y, opts) {
+    fig(x, y, { h: 72, gi: '#37a843', pants: '#2b6b32', skin: '#ffd97a', hair: true, hairColor: '#7a4a22', grin: true, eyeColor: '#2c7a2c', ...opts });
+  }
+
+  // ---------- Scene drawing ----------
+  function drawScene() {
+    const t = sceneT, s = scene;
+    const ground = 470;
+
+    if (s === 0) {
+      drawBackground(0, t);
+      emit('confetti', rand(0, W), -10, 1);
+    }
+
+    else if (s === 1) {
+      drawBackground(1, t);
+      sensei(190, ground, {});
+      const nx = [360, 500, 640, 780];
+      const order = ['kai','jay','zane','cole'];
+      order.forEach((k, i) => ninja(NINJA[k], nx[i], ground, { flip: false }));
+      // slight bobbing
+      drawLineupBounce();
+    }
+
+    else if (s === 2) {
+      drawBackground(2, t);
+      const order = ['kai','jay','zane','cole'];
+      const active = Math.floor(t / 4);
+      order.forEach((k, i) => {
+        const nx = [360, 500, 640, 780][i];
+        const step = (i === active) ? 18 : 0;
+        const armsUp = (i === active);
+        ninja(NINJA[k], nx, ground - step, { armsUp });
+        if (i === active) {
+          const fx = nx, fy = ground - 110;
+          if (k === 'kai') emit('fire', fx, ground - 96, 2);
+          if (k === 'jay') emit('spark', fx, ground - 96, 2);
+          if (k === 'zane') emit('snow', fx, ground - 96, 2);
+          if (k === 'cole') emit('rock', fx, ground - 96, 1);
+        }
+      });
+      // element visuals above active
+      const k = order[active];
+      const ax = [360, 500, 640, 780][active];
+      if (k === 'jay') drawBolt(ax - 8, 120, ax + 14, ground - 96);
+    }
+
+    else if (s === 3) {
+      drawBackground(3, t);
+      // lightning flashes
+      if (lightningFlash > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,' + (lightningFlash * 0.5) + ')';
+        ctx.fillRect(0, 0, W, H);
+      }
+      if (Math.random() < 0.02) { lightningFlash = 1; sfx.crack(); }
+      // ninja on left
+      const nx = [150, 260, 370, 480];
+      ['kai','jay','zane','cole'].forEach((k, i) => ninja(NINJA[k], nx[i], ground, {}));
+      sensei(70, ground, {});
+      // garmadon on right
+      garmadon(830, ground, {});
+      // skeleton army marching from right
+      const count = 6;
+      for (let i = 0; i < count; i++) {
+        const off = (t * 30 + i * 60) % (count * 60);
+        const sx = 960 + 40 - off;
+        const bob = Math.sin(t * 6 + i) * 2;
+        drawSkeleton(sx, ground + bob, { sword: i % 2 === 0, flip: false });
+      }
+    }
+
+    else if (s === 4) {
+      drawBackground(4, t);
+      // ninja left (some in tornado)
+      const ninjaTornado = t > 1.5 && t < 7;
+      const nx = [170, 300];
+      ['kai','jay'].forEach((k, i) => ninja(NINJA[k], nx[i], ground, {}));
+      if (ninjaTornado) {
+        drawTornado(240, ground, '#4db8ff', t);
+        drawTornado(360, ground, '#ff6a55', t + 0.5);
+        if (Math.random() < 0.4) sfx.whoosh();
+      }
+      // skeletons defeated -> poof and shrink
+      const rem = Math.max(0, 6 - Math.floor((t - 2) * 1.2));
+      for (let i = 0; i < rem; i++) {
+        const sx = 820 - i * 50;
+        const bob = Math.sin(t * 8 + i) * 2;
+        drawSkeleton(sx, ground + bob, { sword: true });
+      }
+      if (t > 2 && Math.random() < 0.2) emit('poof', rand(700, 940), ground - 40, 1);
+    }
+
+    else if (s === 5) {
+      drawBackground(5, t);
+      const nx = [260, 420, 580, 740];
+      ['kai','jay','zane','cole'].forEach((k, i) => ninja(NINJA[k], nx[i], ground, {}));
+      lloyd(480, ground, {});
+      sensei(130, ground, {});
+    }
+
+    else if (s === 6) {
+      drawBackground(6, t);
+      const nx = [180, 320, 460, 600, 740];
+      ['kai','jay','zane','cole'].forEach((k, i) => ninja(NINJA[k], nx[i], ground, { armsUp: true }));
+      lloyd(870, ground, { armsUp: true });
+      sensei(70, ground, {});
+      if (Math.random() < 0.15) emit('firework', rand(120, 880), rand(80, 240), 1);
+    }
+  }
+  function drawLineupBounce() {
+    // subtle breathing bob on ninja heads handled visually via particles; no-op kept simple
+  }
+
+  // ---------- Dialogue / subtitle ----------
+  function currentLine() {
+    const lines = DIALOG[scene];
+    if (!lines) return null;
+    let cur = null;
+    for (const ln of lines) { if (sceneT >= ln.t) cur = ln; }
+    return cur;
+  }
+
+  function updateSubtitle() {
+    const ln = currentLine();
+    if (ln) {
+      subtitleEl.classList.remove('hidden');
+      subSpeaker.textContent = ln.sp + ':';
+      subSpeaker.style.color = SPEAKER_COLOR[ln.sp] || '#fff';
+      subText.textContent = ln.tx;
+    } else {
+      subtitleEl.classList.add('hidden');
+    }
+  }
+
+  function updateBigText() {
+    if (scene === 0) {
+      bigText.innerHTML = '';
+    } else if (scene === 6) {
+      bigText.innerHTML = 'Продолжение следует...<br><span class="red">ЛЕГО НИНДЗЯГО — Сезон 1</span>';
+    } else {
+      bigText.textContent = '';
+    }
+  }
+
+  // ---------- Update ----------
+  function update(dt) {
+    globalT += dt;
+    if (!started || paused) return;
+
+    sceneT += dt;
+
+    // lightning decay
+    if (lightningFlash > 0) lightningFlash = Math.max(0, lightningFlash - dt * 2);
+
+    // per-scene sfx triggers
+    triggerSfx();
+
+    // subtitle blip on line change
+    const ln = currentLine();
+    if (ln && ln.t > sceneT - dt && ln.t <= sceneT) sfx.blip();
+
+    updateParticles(dt);
+
+    if (sceneT >= SCENES[scene].dur) nextScene();
+  }
+
+  let lastLineIdx = -1;
+  function triggerSfx() {
+    const ln = currentLine();
+    if (!ln) return;
+    // fire elements / boom at specific moments
+    if (scene === 2) {
+      if (ln.sp === 'Кай' && ln.t <= sceneT && ln.t > sceneT - 0.1) sfx.fire();
+    }
+    if (scene === 3 && ln.sp === 'Лорд Гармадон' && ln.t > 2 && ln.t <= sceneT && ln.t > sceneT - 0.1) sfx.boom();
+    if (scene === 6 && sceneT < 0.2) sfx.fanfare();
+  }
+
+  function nextScene() {
+    scene = (scene + 1) % SCENES.length;
+    sceneT = 0;
+    particles.length = 0;
+    lightningFlash = 0;
+    sceneLabel.textContent = SCENES[scene].name;
+    if (scene === 0) { bigText.innerHTML = ''; }
+  }
+
+  // ---------- Render ----------
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    drawScene();
+    drawParticles();
+
+    // fade
+    const dur = SCENES[scene].dur;
+    let fade = 0;
+    if (started) {
+      if (sceneT < 0.5) fade = 1 - sceneT / 0.5;
+      else if (sceneT > dur - 0.5) fade = (sceneT - (dur - 0.5)) / 0.5;
+    }
+    fadeEl.style.opacity = clamp(fade, 0, 1).toFixed(3);
+
+    // progress
+    const prog = started ? ((scene + sceneT / dur) / SCENES.length) * 100 : 0;
+    fillEl.style.width = clamp(prog, 0, 100).toFixed(1) + '%';
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0.016);
+    lastFrame = now;
+    update(dt);
+    render();
+    updateSubtitle();
+    updateBigText();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Controls ----------
+  function start() {
+    ensureAudio();
+    started = true; paused = false;
+    overlay.style.display = 'none';
+    controls.style.display = 'flex';
+    sceneLabel.textContent = SCENES[scene].name;
+    nextNote = audioCtx.currentTime + 0.1;
+    lastFrame = performance.now();
+  }
+  playBtn.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+  overlay.addEventListener('pointerdown', (e) => { if (e.target !== playBtn) start(); });
+
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? '▶' : '⏸';
+  });
+  btnNext.addEventListener('click', () => { nextScene(); });
+  btnRestart.addEventListener('click', () => { scene = 0; sceneT = 0; particles.length = 0; sceneLabel.textContent = SCENES[0].name; });
+  btnMute.addEventListener('click', () => {
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇' : '🔊';
+  });
+
+  // keyboard
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { if (started) { paused = !paused; btnPause.textContent = paused ? '▶' : '⏸'; } else start(); e.preventDefault(); }
+    if (e.code === 'ArrowRight') { if (started) nextScene(); }
+  });
+
+  // ---------- Boot ----------
+  sceneLabel.textContent = SCENES[scene].name;
+  lastFrame = performance.now();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

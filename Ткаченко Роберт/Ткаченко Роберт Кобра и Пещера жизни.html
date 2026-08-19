@@ -1,0 +1,4747 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Кобра и Пещера жизни</title>
+
+<style>
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: black;
+    font-family: Arial, sans-serif;
+}
+
+canvas {
+    display: block;
+}
+
+#start {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 20px 42px;
+    border: none;
+    border-radius: 16px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    background: white;
+    z-index: 10;
+}
+</style>
+</head>
+
+<body>
+
+<button id="start">▶ НАЧАТЬ МУЛЬТФИЛЬМ</button>
+<canvas id="canvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const startButton = document.getElementById("start");
+
+function resize() {
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+}
+
+resize();
+addEventListener("resize", resize);
+
+let startTime = 0;
+let playing = false;
+
+startButton.onclick = () => {
+    startButton.style.display = "none";
+    startTime = performance.now();
+    playing = true;
+    requestAnimationFrame(loop);
+};
+
+function getTime() {
+    return (performance.now() - startTime) / 1000;
+}
+
+function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function progress(t, a, b) {
+    return clamp((t - a) / (b - a), 0, 1);
+}
+
+
+/* =========================================================
+   НОЧНОЙ ЛЕС
+========================================================= */
+
+function drawNightForest() {
+
+    const sky = ctx.createLinearGradient(
+        0,
+        0,
+        0,
+        canvas.height
+    );
+
+    sky.addColorStop(0, "#07101d");
+    sky.addColorStop(0.55, "#152b3b");
+    sky.addColorStop(1, "#293e45");
+
+    ctx.fillStyle = sky;
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // Луна
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#fff8c5";
+    ctx.fillStyle = "#fff4c7";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        canvas.width - 130,
+        100,
+        55,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+
+    // Горы
+
+    ctx.fillStyle = "#111b24";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        canvas.height * 0.65
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.18,
+        canvas.height * 0.40
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.32,
+        canvas.height * 0.61
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.52,
+        canvas.height * 0.34
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.68,
+        canvas.height * 0.62
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.84,
+        canvas.height * 0.43
+    );
+
+    ctx.lineTo(
+        canvas.width,
+        canvas.height * 0.64
+    );
+
+    ctx.lineTo(
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.lineTo(
+        0,
+        canvas.height
+    );
+
+    ctx.closePath();
+    ctx.fill();
+
+
+    // Деревья
+
+    for (let i = 0; i < 15; i++) {
+
+        tree(
+            i * canvas.width / 14,
+            canvas.height * 0.78,
+            130 + i % 4 * 30
+        );
+    }
+
+
+    ctx.fillStyle = "#20362e";
+
+    ctx.fillRect(
+        0,
+        canvas.height * 0.78,
+        canvas.width,
+        canvas.height * 0.22
+    );
+}
+
+
+function tree(x, ground, height) {
+
+    ctx.fillStyle = "#07110d";
+
+    ctx.fillRect(
+        x - 4,
+        ground - height,
+        8,
+        height
+    );
+
+    for (let i = 0; i < 4; i++) {
+
+        const y =
+            ground -
+            height +
+            25 +
+            i * height * 0.21;
+
+        const width =
+            25 + i * 13;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x,
+            y - 50
+        );
+
+        ctx.lineTo(
+            x - width,
+            y + 35
+        );
+
+        ctx.lineTo(
+            x + width,
+            y + 35
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
+    }
+}
+
+
+/* =========================================================
+   ВОЛК
+========================================================= */
+
+function drawWolf(
+    x,
+    y,
+    scale,
+    phase,
+    color = "#60666b"
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    const dark = "#282d31";
+
+    const legSwing =
+        Math.sin(phase) * 16;
+
+    ctx.translate(
+        0,
+        -Math.abs(
+            Math.sin(phase * 2)
+        ) * 2
+    );
+
+
+    wolfLeg(
+        -45,
+        12,
+        -legSwing,
+        color,
+        0.65
+    );
+
+    wolfLeg(
+        45,
+        10,
+        legSwing,
+        color,
+        0.65
+    );
+
+
+    // хвост
+
+    ctx.fillStyle = color;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -76,
+        -20
+    );
+
+    ctx.bezierCurveTo(
+        -105, -35,
+        -142, -27,
+        -156, -5
+    );
+
+    ctx.bezierCurveTo(
+        -143, 10,
+        -113, 15,
+        -83, 5
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // тело
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -80,
+        -18
+    );
+
+    ctx.bezierCurveTo(
+        -63, -40,
+        -35, -50,
+        -5, -48
+    );
+
+    ctx.bezierCurveTo(
+        26, -48,
+        54, -42,
+        70, -25
+    );
+
+    ctx.bezierCurveTo(
+        84, -10,
+        78, 13,
+        62, 22
+    );
+
+    ctx.bezierCurveTo(
+        42, 31,
+        15, 22,
+        -10, 27
+    );
+
+    ctx.bezierCurveTo(
+        -37, 34,
+        -67, 26,
+        -81, 10
+    );
+
+    ctx.bezierCurveTo(
+        -91, -2,
+        -90, -10,
+        -80, -18
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // грудь
+
+    ctx.fillStyle =
+        "rgba(220,220,220,.15)";
+
+    ctx.beginPath();
+
+    ctx.moveTo(45, -20);
+    ctx.lineTo(65, -5);
+    ctx.lineTo(51, 6);
+    ctx.lineTo(63, 13);
+    ctx.lineTo(43, 21);
+    ctx.lineTo(30, 11);
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // шея
+
+    ctx.fillStyle = color;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        50,
+        -20
+    );
+
+    ctx.bezierCurveTo(
+        57, -43,
+        66, -60,
+        79, -68
+    );
+
+    ctx.lineTo(
+        99,
+        -52
+    );
+
+    ctx.bezierCurveTo(
+        91, -33,
+        80, -17,
+        66, -4
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // голова
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        74,
+        -68
+    );
+
+    ctx.bezierCurveTo(
+        83, -83,
+        101, -89,
+        118, -80
+    );
+
+    ctx.bezierCurveTo(
+        130, -72,
+        132, -57,
+        124, -47
+    );
+
+    ctx.bezierCurveTo(
+        111, -36,
+        89, -42,
+        78, -51
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // уши
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        87,
+        -80
+    );
+
+    ctx.lineTo(
+        91,
+        -107
+    );
+
+    ctx.lineTo(
+        103,
+        -83
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        102,
+        -84
+    );
+
+    ctx.lineTo(
+        112,
+        -108
+    );
+
+    ctx.lineTo(
+        119,
+        -78
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // морда
+
+    ctx.fillStyle = "#929697";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        111,
+        -69
+    );
+
+    ctx.bezierCurveTo(
+        133, -69,
+        153, -63,
+        168, -56
+    );
+
+    ctx.bezierCurveTo(
+        158, -46,
+        137, -44,
+        116, -50
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // нос
+
+    ctx.fillStyle = "#101112";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        168,
+        -55,
+        6,
+        5,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // глаз
+
+    ctx.fillStyle = "#e2b45d";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        113,
+        -70,
+        3.5,
+        2,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        113,
+        -70,
+        1.2,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    wolfLeg(
+        -56,
+        15,
+        legSwing,
+        color,
+        1
+    );
+
+    wolfLeg(
+        38,
+        13,
+        -legSwing,
+        color,
+        1
+    );
+
+    ctx.restore();
+}
+
+
+function wolfLeg(
+    x,
+    y,
+    swing,
+    color,
+    alpha
+) {
+
+    ctx.save();
+
+    ctx.globalAlpha = alpha;
+
+    ctx.translate(x, y);
+
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+
+
+    ctx.lineWidth = 11;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        0
+    );
+
+    ctx.lineTo(
+        swing * 0.2,
+        27
+    );
+
+    ctx.stroke();
+
+
+    ctx.lineWidth = 7;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        swing * 0.2,
+        27
+    );
+
+    ctx.lineTo(
+        swing * 0.65,
+        53
+    );
+
+    ctx.stroke();
+
+
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        swing * 0.65,
+        53
+    );
+
+    ctx.lineTo(
+        swing * 0.8,
+        70
+    );
+
+    ctx.stroke();
+
+
+    ctx.strokeStyle = "#292d30";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        swing * 0.8 - 2,
+        70
+    );
+
+    ctx.lineTo(
+        swing * 0.8 + 13,
+        70
+    );
+
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   КОБРА
+========================================================= */
+
+function drawCobra(
+    x,
+    y,
+    scale,
+    angry = false,
+    revolver = false
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    const body = "#708f2f";
+    const dark = "#324513";
+    const belly = "#d3ca79";
+
+
+    // тень
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.25)";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        -15,
+        38,
+        125,
+        19,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // кольца тела
+
+    ctx.fillStyle = body;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        -68,
+        28,
+        50,
+        16,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        -18,
+        34,
+        62,
+        18,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        38,
+        28,
+        52,
+        16,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // хвост
+
+    ctx.strokeStyle = body;
+    ctx.lineCap = "round";
+
+    ctx.lineWidth = 10;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -108,
+        27
+    );
+
+    ctx.bezierCurveTo(
+        -137, 20,
+        -160, 15,
+        -182, 1
+    );
+
+    ctx.stroke();
+
+
+    // поднятая часть тела
+
+    ctx.lineWidth = 23;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -28,
+        20
+    );
+
+    ctx.bezierCurveTo(
+        -2, 10,
+        17, -2,
+        25, -28
+    );
+
+    ctx.bezierCurveTo(
+        31, -48,
+        29, -75,
+        30, -102
+    );
+
+    ctx.stroke();
+
+
+    // живот
+
+    ctx.strokeStyle = belly;
+    ctx.lineWidth = 7;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        27,
+        4
+    );
+
+    ctx.bezierCurveTo(
+        32, -26,
+        34, -60,
+        34, -103
+    );
+
+    ctx.stroke();
+
+
+    // капюшон
+
+    ctx.fillStyle = body;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        32,
+        -164
+    );
+
+    ctx.bezierCurveTo(
+        -11, -160,
+        -34, -132,
+        -20, -101
+    );
+
+    ctx.bezierCurveTo(
+        -11, -79,
+        4, -67,
+        28, -70
+    );
+
+    ctx.bezierCurveTo(
+        53, -66,
+        73, -78,
+        84, -102
+    );
+
+    ctx.bezierCurveTo(
+        98, -134,
+        75, -161,
+        32, -164
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // рисунок капюшона
+
+    ctx.strokeStyle =
+        "rgba(43,63,15,0.8)";
+
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        15,
+        -121,
+        13,
+        19,
+        -0.13,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        50,
+        -121,
+        13,
+        19,
+        0.13,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        26,
+        -120
+    );
+
+    ctx.lineTo(
+        39,
+        -120
+    );
+
+    ctx.stroke();
+
+
+    // голова
+
+    ctx.fillStyle = "#759d36";
+    ctx.strokeStyle = dark;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        17,
+        -183
+    );
+
+    ctx.bezierCurveTo(
+        22, -196,
+        41, -199,
+        51, -188
+    );
+
+    ctx.bezierCurveTo(
+        60, -177,
+        57, -162,
+        46, -153
+    );
+
+    ctx.bezierCurveTo(
+        37, -145,
+        22, -146,
+        14, -155
+    );
+
+    ctx.bezierCurveTo(
+        7, -164,
+        8, -176,
+        17, -183
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // морда
+
+    ctx.fillStyle = "#8bb04d";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        19,
+        -165
+    );
+
+    ctx.bezierCurveTo(
+        27, -172,
+        42, -171,
+        49, -163
+    );
+
+    ctx.bezierCurveTo(
+        45, -151,
+        25, -151,
+        19, -165
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // глаза
+
+    ctx.fillStyle =
+        angry
+        ? "#ffcf39"
+        : "#e8e36d";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        21,
+        -176,
+        5,
+        4,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.ellipse(
+        46,
+        -176,
+        5,
+        4,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // змеиные зрачки
+
+    ctx.fillStyle = "#111";
+
+    ctx.fillRect(
+        20,
+        -180,
+        2,
+        8
+    );
+
+    ctx.fillRect(
+        45,
+        -180,
+        2,
+        8
+    );
+
+
+    // ноздри
+
+    ctx.beginPath();
+
+    ctx.arc(
+        28,
+        -162,
+        1.8,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.arc(
+        40,
+        -162,
+        1.8,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // рот
+
+    ctx.strokeStyle = "#17210e";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+
+    if (angry) {
+
+        ctx.moveTo(
+            23,
+            -154
+        );
+
+        ctx.quadraticCurveTo(
+            34,
+            -160,
+            45,
+            -154
+        );
+
+    } else {
+
+        ctx.moveTo(
+            23,
+            -154
+        );
+
+        ctx.quadraticCurveTo(
+            34,
+            -150,
+            45,
+            -154
+        );
+    }
+
+    ctx.stroke();
+
+
+    // язык
+
+    ctx.strokeStyle = "#d83959";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        34,
+        -151
+    );
+
+    ctx.lineTo(
+        34,
+        -139
+    );
+
+    ctx.lineTo(
+        29,
+        -133
+    );
+
+    ctx.moveTo(
+        34,
+        -139
+    );
+
+    ctx.lineTo(
+        39,
+        -133
+    );
+
+    ctx.stroke();
+
+
+    if (revolver) {
+
+        drawRevolver(
+            87,
+            -110
+        );
+    }
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   РЕВОЛЬВЕР
+========================================================= */
+
+function drawRevolver(x, y) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    ctx.fillStyle = "#3b3e41";
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 2;
+
+    ctx.fillRect(
+        0,
+        0,
+        46,
+        12
+    );
+
+    ctx.strokeRect(
+        0,
+        0,
+        46,
+        12
+    );
+
+    ctx.beginPath();
+
+    ctx.arc(
+        12,
+        15,
+        10,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#5d3b20";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        9,
+        18
+    );
+
+    ctx.lineTo(
+        25,
+        18
+    );
+
+    ctx.lineTo(
+        20,
+        42
+    );
+
+    ctx.lineTo(
+        7,
+        37
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   ПЕЩЕРА
+========================================================= */
+
+function drawCave() {
+
+    ctx.fillStyle = "#171a19";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        canvas.width * 0.55,
+        canvas.height * 0.79
+    );
+
+    ctx.bezierCurveTo(
+        canvas.width * 0.56,
+        canvas.height * 0.45,
+        canvas.width * 0.73,
+        canvas.height * 0.38,
+        canvas.width * 0.86,
+        canvas.height * 0.79
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "#030504";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        canvas.width * 0.71,
+        canvas.height * 0.67,
+        canvas.width * 0.09,
+        canvas.height * 0.18,
+        0,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.80,
+        canvas.height * 0.79
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.62,
+        canvas.height * 0.79
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+}
+
+
+/* =========================================================
+   ВНУТРИ ПЕЩЕРЫ
+========================================================= */
+
+function drawCaveInterior() {
+
+    const g =
+        ctx.createRadialGradient(
+            canvas.width / 2,
+            canvas.height / 2,
+            50,
+            canvas.width / 2,
+            canvas.height / 2,
+            canvas.width
+        );
+
+    g.addColorStop(
+        0,
+        "#24272d"
+    );
+
+    g.addColorStop(
+        1,
+        "#050607"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.fillStyle = "#111318";
+
+    for (let i = 0; i < 12; i++) {
+
+        const x =
+            i *
+            canvas.width /
+            11;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x - 35,
+            0
+        );
+
+        ctx.lineTo(
+            x,
+            70 +
+            i % 4 * 25
+        );
+
+        ctx.lineTo(
+            x + 35,
+            0
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
+    }
+}
+
+
+/* =========================================================
+   КРИСТАЛЛ
+========================================================= */
+
+function drawCrystal(
+    x,
+    y,
+    size,
+    color,
+    label = ""
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = color;
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.85;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        -size
+    );
+
+    ctx.lineTo(
+        size * 0.6,
+        -size * 0.35
+    );
+
+    ctx.lineTo(
+        size * 0.48,
+        size * 0.75
+    );
+
+    ctx.lineTo(
+        0,
+        size
+    );
+
+    ctx.lineTo(
+        -size * 0.48,
+        size * 0.75
+    );
+
+    ctx.lineTo(
+        -size * 0.6,
+        -size * 0.35
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+
+    // дверца
+
+    ctx.fillStyle =
+        "rgba(0,0,0,.65)";
+
+    ctx.fillRect(
+        -size * 0.18,
+        size * 0.25,
+        size * 0.36,
+        size * 0.48
+    );
+
+
+    if (label) {
+
+        ctx.fillStyle = "white";
+
+        ctx.font =
+            "bold 17px Arial";
+
+        ctx.textAlign =
+            "center";
+
+        ctx.fillText(
+            label,
+            0,
+            size + 27
+        );
+    }
+
+    ctx.restore();
+}
+
+
+function drawFiveCrystals() {
+
+    const y =
+        canvas.height * 0.57;
+
+    const gap =
+        canvas.width / 6;
+
+    drawCrystal(
+        gap,
+        y,
+        65,
+        "#e33131",
+        "КРАСНЫЙ"
+    );
+
+    drawCrystal(
+        gap * 2,
+        y,
+        65,
+        "#258cff",
+        "СИНИЙ"
+    );
+
+    drawCrystal(
+        gap * 3,
+        y,
+        65,
+        "#ffe22c",
+        "ЖЁЛТЫЙ"
+    );
+
+    drawCrystal(
+        gap * 4,
+        y,
+        65,
+        "#39d65b",
+        "ЗЕЛЁНЫЙ"
+    );
+
+    drawCrystal(
+        gap * 5,
+        y,
+        65,
+        "#a43bdf",
+        "ФИОЛЕТОВЫЙ"
+    );
+}
+
+
+/* =========================================================
+   ЖЁЛТАЯ ЯМА
+========================================================= */
+
+function drawYellowPit(fallingY) {
+
+    const g =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+    g.addColorStop(
+        0,
+        "#ffe85f"
+    );
+
+    g.addColorStop(
+        0.3,
+        "#9d812a"
+    );
+
+    g.addColorStop(
+        1,
+        "#050505"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.fillStyle = "#55491f";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        0
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.34,
+        canvas.height
+    );
+
+    ctx.lineTo(
+        0,
+        canvas.height
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        canvas.width,
+        0
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.66,
+        canvas.height
+    );
+
+    ctx.lineTo(
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    drawCobra(
+        canvas.width / 2,
+        fallingY,
+        0.75
+    );
+}
+
+
+/* =========================================================
+   ЛОГОВО
+========================================================= */
+
+function drawCobraHome() {
+
+    const g =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+    g.addColorStop(
+        0,
+        "#261c18"
+    );
+
+    g.addColorStop(
+        1,
+        "#080605"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // стены
+
+    ctx.fillStyle = "#392d29";
+
+    for (let i = 0; i < 10; i++) {
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            i *
+            canvas.width /
+            9,
+            canvas.height * 0.82,
+            90,
+            45,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+
+    // вход из логова
+
+    ctx.fillStyle = "#050403";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        canvas.width * 0.16,
+        canvas.height * 0.64,
+        85,
+        130,
+        0,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.245,
+        canvas.height * 0.79
+    );
+
+    ctx.lineTo(
+        canvas.width * 0.075,
+        canvas.height * 0.79
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+}
+
+
+function drawHomeGreenCrystal() {
+
+    drawCrystal(
+        canvas.width * 0.73,
+        canvas.height * 0.60,
+        75,
+        "#39ff65"
+    );
+}
+
+
+/* =========================================================
+   ГРИБНИЦА
+========================================================= */
+
+function drawMushroomCave() {
+
+    const g =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+    g.addColorStop(
+        0,
+        "#08141d"
+    );
+
+    g.addColorStop(
+        0.6,
+        "#101d24"
+    );
+
+    g.addColorStop(
+        1,
+        "#07100e"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.fillStyle = "#10201c";
+
+    ctx.fillRect(
+        0,
+        canvas.height * 0.77,
+        canvas.width,
+        canvas.height * 0.23
+    );
+
+
+    for (let i = 0; i < 18; i++) {
+
+        const x =
+            40 +
+            i *
+            (canvas.width - 80) /
+            17;
+
+        const y =
+            canvas.height * 0.77 +
+            Math.sin(i * 2.3) * 14;
+
+        const size =
+            18 +
+            (i % 4) * 5;
+
+        drawBlueMushroom(
+            x,
+            y,
+            size
+        );
+    }
+
+
+    drawHugeMushroom(
+        canvas.width * 0.72,
+        canvas.height * 0.68,
+        1.25
+    );
+}
+
+
+function drawBlueMushroom(
+    x,
+    y,
+    size
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    ctx.shadowBlur = 22;
+    ctx.shadowColor = "#42cfff";
+
+    ctx.fillStyle = "#62d9ff";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        -size,
+        size,
+        size * 0.45,
+        0,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "#a8eaff";
+
+    ctx.fillRect(
+        -size * 0.14,
+        -size,
+        size * 0.28,
+        size
+    );
+
+    ctx.restore();
+}
+
+
+function drawHugeMushroom(
+    x,
+    y,
+    scale
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = "#a9d8df";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -22,
+        70
+    );
+
+    ctx.bezierCurveTo(
+        -18, 20,
+        -14, -25,
+        -10, -75
+    );
+
+    ctx.lineTo(
+        20,
+        -75
+    );
+
+    ctx.bezierCurveTo(
+        18, -25,
+        20, 25,
+        28, 70
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    ctx.shadowBlur = 45;
+    ctx.shadowColor = "#34bfff";
+
+    ctx.fillStyle = "#279dcf";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -110,
+        -65
+    );
+
+    ctx.bezierCurveTo(
+        -90, -135,
+        -45, -165,
+        5, -165
+    );
+
+    ctx.bezierCurveTo(
+        65, -165,
+        105, -130,
+        120, -65
+    );
+
+    ctx.bezierCurveTo(
+        75, -45,
+        -65, -42,
+        -110, -65
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   СТЕРВЯТНИК КВАД — УЛУЧШЕННЫЙ
+========================================================= */
+
+function drawVulture(
+    x,
+    y,
+    scale = 1,
+    wingMove = 0
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+
+    // хвостовые перья
+
+    ctx.fillStyle = "#222326";
+
+    for (let i = -2; i <= 2; i++) {
+
+        ctx.save();
+
+        ctx.rotate(i * 0.08);
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            i * 8,
+            32
+        );
+
+        ctx.lineTo(
+            i * 11 - 10,
+            80
+        );
+
+        ctx.lineTo(
+            i * 11 + 10,
+            80
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+
+    // большое сутулое тело
+
+    ctx.fillStyle = "#2d3032";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        0,
+        48,
+        62,
+        -0.08,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // левое огромное крыло
+
+    ctx.save();
+
+    ctx.translate(-25, -12);
+    ctx.rotate(-0.18 - wingMove);
+
+    ctx.fillStyle = "#202225";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        0
+    );
+
+    ctx.bezierCurveTo(
+        -48, -2,
+        -88, 22,
+        -112, 68
+    );
+
+    ctx.bezierCurveTo(
+        -78, 66,
+        -42, 50,
+        4, 22
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // отдельные маховые перья
+
+    ctx.strokeStyle = "#121315";
+    ctx.lineWidth = 4;
+
+    for (let i = 0; i < 5; i++) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            -45 - i * 9,
+            28 + i * 6
+        );
+
+        ctx.lineTo(
+            -86 - i * 5,
+            62 + i * 3
+        );
+
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+
+    // правое крыло
+
+    ctx.save();
+
+    ctx.translate(25, -10);
+    ctx.rotate(0.18 + wingMove);
+
+    ctx.fillStyle = "#202225";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        0
+    );
+
+    ctx.bezierCurveTo(
+        48, -2,
+        88, 22,
+        112, 68
+    );
+
+    ctx.bezierCurveTo(
+        78, 66,
+        42, 50,
+        -4, 22
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    ctx.strokeStyle = "#121315";
+    ctx.lineWidth = 4;
+
+    for (let i = 0; i < 5; i++) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            45 + i * 9,
+            28 + i * 6
+        );
+
+        ctx.lineTo(
+            86 + i * 5,
+            62 + i * 3
+        );
+
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+
+    // белый воротник
+
+    ctx.fillStyle = "#dad9d1";
+
+    for (let i = 0; i < 10; i++) {
+
+        const angle =
+            Math.PI +
+            i * Math.PI / 9;
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            Math.cos(angle) * 31,
+            -36 +
+            Math.sin(angle) * 9,
+            12,
+            8,
+            angle,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+
+    // длинная голая шея
+
+    ctx.fillStyle = "#a94945";
+
+    ctx.beginPath();
+
+    ctx.bezierCurveTo(
+        -17, -42,
+        -13, -78,
+        -8, -98
+    );
+
+    ctx.bezierCurveTo(
+        0, -112,
+        17, -104,
+        17, -85
+    );
+
+    ctx.lineTo(
+        13,
+        -49
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // лысая голова
+
+    ctx.fillStyle = "#b34f49";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        5,
+        -105,
+        22,
+        19,
+        -0.15,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // надглазная складка
+
+    ctx.strokeStyle = "#662927";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        3,
+        -112
+    );
+
+    ctx.lineTo(
+        16,
+        -113
+    );
+
+    ctx.stroke();
+
+
+    // глаз
+
+    ctx.fillStyle = "#e2c13e";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        11,
+        -107,
+        4.5,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#080808";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        12,
+        -107,
+        1.8,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // мощный крючковатый клюв
+
+    ctx.fillStyle = "#d6b151";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        21,
+        -105
+    );
+
+    ctx.bezierCurveTo(
+        39, -107,
+        55, -101,
+        65, -93
+    );
+
+    ctx.bezierCurveTo(
+        57, -87,
+        50, -82,
+        42, -82
+    );
+
+    ctx.bezierCurveTo(
+        46, -75,
+        41, -69,
+        34, -69
+    );
+
+    ctx.bezierCurveTo(
+        32, -81,
+        24, -89,
+        17, -92
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // тёмный кончик клюва
+
+    ctx.fillStyle = "#433a28";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        54,
+        -97
+    );
+
+    ctx.lineTo(
+        65,
+        -93
+    );
+
+    ctx.bezierCurveTo(
+        58, -86,
+        51, -81,
+        44, -81
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // ноги
+
+    ctx.strokeStyle = "#b8a25f";
+    ctx.lineWidth = 6;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -16,
+        47
+    );
+
+    ctx.lineTo(
+        -20,
+        68
+    );
+
+    ctx.moveTo(
+        16,
+        47
+    );
+
+    ctx.lineTo(
+        20,
+        68
+    );
+
+    ctx.stroke();
+
+
+    // когти
+
+    ctx.strokeStyle = "#27251f";
+    ctx.lineWidth = 2;
+
+    for (const px of [-20, 20]) {
+
+        for (let i = -1; i <= 1; i++) {
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                px,
+                68
+            );
+
+            ctx.quadraticCurveTo(
+                px + i * 9,
+                73,
+                px + i * 13,
+                68
+            );
+
+            ctx.stroke();
+        }
+    }
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   КРИСТАЛЬНАЯ ПОЛЯНА
+========================================================= */
+
+function drawCrystalMeadow() {
+
+    drawCaveInterior();
+
+    ctx.fillStyle =
+        "rgba(30,55,45,0.4)";
+
+    ctx.fillRect(
+        0,
+        canvas.height * 0.70,
+        canvas.width,
+        canvas.height * 0.30
+    );
+
+    drawFiveCrystals();
+}
+
+
+/* =========================================================
+   КВАРТАЛ
+========================================================= */
+
+function drawQuarterHall(number) {
+
+    const g =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+    g.addColorStop(
+        0,
+        "#15171b"
+    );
+
+    g.addColorStop(
+        1,
+        "#030405"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    const doors = [
+        0.15,
+        0.35,
+        0.65,
+        0.85
+    ];
+
+    for (const pos of doors) {
+
+        ctx.fillStyle = "#050607";
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            canvas.width * pos,
+            canvas.height * 0.55,
+            70,
+            125,
+            0,
+            Math.PI,
+            Math.PI * 2
+        );
+
+        ctx.lineTo(
+            canvas.width * pos + 70,
+            canvas.height * 0.75
+        );
+
+        ctx.lineTo(
+            canvas.width * pos - 70,
+            canvas.height * 0.75
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
+    }
+
+
+    ctx.fillStyle = "#e7e7dc";
+
+    ctx.font =
+        "bold 46px Arial";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.fillText(
+        "КВАРТАЛ " + number,
+        canvas.width / 2,
+        105
+    );
+}
+
+
+/* =========================================================
+   БАЛКОН ПЕЩЕРЫ ЖИЗНИ
+========================================================= */
+
+function drawLifeCaveBalcony(
+    t,
+    reveal = 0
+) {
+
+    const sky =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+    sky.addColorStop(
+        0,
+        "#55c4ec"
+    );
+
+    sky.addColorStop(
+        0.7,
+        "#e2d099"
+    );
+
+    sky.addColorStop(
+        1,
+        "#d7a957"
+    );
+
+    ctx.fillStyle = sky;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // солнце
+
+    ctx.fillStyle = "#fff1a9";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        canvas.width * 0.82,
+        110,
+        55,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // пустыня движется относительно пещеры
+
+    const offset =
+        (t * 80) % 200;
+
+    ctx.fillStyle = "#d3a552";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        canvas.height * 0.61
+    );
+
+    for (
+        let x = -200;
+        x < canvas.width + 200;
+        x += 100
+    ) {
+
+        ctx.lineTo(
+            x - offset,
+            canvas.height * 0.63 +
+            Math.sin(
+                x * 0.018
+            ) * 30
+        );
+    }
+
+    ctx.lineTo(
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.lineTo(
+        0,
+        canvas.height
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // огромная движущаяся Пещера жизни
+
+    const caveX =
+        lerp(
+            -canvas.width * 0.05,
+            canvas.width * 0.08,
+            reveal
+        );
+
+    const caveWidth =
+        lerp(
+            canvas.width * 1.55,
+            canvas.width * 0.92,
+            reveal
+        );
+
+
+    ctx.fillStyle = "#67645c";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        caveX,
+        canvas.height
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.07,
+        canvas.height * 0.21
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.21,
+        canvas.height * 0.08
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.34,
+        canvas.height * 0.18
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.48,
+        canvas.height * 0.06
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.63,
+        canvas.height * 0.19
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.77,
+        canvas.height * 0.10
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth * 0.90,
+        canvas.height * 0.29
+    );
+
+    ctx.lineTo(
+        caveX + caveWidth,
+        canvas.height
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // каменные тени
+
+    ctx.fillStyle =
+        "rgba(30,30,28,0.22)";
+
+    for (let i = 0; i < 8; i++) {
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            caveX +
+            caveWidth *
+            (0.12 + i * 0.1),
+            canvas.height *
+            (0.25 + (i % 3) * 0.15),
+            caveWidth * 0.06,
+            canvas.height * 0.08,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+
+    // норы и окна животных
+
+    ctx.fillStyle = "#191918";
+
+    for (let i = 0; i < 5; i++) {
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            caveX +
+            caveWidth *
+            (0.2 + i * 0.13),
+            canvas.height *
+            (0.35 + (i % 2) * 0.13),
+            25,
+            38,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+
+    // балкон
+
+    const balconyX =
+        caveX +
+        caveWidth * 0.67;
+
+    const balconyY =
+        canvas.height * 0.58;
+
+
+    ctx.fillStyle = "#74716b";
+    ctx.strokeStyle = "#3a3834";
+    ctx.lineWidth = 5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        balconyX - 190,
+        balconyY
+    );
+
+    ctx.lineTo(
+        balconyX + 160,
+        balconyY - 5
+    );
+
+    ctx.lineTo(
+        balconyX + 190,
+        balconyY + 65
+    );
+
+    ctx.lineTo(
+        balconyX - 160,
+        balconyY + 70
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // ограждение
+
+    ctx.strokeStyle = "#45423e";
+    ctx.lineWidth = 5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        balconyX - 160,
+        balconyY
+    );
+
+    ctx.lineTo(
+        balconyX - 160,
+        balconyY - 50
+    );
+
+    ctx.lineTo(
+        balconyX + 155,
+        balconyY - 50
+    );
+
+    ctx.lineTo(
+        balconyX + 155,
+        balconyY
+    );
+
+    ctx.stroke();
+
+
+    for (let i = 0; i < 6; i++) {
+
+        const bx =
+            balconyX -
+            150 +
+            i * 60;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            bx,
+            balconyY
+        );
+
+        ctx.lineTo(
+            bx,
+            balconyY - 50
+        );
+
+        ctx.stroke();
+    }
+
+
+    // дверь внутрь пещеры
+
+    ctx.fillStyle = "#171716";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        balconyX - 120,
+        balconyY - 55,
+        55,
+        85,
+        0,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.lineTo(
+        balconyX - 65,
+        balconyY
+    );
+
+    ctx.lineTo(
+        balconyX - 175,
+        balconyY
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // надпись на скале
+
+    if (reveal > 0.35) {
+
+        ctx.fillStyle =
+            "rgba(235,235,220,0.9)";
+
+        ctx.font =
+            "bold 24px Arial";
+
+        ctx.textAlign =
+            "center";
+
+        ctx.fillText(
+            "ПЕЩЕРА ЖИЗНИ",
+            caveX +
+            caveWidth * 0.48,
+            canvas.height * 0.24
+        );
+
+        ctx.font =
+            "18px Arial";
+
+        ctx.fillText(
+            "ЗАЩИТА ОТ БРАКОНЬЕРОВ",
+            caveX +
+            caveWidth * 0.48,
+            canvas.height * 0.28
+        );
+    }
+
+
+    return {
+        x: balconyX,
+        y: balconyY
+    };
+}
+
+
+/* =========================================================
+   ЯЙЦА В ЛОГОВЕ
+========================================================= */
+
+function drawEggs(x, y) {
+
+    const positions = [
+        [-42, 5],
+        [-12, -8],
+        [18, 2],
+        [48, -6],
+        [-20, 20],
+        [20, 22]
+    ];
+
+    for (const egg of positions) {
+
+        ctx.fillStyle = "#eee8ce";
+        ctx.strokeStyle = "#aaa68f";
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            x + egg[0],
+            y + egg[1],
+            17,
+            24,
+            0.12,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "rgba(100,80,50,0.14)";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x + egg[0] - 4,
+            y + egg[1] - 4,
+            3,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+}
+
+
+/* =========================================================
+   СПЯЩАЯ КОБРА
+========================================================= */
+
+function drawSleepingCobra(
+    x,
+    y,
+    scale
+) {
+
+    ctx.save();
+
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+
+    // кольца вокруг яиц
+
+    ctx.strokeStyle = "#708f2f";
+    ctx.lineWidth = 25;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        0,
+        95,
+        42,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        -5,
+        65,
+        28,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.stroke();
+
+
+    // голова лежит на кольце
+
+    ctx.fillStyle = "#759d36";
+    ctx.strokeStyle = "#324513";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        75,
+        -26,
+        27,
+        19,
+        -0.1,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
+
+
+    // закрытые глаза
+
+    ctx.strokeStyle = "#1a240d";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        69,
+        -29
+    );
+
+    ctx.quadraticCurveTo(
+        74,
+        -25,
+        79,
+        -29
+    );
+
+    ctx.stroke();
+
+
+    // язык во сне не торчит
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   СУБТИТРЫ
+========================================================= */
+
+function subtitle(
+    text,
+    speaker = ""
+) {
+
+    const boxHeight = 125;
+
+    ctx.fillStyle =
+        "rgba(0,0,0,.72)";
+
+    ctx.fillRect(
+        0,
+        canvas.height - boxHeight,
+        canvas.width,
+        boxHeight
+    );
+
+
+    if (speaker) {
+
+        ctx.fillStyle = "#ffd45c";
+
+        ctx.font =
+            "bold 24px Arial";
+
+        ctx.textAlign =
+            "left";
+
+        ctx.fillText(
+            speaker,
+            35,
+            canvas.height - 83
+        );
+    }
+
+
+    ctx.fillStyle = "white";
+
+    ctx.font =
+        "26px Arial";
+
+    ctx.textAlign =
+        "left";
+
+    wrapText(
+        text,
+        35,
+        canvas.height - 48,
+        canvas.width - 70,
+        32
+    );
+}
+
+
+function wrapText(
+    text,
+    x,
+    y,
+    maxWidth,
+    lineHeight
+) {
+
+    const words =
+        text.split(" ");
+
+    let line = "";
+
+    for (
+        let i = 0;
+        i < words.length;
+        i++
+    ) {
+
+        const test =
+            line +
+            words[i] +
+            " ";
+
+        if (
+            ctx.measureText(test).width >
+            maxWidth &&
+            i > 0
+        ) {
+
+            ctx.fillText(
+                line,
+                x,
+                y
+            );
+
+            line =
+                words[i] + " ";
+
+            y += lineHeight;
+
+        } else {
+
+            line = test;
+        }
+    }
+
+    ctx.fillText(
+        line,
+        x,
+        y
+    );
+}
+
+
+function title(text) {
+
+    ctx.fillStyle =
+        "rgba(0,0,0,.5)";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        80
+    );
+
+    ctx.font =
+        "bold 32px Arial";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.fillStyle = "white";
+
+    ctx.fillText(
+        text,
+        canvas.width / 2,
+        52
+    );
+}
+
+
+/* =========================================================
+   МУЛЬТФИЛЬМ
+========================================================= */
+
+function movie(t) {
+
+
+    /* =====================================================
+       ВОЛКИ
+    ===================================================== */
+
+    if (t < 5) {
+
+        drawNightForest();
+
+        title(
+            "Волчья стая"
+        );
+
+        for (let i = 0; i < 4; i++) {
+
+            const x =
+                120 +
+                (
+                    (
+                        t * 80 +
+                        i * 230
+                    ) %
+                    (
+                        canvas.width + 300
+                    )
+                ) -
+                200;
+
+            drawWolf(
+                x,
+                canvas.height * 0.77 -
+                i * 7,
+                0.72 +
+                i * 0.04,
+                t * 7 + i,
+                [
+                    "#5d6368",
+                    "#777c80",
+                    "#4a5055",
+                    "#686d71"
+                ][i]
+            );
+        }
+
+        subtitle(
+            "Шла волчья стая через тёмный лес..."
+        );
+
+        return;
+    }
+
+
+    if (t < 9) {
+
+        drawNightForest();
+
+        for (let i = 0; i < 4; i++) {
+
+            drawWolf(
+                150 +
+                i * 170,
+                canvas.height * 0.76,
+                0.7,
+                0,
+                "#60666a"
+            );
+        }
+
+        drawCobra(
+            canvas.width - 190,
+            canvas.height * 0.78,
+            0.85,
+            true
+        );
+
+        subtitle(
+            "Валяйте отсюда!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 12) {
+
+        drawNightForest();
+
+        for (let i = 0; i < 4; i++) {
+
+            drawWolf(
+                150 +
+                i * 170,
+                canvas.height * 0.76,
+                0.7,
+                0,
+                "#60666a"
+            );
+        }
+
+        drawCobra(
+            canvas.width - 190,
+            canvas.height * 0.78,
+            0.85,
+            true
+        );
+
+        subtitle(
+            "И не подумаем!",
+            "ВОЛКИ"
+        );
+
+        return;
+    }
+
+
+    if (t < 15) {
+
+        drawNightForest();
+
+        for (let i = 0; i < 4; i++) {
+
+            drawWolf(
+                150 +
+                i * 170,
+                canvas.height * 0.76,
+                0.7,
+                0,
+                "#60666a"
+            );
+        }
+
+        drawCobra(
+            canvas.width - 210,
+            canvas.height * 0.78,
+            0.85,
+            true,
+            true
+        );
+
+        subtitle(
+            "У меня револьвер!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 18) {
+
+        drawNightForest();
+
+        const p =
+            progress(
+                t,
+                15,
+                18
+            );
+
+        for (let i = 0; i < 4; i++) {
+
+            drawWolf(
+                lerp(
+                    500 - i * 140,
+                    -400 - i * 120,
+                    p
+                ),
+                canvas.height * 0.76,
+                0.7,
+                t * 15 + i,
+                "#60666a"
+            );
+        }
+
+        drawCobra(
+            canvas.width - 200,
+            canvas.height * 0.78,
+            0.85,
+            false,
+            true
+        );
+
+        subtitle(
+            "БЕЖИМ!",
+            "ВОЛКИ"
+        );
+
+        return;
+    }
+
+
+    if (t < 22) {
+
+        drawNightForest();
+
+        drawCobra(
+            canvas.width * 0.55,
+            canvas.height * 0.78,
+            0.95,
+            false,
+            true
+        );
+
+        subtitle(
+            "Бегите, бегите! Я-то вас могу... Да и ладно.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 25) {
+
+        drawNightForest();
+
+        drawCobra(
+            canvas.width * 0.45,
+            canvas.height * 0.78,
+            0.95
+        );
+
+        subtitle(
+            "Кобра сплюнула волкам вслед..."
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ПЕЩЕРА
+    ===================================================== */
+
+    if (t < 29) {
+
+        drawNightForest();
+        drawCave();
+
+        drawCobra(
+            canvas.width * 0.37,
+            canvas.height * 0.78,
+            0.85
+        );
+
+        subtitle(
+            "Что это за пещера?!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 33) {
+
+        drawCaveInterior();
+
+        const p =
+            progress(
+                t,
+                29,
+                33
+            );
+
+        drawCobra(
+            lerp(
+                canvas.width * 0.18,
+                canvas.width * 0.48,
+                p
+            ),
+            canvas.height * 0.80,
+            0.8
+        );
+
+        subtitle(
+            "Кобра подползла к пещере и огляделась..."
+        );
+
+        return;
+    }
+
+
+    if (t < 36) {
+
+        drawCaveInterior();
+
+        drawCobra(
+            canvas.width * 0.45,
+            canvas.height * 0.80,
+            0.85
+        );
+
+        subtitle(
+            "Невероятно...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 42) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.10,
+            canvas.height * 0.82,
+            0.62
+        );
+
+        subtitle(
+            "Таккс...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 48) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.10,
+            canvas.height * 0.82,
+            0.62
+        );
+
+        subtitle(
+            "Я знаю, что синий — это вода. Фиолетовый — эпик-фейлы. А красный это что? Огонь? По ходу да.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 53) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.20,
+            canvas.height * 0.82,
+            0.62
+        );
+
+        subtitle(
+            "А жёлтый и зелёный? Пойду-ка я в жёл...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ВООБРАЖЕНИЕ ПРО ЖЁЛТЫЙ
+    ===================================================== */
+
+    if (t < 59) {
+
+        const p =
+            progress(
+                t,
+                53,
+                59
+            );
+
+        drawYellowPit(
+            lerp(
+                20,
+                canvas.height + 170,
+                p
+            )
+        );
+
+        subtitle(
+            "АААААААА!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 63) {
+
+        drawYellowPit(
+            canvas.height * 0.54
+        );
+
+        subtitle(
+            "Только бы это не было новое начало «Алисы в Стране чудес»!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 67) {
+
+        drawYellowPit(
+            canvas.height * 0.72
+        );
+
+        subtitle(
+            "БУМ! Кобра стукнулась головой о пол."
+        );
+
+        return;
+    }
+
+
+    if (t < 72) {
+
+        drawYellowPit(
+            canvas.height * 0.72
+        );
+
+        subtitle(
+            "Теперь выползаем!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 78) {
+
+        drawYellowPit(
+            canvas.height * 0.61
+        );
+
+        subtitle(
+            "На первый день улитка проползла 3 метра и опустилась на 2...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 84) {
+
+        drawYellowPit(
+            canvas.height * 0.48
+        );
+
+        subtitle(
+            "На 1236736475474747549014806742258 день она поднялась на 3 метра и спустилась на...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 87) {
+
+        drawYellowPit(
+            canvas.height + 150
+        );
+
+        subtitle(
+            "ААААА! СОРВАЛАСЬ!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 91) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.45,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Ишь размечталась! Всё это время кобра сидела возле жёлтого кристалла."
+        );
+
+        return;
+    }
+
+
+    if (t < 94) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.45,
+            canvas.height * 0.82,
+            0.65,
+            true
+        );
+
+        subtitle(
+            "НЕЕЕЕТ!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 98) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCobra(
+            canvas.width * 0.60,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Лучше пойду в зелёный!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 102) {
+
+        drawCaveInterior();
+        drawFiveCrystals();
+
+        drawCrystal(
+            canvas.width * 4 / 6,
+            canvas.height * 0.57,
+            90 +
+            Math.sin(t * 10) * 7,
+            "#39ff65"
+        );
+
+        subtitle(
+            "Кобра вползла внутрь..."
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ЛОГОВО — СОН ИЛИ НЕ СОН
+    ===================================================== */
+
+    if (t < 107) {
+
+        drawCobraHome();
+
+        drawCobra(
+            canvas.width * 0.38,
+            canvas.height * 0.78,
+            0.9
+        );
+
+        subtitle(
+            "...и очутилась у себя в логове."
+        );
+
+        return;
+    }
+
+
+    if (t < 112) {
+
+        drawCobraHome();
+
+        drawCobra(
+            canvas.width * 0.38,
+            canvas.height * 0.78,
+            0.9
+        );
+
+        subtitle(
+            "Наверное, это всё был сон...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 117) {
+
+        drawCobraHome();
+        drawHomeGreenCrystal();
+
+        drawCobra(
+            canvas.width * 0.38,
+            canvas.height * 0.78,
+            0.9
+        );
+
+        subtitle(
+            "Стоп. А это тогда ЧТО?!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 122) {
+
+        drawCobraHome();
+        drawHomeGreenCrystal();
+
+        drawCobra(
+            canvas.width * 0.63,
+            canvas.height * 0.78,
+            0.8
+        );
+
+        subtitle(
+            "Пойду обратно. Проверим.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 126) {
+
+        drawCrystalMeadow();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Те же кристаллы... Значит, не сон.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 130) {
+
+        drawCrystalMeadow();
+
+        drawCobra(
+            canvas.width * 0.78,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Теперь просто выползем отсюда.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ГРИБНИЦА И КВАД
+    ===================================================== */
+
+    if (t < 134) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.17,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        subtitle(
+            "Э-э-э... А это ещё что?"
+        );
+
+        return;
+    }
+
+
+    if (t < 138) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.17,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Ты кто?",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 142) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.17,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Я кровожадный стервятник. Зовут меня Квад.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 146) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Послушай, Квад, куда делся выход?!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 149) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Его застроили.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 151) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7,
+            true
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "КАК?!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 157) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "А вот так! К тому же зачем тебе выход? Зайди в зелёный кристалл — и окажешься дома.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 161) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Я знаю, знаю. Но мне нужен выход.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 165) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82,
+            Math.sin(
+                (t - 161) * 4
+            ) * 0.25
+        );
+
+        subtitle(
+            "Фиолетовый кристалл под номером 3.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 167) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Номером?!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 170) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Иди дальше на два квартала.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 175) {
+
+        drawCrystalMeadow();
+
+        drawCobra(
+            canvas.width * 0.42,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Иди дальше на два квартала... Тут ни одного! Странный этот Квад...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 179) {
+
+        drawCrystalMeadow();
+
+        drawCobra(
+            canvas.width * 0.80,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Ну ладно. Фиолетовый.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 183) {
+
+        drawQuarterHall(1);
+
+        drawCobra(
+            canvas.width * 0.50,
+            canvas.height * 0.82,
+            0.68
+        );
+
+        subtitle(
+            "О! Выход!.. А нет.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 187) {
+
+        drawQuarterHall(1);
+
+        drawCobra(
+            canvas.width * 0.50,
+            canvas.height * 0.82,
+            0.68
+        );
+
+        subtitle(
+            "Квартал 1. Ага! Следующий квартал третий...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 193) {
+
+        drawQuarterHall(1);
+
+        drawCobra(
+            canvas.width * 0.50,
+            canvas.height * 0.82,
+            0.68,
+            true
+        );
+
+        subtitle(
+            "Нет, подожди! Тут ещё четыре прохода! Лучше пойду обратно.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 197) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Послушай, Квад. Что это за пещера? Кто тут живёт?",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 204) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Это Пещера жизни и защиты от браконьеров. Здесь живут животные со всего мира. А тут — мои коллеги-стервятники.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 208) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Со всего мира? Значит, и волки, которые...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 211) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Ага. Вопросы?",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 213) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Нет.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 215) {
+
+        drawMushroomCave();
+
+        drawCobra(
+            canvas.width * 0.18,
+            canvas.height * 0.82,
+            0.7
+        );
+
+        drawVulture(
+            canvas.width * 0.72,
+            canvas.height * 0.49,
+            0.82
+        );
+
+        subtitle(
+            "Прекрасно.",
+            "КВАД"
+        );
+
+        return;
+    }
+
+
+    if (t < 220) {
+
+        drawCrystalMeadow();
+
+        drawCobra(
+            canvas.width * 0.60,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Кобра поползла дальше. Она совершенно не понимала, где находится."
+        );
+
+        return;
+    }
+
+
+    if (t < 224) {
+
+        drawCrystalMeadow();
+
+        drawCrystal(
+            canvas.width * 4 / 6,
+            canvas.height * 0.57,
+            90 +
+            Math.sin(t * 8) * 8,
+            "#39ff65"
+        );
+
+        drawCobra(
+            canvas.width * 0.62,
+            canvas.height * 0.82,
+            0.65
+        );
+
+        subtitle(
+            "Ладно... зелёный, так зелёный.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       СНОВА ЛОГОВО
+    ===================================================== */
+
+    if (t < 228) {
+
+        drawCobraHome();
+        drawHomeGreenCrystal();
+
+        drawCobra(
+            canvas.width * 0.45,
+            canvas.height * 0.78,
+            0.85
+        );
+
+        subtitle(
+            "Опять моё логово. Ладно. Попробую просто выползти наружу.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       БАЛКОН
+    ===================================================== */
+
+    if (t < 233) {
+
+        const balcony =
+            drawLifeCaveBalcony(
+                t - 228,
+                0
+            );
+
+        drawCobra(
+            balcony.x,
+            balcony.y - 5,
+            0.72
+        );
+
+        subtitle(
+            "Так... пустыня. И я почему-то еду на какой-то каменной штуке.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 238) {
+
+        const p =
+            progress(
+                t,
+                233,
+                238
+            );
+
+        const balcony =
+            drawLifeCaveBalcony(
+                t - 228,
+                p
+            );
+
+        drawCobra(
+            balcony.x,
+            balcony.y - 5,
+            0.68
+        );
+
+        subtitle(
+            "Подождите-ка...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 243) {
+
+        const balcony =
+            drawLifeCaveBalcony(
+                t - 228,
+                1
+            );
+
+        drawCobra(
+            balcony.x,
+            balcony.y - 5,
+            0.68
+        );
+
+        title(
+            "ПЕЩЕРА ЖИЗНИ И ЗАЩИТЫ ОТ БРАКОНЬЕРОВ"
+        );
+
+        subtitle(
+            "ЭТО НЕ КАМЕННАЯ ШТУКА! Я НА БАЛКОНЕ ЭТОЙ ПЕЩЕРЫ!",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 248) {
+
+        const balcony =
+            drawLifeCaveBalcony(
+                t - 228,
+                1
+            );
+
+        const p =
+            progress(
+                t,
+                243,
+                248
+            );
+
+        drawCobra(
+            lerp(
+                balcony.x,
+                balcony.x - 120,
+                p
+            ),
+            balcony.y - 5,
+            0.68
+        );
+
+        subtitle(
+            "Выходит, пытаясь выползти из своего логова, я просто попала на балкон...",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ВОЗВРАЩЕНИЕ ВНУТРЬ
+    ===================================================== */
+
+    if (t < 252) {
+
+        drawCobraHome();
+        drawHomeGreenCrystal();
+
+        drawEggs(
+            canvas.width * 0.46,
+            canvas.height * 0.73
+        );
+
+        drawCobra(
+            canvas.width * 0.26,
+            canvas.height * 0.79,
+            0.72
+        );
+
+        subtitle(
+            "Нет. На сегодня с меня хватит.",
+            "КОБРА"
+        );
+
+        return;
+    }
+
+
+    if (t < 257) {
+
+        drawCobraHome();
+        drawHomeGreenCrystal();
+
+        drawEggs(
+            canvas.width * 0.46,
+            canvas.height * 0.73
+        );
+
+        const p =
+            progress(
+                t,
+                252,
+                257
+            );
+
+        drawCobra(
+            lerp(
+                canvas.width * 0.27,
+                canvas.width * 0.44,
+                p
+            ),
+            canvas.height * 0.79,
+            0.72
+        );
+
+        subtitle(
+            "Кобра подползла к своим яйцам."
+        );
+
+        return;
+    }
+
+
+    if (t < 262) {
+
+        drawCobraHome();
+
+        drawHomeGreenCrystal();
+
+        drawEggs(
+            canvas.width * 0.46,
+            canvas.height * 0.73
+        );
+
+        drawSleepingCobra(
+            canvas.width * 0.46,
+            canvas.height * 0.73,
+            0.92
+        );
+
+        subtitle(
+            "Она свернулась вокруг яиц и закрыла глаза."
+        );
+
+        return;
+    }
+
+
+    /* =====================================================
+       ФИНАЛ
+    ===================================================== */
+
+    drawCobraHome();
+
+    drawHomeGreenCrystal();
+
+    drawEggs(
+        canvas.width * 0.46,
+        canvas.height * 0.73
+    );
+
+    drawSleepingCobra(
+        canvas.width * 0.46,
+        canvas.height * 0.73,
+        0.92
+    );
+
+
+    title(
+        "КОНЕЦ..."
+    );
+
+
+    if (t < 268) {
+
+        subtitle(
+            "Кобра уснула на своих яйцах..."
+        );
+
+    } else if (t < 274) {
+
+        subtitle(
+            "...а зелёный кристалл по-прежнему стоял рядом."
+        );
+
+    } else {
+
+        subtitle(
+            "Z-z-z-z..."
+        );
+    }
+}
+
+
+/* =========================================================
+   ЦИКЛ
+========================================================= */
+
+function loop() {
+
+    if (!playing) {
+        return;
+    }
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    movie(
+        getTime()
+    );
+
+    requestAnimationFrame(loop);
+}
+
+</script>
+
+</body>
+</html>

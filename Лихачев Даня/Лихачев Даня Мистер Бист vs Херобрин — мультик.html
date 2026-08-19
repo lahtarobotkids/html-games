@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мистер Бист vs Херобрин — мультик</title>
+<style>
+  :root { --accent:#3ad; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; background:#0b0f1a; overflow:hidden;
+              font-family:"Segoe UI",system-ui,sans-serif; }
+  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  canvas { display:block; image-rendering:pixelated; max-width:100vw; max-height:100vh;
+           box-shadow:0 20px 80px rgba(0,0,0,.6); border-radius:8px; }
+  /* Overlay / start screen */
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column;
+             align-items:center; justify-content:center; gap:18px;
+             background:radial-gradient(circle at 50% 40%, rgba(20,40,80,.9), rgba(5,8,16,.96));
+             z-index:10; transition:opacity .5s ease; }
+  #overlay.hidden { opacity:0; pointer-events:none; }
+  #overlay h1 { color:#fff; font-size:clamp(22px,4vw,44px); text-align:center; padding:0 20px;
+                text-shadow:0 0 20px #39f, 0 0 40px #39f; }
+  #overlay p { color:#9db; font-size:clamp(13px,2vw,17px); text-align:center; padding:0 20px; }
+  #playBtn { font-size:clamp(18px,2.5vw,26px); font-weight:800; padding:16px 44px; cursor:pointer;
+             border:none; border-radius:14px; color:#fff; letter-spacing:1px;
+             background:linear-gradient(135deg,#2ec27e,#1b9e5f); box-shadow:0 8px 0 #0f6b40, 0 14px 40px rgba(46,194,126,.4);
+             transition:transform .08s ease, box-shadow .08s ease; }
+  #playBtn:active { transform:translateY(6px); box-shadow:0 2px 0 #0f6b40; }
+  #replayBtn { position:absolute; right:18px; bottom:16px; z-index:5; font-size:16px; font-weight:700;
+               padding:12px 22px; cursor:pointer; border:none; border-radius:12px; color:#fff;
+               background:linear-gradient(135deg,#ff7a18,#e0440b); box-shadow:0 6px 0 #8a2a05;
+               opacity:0; pointer-events:none; transition:opacity .4s; }
+  #replayBtn.show { opacity:1; pointer-events:auto; }
+  #replayBtn:active { transform:translateY(4px); box-shadow:0 2px 0 #8a2a05; }
+  #muteBtn { position:absolute; left:18px; bottom:16px; z-index:5; font-size:15px; font-weight:700;
+             padding:10px 16px; cursor:pointer; border:none; border-radius:12px; color:#fff;
+             background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="overlay">
+  <h1>💥 Мистер Бист vs Херобрин 💥</h1>
+  <p>Мультик в мире Майнкрафта · со звуком 🎧</p>
+  <button id="playBtn">▶ СМОТРЕТЬ</button>
+</div>
+<button id="replayBtn">↻ Ещё раз</button>
+<button id="muteBtn">🔊 Звук</button>
+
+<script>
+/* ============================================================
+   МИСТЕР БИСТ vs ХЕРОБРИН — мультик (Canvas + JS, без библиотек)
+   ============================================================ */
+const W = 960, H = 540;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+
+/* ---------- Спрайты (пиксель-арт) ---------- */
+// '.' — прозрачный пиксель. Каждый символ -> цвет из палитры.
+function makeSprite(rows, palette){
+  const h = rows.length, w = rows[0].length;
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const o = off.getContext('2d');
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const ch = rows[y][x];
+    if(ch==='.' || ch===' ') continue;
+    o.fillStyle = palette[ch] || '#f0f';
+    o.fillRect(x,y,1,1);
+  }
+  return off;
+}
+function drawSprite(img, x, y, scale, flip){
+  const w = img.width*scale, h = img.height*scale;
+  ctx.save();
+  if(flip){ ctx.translate(x+w, y); ctx.scale(-1,1); ctx.drawImage(img,0,0,w,h); }
+  else ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+}
+
+/* Херобрин (Стив с белыми светящимися глазами) */
+const HEROBRINE = makeSprite([
+  "..HHHHHHHH..",
+  ".HHHHHHHHHH.",
+  ".HHSSSSSSHH.",
+  ".HSSSSSSSSH.",
+  ".HSEESSEESH.",
+  ".HSSSSSSSSH.",
+  ".HSSMMMMSSH.",
+  ".HSSSSSSSSH.",
+  ".HHSSSSSSHH.",
+  "..HHHHHHHH..",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  ".OOO....OOO.",
+], {
+  S:'#d9a066', H:'#4a3020', E:'#ffffff', M:'#7a4a2a',
+  T:'#00a6a6', A:'#d9a066', P:'#4a3a7a', O:'#2a2438'
+});
+
+/* Мистер Бист (борода + синяя футболка) */
+const MRBEAST = makeSprite([
+  "..HHHHHHHH..",
+  ".HHHHHHHHHH.",
+  ".HHSSSSSSHH.",
+  ".HSSSSSSSSH.",
+  ".HSEESSEESH.",
+  ".HSSSSSSSSH.",
+  ".HSSBBBBBSS.",
+  ".HSBBBBBBSH.",
+  ".HHBBBBBBHH.",
+  "..BBBBBBBB..",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  ".AATTTTTTAA.",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  "..PPP..PPP..",
+  ".OOO....OOO.",
+], {
+  S:'#e8b98a', H:'#6b4526', E:'#3b82f6', B:'#5a3a1e', M:'#7a4a2a',
+  T:'#1f6feb', A:'#e8b98a', P:'#2b2b3a', O:'#1b1b26'
+});
+
+/* TNT-блок (красный, белая лента, надпись TNT) */
+const TNT = makeSprite([
+  "RRRRRRRRRRRR",
+  "RRRRRRRRRRRR",
+  "RRRRRRRRRRRR",
+  "WWWWWWWWWWWW",
+  "WXXXWXWXWXXX",
+  "WWXWWXXXWWXW",
+  "WWXWWXWXWWXW",
+  "WWWWWWWWWWWW",
+  "RRRRRRRRRRRR",
+  "RRRRRRRRRRRR",
+  "RRRRRRRRRRRR",
+  "RRRRRRRRRRRR",
+], {
+  R:'#c0392b', W:'#f0ead6', X:'#1a1a1a'
+});
+
+/* Тёмные очки (для мистера биста) */
+const SHADES = makeSprite([
+  ".OOOO..OOOO.",
+  "OLLLLOOLLLLO",
+  "OLLLLOOLLLLO",
+  ".OOOO..OOOO.",
+  "...O....O...",
+], {
+  O:'#0a0a0a', L:'#1a1a1a'
+});
+
+/* ---------- Звук (WebAudio, генерируем сами) ---------- */
+let AC = null, muted = false;
+function audio(){
+  if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
+  return AC;
+}
+function tone(freq, dur, type='sine', vol=0.2, slide=0){
+  if(muted) return;
+  try{
+    const a=audio(), o=a.createOscillator(), g=a.createGain();
+    o.type=type; o.frequency.value=freq;
+    if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(1,freq+slide), a.currentTime+dur);
+    g.gain.setValueAtTime(vol, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime+dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(); o.stop(a.currentTime+dur);
+  }catch(e){}
+}
+function noise(dur, vol=0.4, lp=800){
+  if(muted) return;
+  try{
+    const a=audio(), len=a.sampleRate*dur, buf=a.createBuffer(1,len,a.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*(1-i/len);
+    const src=a.createBufferSource(); src.buffer=buf;
+    const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
+    const g=a.createGain(); g.gain.setValueAtTime(vol,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+dur);
+    src.connect(f); f.connect(g); g.connect(a.destination);
+    src.start(); src.stop(a.currentTime+dur);
+  }catch(e){}
+}
+
+/* ---------- Фон: мир Майнкрафта ---------- */
+const groundY = 430;               // уровень травы
+const footY = groundY + 6;         // уровень ног персонажей
+const grass = ['#6fbe3c','#7ec850','#5aa832'];  // оттенки травы
+const dirt  = ['#8a5a34','#7a4e2c','#96613a'];
+
+function drawSky(t){
+  const g = ctx.createLinearGradient(0,0,0,groundY);
+  g.addColorStop(0,'#5aa7e8'); g.addColorStop(1,'#a9d7f5');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,groundY);
+  // солнце (квадратное, как в МК)
+  ctx.fillStyle = '#fff3a0';
+  ctx.fillRect(W-120, 40, 70, 70);
+  ctx.fillStyle = 'rgba(255,240,150,.35)';
+  ctx.fillRect(W-120, 40, 70, 70);
+  // облака (дрейфуют)
+  const cw = ((t*8)% (W+300)) - 150;
+  drawCloud(cw, 70); drawCloud(cw+340, 120); drawCloud(cw-260, 150);
+}
+function drawCloud(x,y){
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.fillRect(x, y, 90, 26);
+  ctx.fillRect(x+16, y-18, 56, 20);
+  ctx.fillRect(x+46, y-8, 40, 14);
+}
+function drawGround(){
+  // грязь под травой
+  ctx.fillStyle = dirt[1];
+  ctx.fillRect(0, groundY+28, W, H-groundY-28);
+  // травяной блок (верх зелёный, низ грязь)
+  for(let x=0;x<W;x+=32){
+    ctx.fillStyle = grass[(x/32)%3];
+    ctx.fillRect(x, groundY, 32, 12);
+    ctx.fillStyle = dirt[(x/32)%3];
+    ctx.fillRect(x, groundY+12, 32, 16);
+    // текстура травы
+    ctx.fillStyle = 'rgba(40,90,20,.35)';
+    ctx.fillRect(x+4, groundY+4, 24, 2);
+    ctx.fillRect(x+4, groundY+8, 14, 2);
+  }
+}
+function drawTree(x, baseY){
+  const s = 14;
+  // ствол
+  ctx.fillStyle = '#6b4423';
+  ctx.fillRect(x, baseY-60, 22, 60);
+  ctx.fillStyle = '#4e3118';
+  ctx.fillRect(x+16, baseY-60, 6, 60);
+  // листва (кубиками)
+  const L = ['#3d8a2f','#4a9c38','#2f7024'];
+  const blocks = [[-16,-88],[0,-88],[16,-88],[-16,-72],[0,-72],[16,-72],[-8,-56],[8,-56]];
+  blocks.forEach(([ox,oy],i)=>{
+    ctx.fillStyle = L[i%3];
+    ctx.fillRect(x+8+ox, baseY+oy-40, 16, 16);
+  });
+}
+function drawBackground(t){
+  drawSky(t);
+  // деревья позади персонажей
+  drawTree(60, groundY+18);
+  drawTree(820, groundY+18);
+  drawTree(700, groundY+14);
+  drawGround();
+  // пара блоков-кустов для деталей
+  ctx.fillStyle='#3d8a2f'; ctx.fillRect(300, groundY-8, 20, 12);
+  ctx.fillStyle='#4a9c38'; ctx.fillRect(320, groundY-14, 20, 18);
+  ctx.fillStyle='#3d8a2f'; ctx.fillRect(520, groundY-10, 24, 14);
+}
+
+/* ---------- Пузырь речи ---------- */
+function speechBubble(x, y, text, w, opts={}){
+  const pad = 14, tail = 14, r = 16;
+  ctx.font = '700 ' + (opts.size||17) + 'px "Segoe UI",sans-serif';
+  const lines = wrap(text, w - pad*2);
+  const lh = (opts.size||17) * 1.25;
+  const h = pad*2 + lines.length*lh;
+  // тень + белый фон
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
+  roundRect(x, y, w, h, r); ctx.fillStyle='#fff'; ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='#222'; ctx.lineWidth=2; roundRect(x,y,w,h,r); ctx.stroke();
+  // хвостик
+  ctx.fillStyle='#fff'; ctx.beginPath();
+  ctx.moveTo(x+w/2-tail, y+h); ctx.lineTo(x+w/2+tail, y+h); ctx.lineTo(x+w/2, y+h+18);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#222'; ctx.beginPath();
+  ctx.moveTo(x+w/2-tail, y+h); ctx.lineTo(x+w/2, y+h+18); ctx.lineTo(x+w/2+tail, y+h);
+  ctx.stroke();
+  // текст
+  ctx.fillStyle='#111'; ctx.textAlign='left'; ctx.textBaseline='top';
+  lines.forEach((ln,i)=> ctx.fillText(ln, x+pad, y+pad+i*lh));
+}
+function wrap(t, maxW){
+  const words = t.split(' '); const out=[]; let cur='';
+  for(const wd of words){
+    const test = cur ? cur+' '+wd : wd;
+    if(ctx.measureText(test).width > maxW && cur){ out.push(cur); cur=wd; }
+    else cur = test;
+  }
+  if(cur) out.push(cur);
+  return out;
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+/* ---------- Частицы взрыва ---------- */
+const parts = [];
+function explode(x,y, opts={}){
+  const n = opts.n||160;
+  for(let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, sp = Math.random()* (opts.speed||9) + 2;
+    parts.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-2,
+      life:1, decay:0.008+Math.random()*0.02, r:3+Math.random()*9,
+      col: pick(['#ff7b1c','#ff3b1c','#ffd21c','#fff3a0','#ff9040','#b0392b','#5a5a5a']) });
+  }
+  // вспышка
+  if(opts.flash!==false) flash = 1;
+  if(opts.boom!==false) noise(0.9, 0.55, 500);
+}
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function stepParts(){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i]; p.life-=p.decay;
+    if(p.life<=0){ parts.splice(i,1); continue; }
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.15;
+  }
+}
+function drawParts(){
+  for(const p of parts){
+    ctx.globalAlpha = Math.max(0,p.life);
+    ctx.fillStyle = p.col;
+    ctx.fillRect(p.x-p.r/2, p.y-p.r/2, p.r, p.r);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFlash(){
+  if(flash>0){
+    ctx.fillStyle = 'rgba(255,255,240,'+(flash*0.85)+')';
+    ctx.fillRect(0,0,W,H);
+    flash -= 0.08;
+  }
+}
+
+/* ---------- Состояние мультика ---------- */
+let start = 0, running = false, flash = 0, done = false;
+let mbXcur = 300, hbXcur = 640;   // текущие позиции (для событий взрыва)
+
+/* Ключевые временные точки (секунды) */
+const T = {
+  mrbeastIn:    0.5,   // появляется Мистер Бист
+  beastSays:    1.2,   // его реплика
+  herobrineIn:  2.8,   // появляется Херобрин
+  hbSays:       3.6,   // «чё за...»
+  tntStart:     5.2,   // TNT начинает падать
+  hbScream:     5.8,   // «АААААА!»
+  tntLand:      7.2,   // TNT приземляется
+  boom:         7.4,   // взрыв TNT+Херобрин
+  shadesStart:  8.6,   // очки падают
+  shadesOn:     9.6,   // очки надеты
+  behindBoom:   9.9,   // взрыв за спиной
+  end:          11.5,  // финал, держим кадр
+  loop:         12.5   // показ кнопки
+};
+
+function easeOutBack(x){ const c1=1.70158, c3=c1+1; return 1 + c3*Math.pow(x-1,3) + c1*Math.pow(x-1,2); }
+function easeOut(x){ return 1-Math.pow(1-x,3); }
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+function draw(){
+  const t = running ? (performance.now()-start)/1000 : 0;
+  ctx.clearRect(0,0,W,H);
+
+  /* --- фон --- */
+  drawBackground(t);
+
+  /* --- позиции --- */
+  const mbX = 300;                       // Мистер Бист слева
+  const hbX = 640;                       // Херобрин справа
+  const mbScale = 3.4, hbScale = 3.4;
+
+  /* Мистер Бист: въезжает слева */
+  const mbIn = easeOut(clamp01((t - T.mrbeastIn)/0.6));
+  mbXcur = -80 + (mbX+80) * (mbIn<=0?0:mbIn);
+
+  /* Херобрин: въезжает справа */
+  const hbIn = easeOut(clamp01((t - T.herobrineIn)/0.6));
+  hbXcur = W+80 - (W+80-hbX) * (hbIn<=0?0:hbIn);
+
+  /* --- рисуем Мистера Биста --- */
+  const mbShaken = (t > T.behindBoom && t < T.behindBoom+0.3);
+  drawSprite(MRBEAST, mbXcur - 12*mbScale/2, footY - 21*mbScale, mbScale, false);
+  // очки на лице (когда надеты)
+  if(t >= T.shadesOn){
+    drawSprite(SHADES, mbXcur - 12*mbScale/2, footY - 21*mbScale + 4*mbScale, mbScale, false);
+  }
+
+  /* --- рисуем Херобрина (до взрыва) --- */
+  let hbGone = false;
+  if(t < T.boom - 0.05){
+    const hbShake = (t > T.hbScream && t < T.boom) ? Math.sin(t*40)*2 : 0;
+    drawSprite(HEROBRINE, hbXcur - 12*hbScale/2 + hbShake, footY - 21*hbScale, hbScale, false);
+  } else {
+    hbGone = true;
+  }
+
+  /* --- TNT блок --- */
+  const tntSize = 90;
+  const tntLandY = footY - 21*hbScale - 22;   // блок ложится на Херобрина (голова+тело)
+  if(t >= T.tntStart && t < T.boom){
+    const p = clamp01((t - T.tntStart)/(T.tntLand - T.tntStart));
+    const tntY = -130 + (tntLandY + 130) * easeOut(p);
+    const sway = Math.sin(t*3)*6;
+    drawSprite(TNT, hbXcur - tntSize/2 + sway, tntY, tntSize/12, false);
+  }
+
+  /* --- пузыри речи --- */
+  if(t >= T.beastSays && t < T.herobrineIn+0.3){
+    speechBubble(mbXcur-90, footY-21*mbScale-95, 'Я сброшу 250 000 тонн тротила!', 240, {size:17});
+  }
+  if(t >= T.hbSays && t < T.hbScream){
+    speechBubble(hbXcur-100, footY-21*hbScale-95, 'Чё за...', 140, {size:17});
+  }
+  if(t >= T.hbScream && t < T.boom){
+    speechBubble(hbXcur-110, footY-21*hbScale-95, 'ААААААА!', 150, {size:22});
+  }
+  if(t >= T.shadesOn && t < T.shadesOn+2.2){
+    speechBubble(mbXcur-70, footY-21*mbScale-95, '😎', 70, {size:26});
+  }
+  if(t >= T.end){
+    ctx.save();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='900 54px "Segoe UI",sans-serif';
+    ctx.fillStyle='#111'; ctx.fillText('КОНЕЦ', W/2+3, 78+3);
+    ctx.fillStyle='#ffd21c'; ctx.fillText('КОНЕЦ', W/2, 78);
+    ctx.font='700 22px "Segoe UI",sans-serif';
+    ctx.fillStyle='#fff'; ctx.fillText('Мистер Бист — легенда 😎', W/2, 120);
+    ctx.restore();
+  }
+
+  /* --- взрыв за спиной Мистера Биста --- */
+  if(t >= T.behindBoom && t < T.behindBoom+1.0){
+    const p = clamp01((t-T.behindBoom)/1.0);
+    const rad = 20 + p*120;
+    drawBoomBehind(mbXcur-140, footY-20, rad, p);
+  }
+
+  /* --- частицы и вспышка --- */
+  stepParts(); drawParts(); drawFlash();
+
+  /* --- события (один раз) --- */
+  fireEvents(t);
+
+  if(running) requestAnimationFrame(draw);
+}
+
+function drawBoomBehind(x,y,rad,p){
+  const alpha = 1-p;
+  ctx.save(); ctx.globalAlpha = alpha;
+  const g = ctx.createRadialGradient(x,y,4, x,y,rad);
+  g.addColorStop(0,'#fff6c0'); g.addColorStop(0.4,'#ffb020'); g.addColorStop(0.75,'#ff5a1c'); g.addColorStop(1,'rgba(120,40,10,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+/* --- одноразовые события --- */
+const fired = {};
+function fireEvents(t){
+  const once = (k, fn)=>{ if(!fired[k] && t>=T[k]){ fired[k]=true; fn(); } };
+  once('beastSays', ()=> tone(220,0.35,'square',0.12));
+  once('herobrineIn', ()=> tone(160,0.3,'triangle',0.15));
+  once('hbSays', ()=> tone(140,0.4,'triangle',0.15));
+  once('hbScream', ()=> tone(400,0.5,'sawtooth',0.14, 300));
+  once('tntStart', ()=> tone(900,0.7,'sine',0.08, -700));
+  once('tntLand', ()=> tone(90,0.2,'square',0.3));
+  once('boom', ()=>{
+    explode(hbXcur, footY-40, {n:220, speed:11, boom:true});
+    explode(hbXcur, footY-40, {n:120, speed:7, boom:false});
+    flash = 1;
+  });
+  once('shadesStart', ()=> tone(700,0.5,'sine',0.07, -500));
+  once('shadesOn', ()=> tone(520,0.15,'triangle',0.18));
+  once('behindBoom', ()=>{
+    explode(mbXcur-140, footY-20, {n:140, speed:9, boom:true});
+    explode(mbXcur-140, footY-20, {n:80, speed:6, boom:false});
+    flash = 0.7;
+  });
+  once('end', ()=>{ done = true; document.getElementById('replayBtn').classList.add('show'); });
+}
+
+/* ---------- Запуск / перезапуск ---------- */
+const overlay = document.getElementById('overlay');
+const playBtn = document.getElementById('playBtn');
+const replayBtn = document.getElementById('replayBtn');
+const muteBtn = document.getElementById('muteBtn');
+
+function reset(){
+  parts.length = 0; flash = 0; done = false;
+  for(const k in fired) delete fired[k];
+  start = performance.now(); running = true;
+  replayBtn.classList.remove('show');
+}
+function play(){
+  audio();                       // разблокировать звук по клику
+  overlay.classList.add('hidden');
+  reset();
+  requestAnimationFrame(draw);
+}
+playBtn.addEventListener('click', play);
+replayBtn.addEventListener('click', ()=>{ audio(); reset(); });
+muteBtn.addEventListener('click', ()=>{
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇 Звук выкл' : '🔊 Звук';
+});
+
+/* Стартовый статичный кадр (превью) */
+function preview(){
+  ctx.clearRect(0,0,W,H);
+  drawBackground(0);
+  drawSprite(MRBEAST, 300-20, groundY+6-21*3.4, 3.4, false);
+  drawSprite(HEROBRINE, 640-20, groundY+6-21*3.4, 3.4, false);
+  speechBubble(210, groundY-95, 'Я сброшу 250 000 тонн тротила!', 240, {size:17});
+}
+preview();
+</script>
+</body>
+</html>
